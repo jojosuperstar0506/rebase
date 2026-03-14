@@ -1,8 +1,23 @@
-import { useState, useEffect } from "react";
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Workforce Calculator - Test</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #08080f; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useEffect } = React;
 
 // ─── DATA ───────────────────────────────────────────────────────────────────
-// Research-backed salary table by city tier
-// Sources: Zhaopin, BOSS直聘, Michael Page 2025-2026 data
 const SALARY_TABLE = {
   content_editor:   { tier1: 9000,  newTier1: 7000,  tier2: 5500 },
   video_editor:     { tier1: 12000, newTier1: 9000,  tier2: 7000 },
@@ -23,8 +38,6 @@ const SALARY_TABLE = {
   qa_test:          { tier1: 15000, newTier1: 11000, tier2: 9000 },
 };
 
-// Research-backed productivity gains by department
-// Sources: Stanford/MIT, Microsoft Research, HBR, Deloitte
 const PRODUCTIVITY_GAINS = {
   media:            { withAI: 40, fullAI: 65, source: "MIT/Stanford 写作效率研究" },
   customer_service: { withAI: 14, fullAI: 25, source: "Stanford/MIT 客服效率研究" },
@@ -43,9 +56,6 @@ const CITY_TIERS = [
 ];
 
 const getSalary = (roleKey, cityTier) => SALARY_TABLE[roleKey]?.[cityTier] || SALARY_TABLE[roleKey]?.tier1 || 8000;
-
-// Each question has `options` array for multi-select.
-// reversed questions: selecting an option means MORE pain = we invert by subtracting from max.
 
 const DEPARTMENTS = [
   {
@@ -322,7 +332,7 @@ const DEPARTMENTS = [
   },
 ];
 
-// ─── COMPONENTS ─────────────────────────────────────────────────────────────
+// Components
 function PB({ pct, color = "#10b981", delay = 0, h = 8 }) {
   const [w, setW] = useState(0);
   useEffect(() => { const t = setTimeout(() => setW(pct), delay + 100); return () => clearTimeout(t); }, [pct, delay]);
@@ -344,13 +354,11 @@ const bP = (a) => ({ flex: 1, padding: "14px 24px", borderRadius: 12, border: "n
 const bB = { padding: "12px 20px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "#888", cursor: "pointer", fontSize: 14 };
 const pill = (c) => ({ display: "inline-block", padding: "3px 10px", borderRadius: 10, fontSize: 11, fontWeight: 600, background: `${c}15`, color: c, border: `1px solid ${c}30` });
 
-// ─── MAIN ───────────────────────────────────────────────────────────────────
-export default function App() {
+function App() {
   const [step, setStep] = useState(0);
   const [cn, setCn] = useState(""); const [cs, setCs] = useState(""); const [rev, setRev] = useState(""); const [ind, setInd] = useState("");
   const [cityTier, setCityTier] = useState("tier1");
   const [sel, setSel] = useState([]); const [dhc, setDhc] = useState({});
-  // Multi-select: cap[`${deptId}_${key}`] = Set of selected option indices
   const [cap, setCap] = useState({});
   const [ccd, setCcd] = useState(0);
   const [re, setRe] = useState({}); const [crd, setCrd] = useState(0);
@@ -422,7 +430,6 @@ export default function App() {
   const gl2 = { position: "absolute", bottom: -150, left: -150, width: 400, height: 400, borderRadius: "50%", background: `radial-gradient(circle,${A2}10,transparent 70%)`, pointerEvents: "none" };
   const SI = ({ c, t }) => (<div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 24 }}>{Array.from({ length: t }, (_, i) => <div key={i} style={{ width: i + 1 === c ? 28 : 10, height: 10, borderRadius: 5, background: i + 1 < c ? A1 : i + 1 === c ? `linear-gradient(90deg,${A1},${A2})` : "rgba(255,255,255,0.08)", transition: "all 0.4s" }} />)}<span style={{ marginLeft: 8, fontSize: 12, color: "#555" }}>STEP {c}/{t}</span></div>);
 
-  // ═══════ STEP 0 — LANDING ═══════
   if (step === 0) return (
     <div style={ct}><div style={gl1} /><div style={gl2} />
       <div style={{ maxWidth: 780, margin: "0 auto", padding: "50px 20px", position: "relative", zIndex: 1 }}>
@@ -452,7 +459,6 @@ export default function App() {
     </div>
   );
 
-  // ═══════ STEP 1 — INFO ═══════
   if (step === 1) {
     const ok = cs && rev;
     return (<div style={ct}><div style={{ maxWidth: 560, margin: "0 auto", padding: "50px 20px" }}>
@@ -481,7 +487,6 @@ export default function App() {
     </div></div>);
   }
 
-  // ═══════ STEP 2 — DEPTS ═══════
   if (step === 2) {
     const ok = sel.length > 0 && sel.every(id => dhc[id] > 0);
     return (<div style={ct}><div style={{ maxWidth: 680, margin: "0 auto", padding: "50px 20px" }}>
@@ -499,13 +504,11 @@ export default function App() {
     </div></div>);
   }
 
-  // ═══════ STEP 3 — MULTI-SELECT ASSESSMENT ═══════
   if (step === 3) {
     const dept = ad[ccd];
     if (!dept) { setStep(4); initRC(); setCrd(0); return null; }
     const allA = dept.capQuestions.every(cq => isAnswered(dept.id, cq.key));
     const isL = ccd === ad.length - 1;
-
     return (<div style={ct}><div style={{ maxWidth: 640, margin: "0 auto", padding: "50px 20px" }}>
       <SI c={3} t={5} />
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
@@ -513,7 +516,6 @@ export default function App() {
         <div><div style={{ fontSize: 12, color: "#777" }}>部门 {ccd + 1} / {ad.length}</div><h2 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>{dept.name} — AI能力诊断</h2></div>
       </div>
       <p style={{ color: "#888", fontSize: 13, marginBottom: 24, lineHeight: 1.6 }}>勾选所有适用的选项（可多选）。越诚实，报告越精准。</p>
-
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
         {dept.capQuestions.map((cq, qi) => {
           const selected = getSelected(dept.id, cq.key);
@@ -548,7 +550,6 @@ export default function App() {
           );
         })}
       </div>
-
       <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
         <button onClick={() => ccd > 0 ? setCcd(p => p - 1) : setStep(2)} style={bB}>←</button>
         <button onClick={() => { if (!allA) return; if (isL) { initRC(); setCrd(0); setStep(4); } else setCcd(p => p + 1); }} disabled={!allA} style={bP(allA)}>
@@ -558,7 +559,6 @@ export default function App() {
     </div></div>);
   }
 
-  // ═══════ STEP 4 — ROLE HEADCOUNT ═══════
   if (step === 4) {
     const dept = ad[crd]; if (!dept) { setStep(5); return null; }
     const isL = crd === ad.length - 1;
@@ -586,7 +586,7 @@ export default function App() {
     </div></div>);
   }
 
-  // ═══════ STEP 5 — RESULTS with 3-STATE COMPARISON ═══════
+  // STEP 5 — RESULTS
   const results = calc();
   const gtc = results.reduce((s, r) => s + r.tc, 0);
   const gwa = results.reduce((s, r) => s + r.twAI, 0);
@@ -594,15 +594,12 @@ export default function App() {
   const gcw = results.reduce((s, r) => s + r.tcwAI, 0);
   const gcf = results.reduce((s, r) => s + r.tcfAI, 0);
   const avgCap = results.length > 0 ? Math.round(results.reduce((s, r) => s + r.capP, 0) / results.length) : 0;
-
-  // Research-backed productivity gains (weighted average by department headcount)
   const currentLaborCost = results.reduce((s, r) => s + r.rr.reduce((ss, rr) => ss + rr.cc * rr.salary * 14, 0), 0);
   const totalHC = results.reduce((s, r) => s + r.tc, 0) || 1;
   const outputGrowthA = Math.round(results.reduce((s, r) => s + (PRODUCTIVITY_GAINS[r.dept.id]?.withAI || 20) * r.tc, 0) / totalHC);
   const outputGrowthB = Math.round(results.reduce((s, r) => s + (PRODUCTIVITY_GAINS[r.dept.id]?.fullAI || 35) * r.tc, 0) / totalHC);
   const prodPerCapitaA = gwa > 0 ? Math.round(((gtc / gwa) - 1) * 100) : 0;
   const prodPerCapitaB = gfa > 0 ? Math.round(((gtc / gfa) - 1) * 100) : 0;
-
   const tierLabel = CITY_TIERS.find(t => t.id === cityTier)?.label || "一线城市";
 
   const stateCard = (state) => {
@@ -651,8 +648,6 @@ export default function App() {
           <h2 style={{ fontSize: 24, fontWeight: 700, margin: "0 0 4px" }}>{cn || "贵公司"} · AI替代全景分析</h2>
           <p style={{ color: "#777", fontSize: 13 }}>{te}人 · 年营收{rv.toLocaleString()}万 · {ind || "综合"} · {tierLabel} · AI成熟度 {avgCap}%</p>
         </div>
-
-        {/* ═══ 3-STATE BEFORE & AFTER ═══ */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: "#ddd", marginBottom: 12, textAlign: "center" }}>三种状态对比：你的企业可以进化到哪一步？</div>
           <div style={{ display: "flex", gap: 10 }}>
@@ -664,8 +659,6 @@ export default function App() {
             <div style={{ flex: 1, textAlign: "center" }}><span style={{ fontSize: 18, color: A2 }}>→</span><div style={{ fontSize: 10, color: A2 }}>12-18个月目标</div></div>
           </div>
         </div>
-
-        {/* Department Cards */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {results.map(({ dept, rr, tc, twAI, tfAI, tcwAI, tcfAI, capP }, idx) => {
             const isE = exp === dept.id;
@@ -713,7 +706,7 @@ export default function App() {
           })}
         </div>
 
-        {/* Sources Section */}
+        {/* Sources */}
         <div style={{ ...cd, marginTop: 16, padding: 0, overflow: "hidden" }}>
           <div onClick={() => setShowSources(!showSources)} style={{ padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#999" }}>📌 数据来源与研究方法</div>
@@ -760,7 +753,6 @@ export default function App() {
             <div style={{ padding: "20px 0" }}><div style={{ fontSize: 36, marginBottom: 8 }}>✅</div><div style={{ fontSize: 16, fontWeight: 700, color: A1, marginBottom: 4 }}>提交成功！</div><div style={{ fontSize: 13, color: "#aaa", lineHeight: 1.7 }}>AI转型顾问将在 <span style={{ color: A1, fontWeight: 600 }}>24小时内</span> 通过微信联系你。</div></div>
           )}
         </div>
-
         <div style={{ textAlign: "center", marginTop: 14 }}>
           <button onClick={() => { setStep(0); setSel([]); setDhc({}); setCs(""); setRev(""); setCap({}); setRe({}); setExp(null); setCn(""); setInd(""); setCityTier("tier1"); setLeadSubmitted(false); setLeadName(""); setLeadContact(""); setShowSources(false); }} style={{ ...bB, fontSize: 12 }}>重新诊断</button>
         </div>
@@ -769,3 +761,8 @@ export default function App() {
     </div>
   );
 }
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
