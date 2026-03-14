@@ -2,7 +2,19 @@
 
 > make a billion dollars by helping SMBs decision makers change the world
 
-Operations consulting for small and mid-size businesses — powered by AI diagnostics, delivered by humans who understand the work.
+---
+
+## What We're Building
+
+An automated diagnostic product that gives SMB owners an honest look at their operations — without requiring any human consultant time for the first interaction.
+
+**The client experience:**
+```
+Day 0:  Client talks to an AI analyst, uploads their business documents
+Day 1:  Client receives an auto-generated findings report with insights they didn't expect
+```
+
+No forms. No waiting. No human in the loop for Day 0-1.
 
 ---
 
@@ -10,132 +22,100 @@ Operations consulting for small and mid-size businesses — powered by AI diagno
 
 ```
 .
-├── pitch-pages/                        # Client-facing pitch materials
-│   ├── 00-merged-roadmap.html          # Master business roadmap (internal)
-│   ├── 01-export-manufacturers.html    # Pitch: OEM/ODM export manufacturers
-│   ├── 02-construction-contractors.html# Pitch: construction contractors
-│   ├── 03-regional-distributors.html   # Pitch: regional distributors
-│   ├── 04-industrial-manufacturers.html# Pitch: industrial manufacturers
-│   └── 05-property-management.html     # Pitch: property management companies
-│
-├── diagnostic/                         # Diagnostic product (Day 0-1 automated intake)
-│   └── intake-agent/                   # AI Intake Agent — conversational diagnostic
+├── diagnostic/                              # THE PRODUCT
+│   ├── diagnostic-product-plan.md           # Full product plan (all engagement phases)
+│   ├── diagnostic-day0-day1-plan.md         # Detailed Day 0-1 build plan
+│   │
+│   └── intake-agent/                        # PIECE 1: AI Intake Agent
 │       ├── prompts/
-│       │   ├── master-system-prompt.md         # Core agent personality + conversation flow
-│       │   ├── output-schema.json              # Structured JSON output definition
-│       │   ├── vertical-export-manufacturing.md# Vertical module: export
-│       │   ├── vertical-construction.md        # Vertical module: construction
-│       │   ├── vertical-distribution.md        # Vertical module: distribution
-│       │   ├── vertical-industrial-manufacturing.md # Vertical module: industrial
-│       │   └── vertical-property-management.md # Vertical module: property
+│       │   ├── master-system-prompt.md              # Core agent — personality, flow, rules
+│       │   ├── output-schema.json                   # Structured JSON output definition
+│       │   ├── vertical-export-manufacturing.md     # Module: export/OEM
+│       │   ├── vertical-construction.md             # Module: construction
+│       │   ├── vertical-distribution.md             # Module: distribution
+│       │   ├── vertical-industrial-manufacturing.md # Module: industrial
+│       │   └── vertical-property-management.md      # Module: property management
 │       ├── web-embed/
-│       │   └── index.html              # Branded landing page for Dify chat widget
+│       │   └── index.html                   # Branded landing page (EN/CN, Dify embed)
 │       ├── test-conversations/
-│       │   └── mock-export-manufacturer.md     # Mock conversation + expected JSON output
-│       └── dify-chatflow-guide.md      # Step-by-step Dify setup instructions
+│       │   └── mock-export-manufacturer.md  # Full mock conversation + expected output
+│       └── dify-chatflow-guide.md           # Step-by-step Dify setup guide
 │
-├── diagnostic-product-plan.md          # Full diagnostic product plan (all phases)
-├── diagnostic-day0-day1-plan.md        # Detailed Day 0-1 build plan
+├── archive/                                 # Earlier materials (pitch pages, roadmap)
+│   └── pitch-pages/
+│       ├── 00-merged-roadmap.html
+│       ├── 01-export-manufacturers.html
+│       ├── 02-construction-contractors.html
+│       ├── 03-regional-distributors.html
+│       ├── 04-industrial-manufacturers.html
+│       └── 05-property-management.html
+│
 └── README.md
 ```
 
 ---
 
-## Current Status
+## Diagnostic Product — 3 Pieces
 
-### Built
-- [x] Client pitch pages for all 5 verticals (styled, responsive, bilingual-ready)
-- [x] Master business roadmap (3-phase model)
-- [x] AI Intake Agent — system prompts, vertical modules, output schema, web embed, Dify guide
-- [x] Mock test conversation with expected JSON output
-- [x] Diagnostic product plan (full engagement lifecycle)
-- [x] Day 0-1 detailed build plan
+| # | Piece | Status | Description |
+|---|-------|--------|-------------|
+| 1 | **AI Intake Agent** | Ready for Dify build | Conversational agent that interviews the client, collects business profile + pain points, accepts document uploads, outputs structured JSON |
+| 2 | **Document Analysis Engine** | Not started | Automated pipeline: classify docs → extract fields → calculate metrics → generate narrative insights |
+| 3 | **Report Generator** | Not started | Auto-generated HTML findings report with charts, waste calculations, and ROI projections |
 
-### In Progress
-- [ ] **Dify chatflow build** — set up the intake agent in Dify using the prompts and guide
-- [ ] **Test with mock clients** — run 3-5 test conversations across verticals
+### Piece 1: AI Intake Agent (current focus)
 
-### Next Up
-- [ ] Document Analysis Engine (Piece 2) — automated parsing, extraction, metrics
-- [ ] Report Generator (Piece 3) — auto-generated HTML findings report
-- [ ] End-to-end test: fake client through full Day 0 → Day 1 flow
+A 15-20 minute conversation where an AI analyst interviews the client about their business. No forms, no questionnaires — just a natural conversation that collects:
+- Company profile (headcount, revenue, departments, tools)
+- Operational pain points (with specific numbers: hours, frequency, cost)
+- Document uploads (orders, invoices, quotations, reports)
 
----
+**What's built:**
+- Master system prompt with 5-phase conversation structure and 10 behavioral rules
+- 5 vertical-specific modules (export, construction, distribution, industrial, property)
+- JSON output schema for the analysis pipeline
+- Branded web embed page with EN/CN support
+- Dify chatflow configuration guide
+- Mock test conversation with expected JSON output
 
-## Key Decisions
-
-| Decision | What We Chose | Why |
-|----------|---------------|-----|
-| **First product** | Automated diagnostic intake (Day 0-1) | Zero human interaction required. Doubles as proof that AI works for the client's business. |
-| **5 verticals** | Export manufacturing, construction, distribution, industrial manufacturing, property management | These are where Chinese SMBs have the most painful manual workflows and the least tech adoption. |
-| **Diagnostic model** | "Workflow Audit & Live Proof-of-Concept" | Not just shadowing — we arrive with a working prototype. Risk reversal: fee credited toward pilot. |
-| **AI platform** | Dify (chatflow + API) | Fastest to MVP. Handles file uploads, conversational flows, and embeds. Swap later if needed. |
-| **LLMs** | DeepSeek V3.2 (production), GLM-4.7-Flash (free testing) | Cost-effective for SMB pricing. DeepSeek handles Chinese + English well. |
-| **No connector framework** | Build point-to-point integrations per client | Framework is premature. Build individual integrations (MCP servers where they exist, n8n/Dify for glue). Framework emerges after 5-10 clients. |
-| **Engagement pricing** | Diagnostic ~15-25K RMB, Pilot ~80-150K RMB, Retainer ~15-30K/month | SMB-friendly. Diagnostic fee credited toward pilot to reduce perceived risk. |
+**To build next:**
+1. Set up Dify chatflow using `diagnostic/intake-agent/dify-chatflow-guide.md`
+2. Paste master prompt + vertical module into LLM node
+3. Test against `mock-export-manufacturer.md`
+4. Deploy web embed with Dify URL
 
 ---
 
-## How We Work Together
+## Tech Stack
 
-**Will** — Business strategy, client relationships, system prompts, conversation flows, report design, pitch materials
-
-**Joanna** — Technical build, Dify chatflows, document analysis pipeline, integrations, backend
-
-### Branch Strategy
-- `main` — stable, reviewed work only
-- `will/*` — Will's working branches (e.g., `will/pitch-page-updates`)
-- `joanna/*` — Joanna's working branches (e.g., `joanna/dify-intake-agent`)
-- Create a branch for any non-trivial change. Merge to `main` via pull request.
-
-### Communication
-- Tag each other in PR descriptions when something needs review
-- Use commit messages that explain *why*, not just *what*
-- If you change a prompt, test it before committing — include test results in the PR
+| Tool | Role | Why |
+|------|------|-----|
+| **Dify** | Chatflow platform | Fast to MVP, handles file uploads, visual builder |
+| **DeepSeek V3.2** | Primary LLM (production) | $0.25/M input, handles CN+EN well |
+| **GLM-4.7-Flash** | LLM (free testing) | Zero cost for development iteration |
+| **Static HTML** | Web embed, reports | No framework overhead, prints to PDF |
 
 ---
 
-## Quick Start for Joanna
+## How We Work
 
-You're building the Dify chatflow for the AI Intake Agent. Here's where to start:
+**Will** — Strategy, prompts, conversation flows, client materials, report design
 
-1. **Read the build guide:** `diagnostic/intake-agent/dify-chatflow-guide.md` — step-by-step Dify setup
-2. **Core system prompt:** `diagnostic/intake-agent/prompts/master-system-prompt.md` — paste this into the Dify LLM node
-3. **Pick a vertical to test first:** `diagnostic/intake-agent/prompts/vertical-export-manufacturing.md` — append this to the system prompt
-4. **Expected output format:** `diagnostic/intake-agent/prompts/output-schema.json` — this is what the agent should produce at conversation end
-5. **Test against this:** `diagnostic/intake-agent/test-conversations/mock-export-manufacturer.md` — full mock conversation showing ideal behavior
-6. **Web embed page:** `diagnostic/intake-agent/web-embed/index.html` — update `CONFIG.DIFY_EMBED_URL` with your Dify app URL
+**Joanna** — Dify builds, analysis pipeline, integrations, backend
 
-### Build order:
-```
-Week 1-2:  Intake Agent in Dify (you're here)
-Week 2-3:  Document Analysis Engine (parsing + metrics)
-Week 3-4:  Report Generator (auto-generated HTML)
-Week 4-5:  End-to-end testing
-```
+### Branches
+- `main` — stable, reviewed
+- `will/*` — Will's working branches
+- `joanna/*` — Joanna's working branches
+
+### Quick Start for Joanna
+1. Read `diagnostic/intake-agent/dify-chatflow-guide.md`
+2. System prompt: `diagnostic/intake-agent/prompts/master-system-prompt.md`
+3. Test with: `diagnostic/intake-agent/test-conversations/mock-export-manufacturer.md`
+4. Output format: `diagnostic/intake-agent/prompts/output-schema.json`
 
 ---
 
-## Business Context
+## Archive
 
-### The 3-Phase Model
-
-**Phase 1: Consulting (now)**
-We sell diagnostic engagements to SMBs. The diagnostic itself is AI-powered (automated intake + document analysis + report generation). On-site audit follows with a working prototype. Revenue: per-engagement fees.
-
-**Phase 2: Productized Agents (after 5-10 clients)**
-Patterns from consulting engagements become reusable agent templates. Vertical-specific (e.g., "Export Order Processing Agent"). Revenue: pilot + retainer fees.
-
-**Phase 3: Platform (after 20+ clients)**
-Self-serve platform where SMBs can deploy pre-built workflow agents. Marketplace model. Revenue: subscriptions + usage.
-
-### What the Client Experiences
-```
-Day 0:  Talks to AI intake agent, uploads documents         ← WE'RE BUILDING THIS
-Day 1:  Receives auto-generated preliminary findings report  ← NEXT
-Day 2-4: Remote prep — we build a working prototype on their real data
-Day 5-6: On-site audit — shadow morning, demo prototype afternoon
-Day 7:  Deliverable: full diagnostic report + working prototype + ROI analysis
-```
-
-The diagnostic is the product. It's also the demo. The client's first interaction with us *is* an AI tool working on their business — that's the proof.
+The `archive/` folder contains earlier work — client pitch pages and the business roadmap. These are still valid but not the current priority. We'll revisit them once the diagnostic product is live.

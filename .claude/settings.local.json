@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install python-docx)",
+      "Bash(py -c \":*)",
+      "Bash(node -e \":*)",
+      "Bash(git --version)",
+      "Bash(gh --version)",
+      "Bash(mkdir -p \"C:/Users/wchiang/Deloitte \\(O365D\\)/Internal Development - Will''s Folder/Will & Joanna''s SMB idea/diagnostic/intake-agent/prompts\")",
+      "Bash(mkdir -p \"C:/Users/wchiang/Deloitte \\(O365D\\)/Internal Development - Will''s Folder/Will & Joanna''s SMB idea/diagnostic/intake-agent/web-embed\")",
+      "Bash(mkdir -p \"C:/Users/wchiang/Deloitte \\(O365D\\)/Internal Development - Will''s Folder/Will & Joanna''s SMB idea/diagnostic/intake-agent/test-conversations\")",
+      "Bash(find \"C:/Users/wchiang/Deloitte \\(O365D\\)/Internal Development - Will''s Folder/Will & Joanna''s SMB idea/diagnostic\" -type f)",
+      "Bash(gh auth status)",
+      "Bash(git config --global user.name)",
+      "Bash(git config --global user.email)",
+      "Bash(git config --global user.name \"Will Chiang\")",
+      "Bash(git config --global user.email \"jiangweilin040212@gmail.com\")",
+      "Bash(git ls-remote https://github.com/jojosuperstar0506/rebase.git)",
+      "Bash(find \"C:/Users/wchiang/Deloitte \\(O365D\\)/Internal Development - Will''s Folder/Will & Joanna''s SMB idea\" -type f -not -path '*/.claude/*')",
+      "Bash(git config -l)",
+      "Bash(find \"C:/Users/wchiang/Deloitte \\(O365D\\)/Internal Development - Will''s Folder/Will & Joanna''s SMB idea\" -type f -not -path '*/.git/*' -not -path '*/.claude/*')"
+    ]
+  }
+}
