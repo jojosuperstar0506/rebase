@@ -126,7 +126,7 @@ The diagnostic tool is the first thing clients experience — their "wow" moment
 
 ## Phase 1.5: Agent Prototypes — Joanna's Technical Spike
 
-> Building 3 internal "virtual employees" that Rebase uses daily. Each agent is a one-button tool that encodes our business assumptions. This is Joanna's technical spike — proving she can build agents end-to-end while creating real business value.
+> Building 3 internal "virtual employees" that Rebase uses daily. Each agent is an easy-to-use tool that encodes our business assumptions. Joanna prototypes agents end-to-end to create real business value.
 
 **Why these agents matter:**
 1. **Dog-fooding** — we use our own product, proving agents work
