@@ -1,0 +1,95 @@
+version: "3.9"
+
+services:
+  # ---- Application services ------------------------------------------------
+  api:
+    build:
+      context: ../
+      dockerfile: infra/docker/Dockerfile.api
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - NEO4J_URI=bolt://neo4j:7687
+      - MILVUS_HOST=milvus
+      - MILVUS_PORT=19530
+    depends_on:
+      - redis
+      - neo4j
+      - milvus
+    networks:
+      - rebase
+
+  frontend:
+    build:
+      context: ../
+      dockerfile: infra/docker/Dockerfile.frontend
+    ports:
+      - "5173:5173"
+    networks:
+      - rebase
+
+  # ---- Data stores ----------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - rebase
+
+  neo4j:
+    image: neo4j:5
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/rebase_dev
+      - NEO4J_PLUGINS=["apoc"]
+    volumes:
+      - neo4j-data:/data
+    networks:
+      - rebase
+
+  milvus:
+    image: milvusdb/milvus:latest
+    command: ["milvus", "run", "standalone"]
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    environment:
+      ETCD_USE_EMBED: "true"
+      ETCD_DATA_DIR: /var/lib/milvus/etcd
+      COMMON_STORAGETYPE: local
+    volumes:
+      - milvus-data:/var/lib/milvus
+    networks:
+      - rebase
+
+  # ---- Phase 2 services (uncomment when ready) ------------------------------
+  # temporal:
+  #   image: temporalio/auto-setup:latest
+  #   ports:
+  #     - "7233:7233"
+  #   environment:
+  #     - DB=postgresql
+  #   networks:
+  #     - rebase
+
+  # rocketmq:
+  #   image: apache/rocketmq:5.1.0
+  #   ports:
+  #     - "9876:9876"
+  #     - "10911:10911"
+  #   networks:
+  #     - rebase
+
+networks:
+  rebase:
+    driver: bridge
+
+volumes:
+  redis-data:
+  neo4j-data:
+  milvus-data:

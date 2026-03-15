@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en" style="scroll-behavior:smooth">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stop Losing Orders to Slow Response Times</title>
+<style>
+  :root {
+    --accent: #1a6b8a;
+    --accent-dark: #134e65;
+    --accent-light: #e6f2f7;
+    --red: #c0392b;
+    --red-bg: #fdf0ee;
+    --green: #1a7a4c;
+    --green-bg: #edf8f2;
+    --text: #1c1f26;
+    --text-secondary: #525866;
+    --bg: #ffffff;
+    --surface: #f8f9fb;
+    --shadow-sm: 0 2px 12px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 24px rgba(0,0,0,0.06);
+    --shadow-lg: 0 8px 40px rgba(0,0,0,0.10);
+    --radius: 16px;
+  }
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.65;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+  section { padding: 88px 0; }
+  h2 {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 16px;
+    letter-spacing: -0.02em;
+  }
+  .section-subtitle {
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+    max-width: 640px;
+    margin-bottom: 48px;
+  }
+  .label {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+
+  /* ===== HERO ===== */
+  .hero {
+    min-height: 72vh;
+    display: flex;
+    align-items: center;
+    background: linear-gradient(135deg, #0d3d4f 0%, var(--accent) 50%, #1f8fad 100%);
+    color: #fff;
+    padding: 100px 0 80px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -40%;
+    right: -20%;
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+  .hero::after {
+    content: '';
+    position: absolute;
+    bottom: -30%;
+    left: -10%;
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, rgba(255,255,255,0.04) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+  .hero .wrap { position: relative; z-index: 1; }
+  .hero h1 {
+    font-size: 2.8rem;
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: -0.03em;
+    max-width: 720px;
+    margin-bottom: 20px;
+  }
+  .hero p {
+    font-size: 1.15rem;
+    opacity: 0.88;
+    max-width: 560px;
+    margin-bottom: 40px;
+    line-height: 1.6;
+  }
+  .hero-stat {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 12px;
+    background: rgba(255,255,255,0.12);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 12px;
+    padding: 20px 32px;
+  }
+  .hero-stat .num {
+    font-size: 3rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+  .hero-stat .unit {
+    font-size: 1rem;
+    opacity: 0.85;
+    max-width: 180px;
+    line-height: 1.35;
+  }
+
+  /* ===== PAIN POINTS ===== */
+  .pain { background: var(--surface); }
+  .pain-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  .pain-card {
+    background: #fff;
+    border-radius: var(--radius);
+    padding: 32px;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid rgba(0,0,0,0.04);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .pain-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+  .pain-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: var(--accent-light);
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    margin-bottom: 16px;
+    font-weight: 700;
+  }
+  .pain-card h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    line-height: 1.3;
+  }
+  .pain-card p {
+    font-size: 0.92rem;
+    color: var(--text-secondary);
+    line-height: 1.55;
+  }
+
+  /* ===== HIDDEN COST ===== */
+  .cost-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 40px;
+  }
+  .cost-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 36px 32px;
+    text-align: center;
+    border: 1px solid rgba(0,0,0,0.04);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .cost-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+  .cost-num {
+    font-size: 2.8rem;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1.1;
+    margin-bottom: 4px;
+    letter-spacing: -0.03em;
+  }
+  .cost-unit {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin-bottom: 10px;
+  }
+  .cost-desc {
+    font-size: 0.92rem;
+    color: var(--text);
+    line-height: 1.45;
+  }
+  .cost-bottom {
+    text-align: center;
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 28px 32px;
+    border-left: 4px solid var(--accent);
+  }
+
+  /* ===== BEFORE/AFTER ===== */
+  .change { background: var(--surface); }
+  .ba-row {
+    display: grid;
+    grid-template-columns: 1fr 48px 1fr;
+    gap: 0;
+    align-items: stretch;
+    margin-bottom: 16px;
+  }
+  .ba-row:last-child { margin-bottom: 0; }
+  .ba-today, .ba-after {
+    border-radius: 12px;
+    padding: 20px 24px;
+    font-size: 0.92rem;
+    line-height: 1.5;
+  }
+  .ba-today {
+    background: var(--red-bg);
+    color: var(--red);
+    border-left: 3px solid var(--red);
+  }
+  .ba-after {
+    background: var(--green-bg);
+    color: var(--green);
+    border-left: 3px solid var(--green);
+  }
+  .ba-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    color: var(--text-secondary);
+    opacity: 0.5;
+  }
+  .ba-header {
+    display: grid;
+    grid-template-columns: 1fr 48px 1fr;
+    margin-bottom: 16px;
+  }
+  .ba-header span {
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .ba-header .today-label { color: var(--red); }
+  .ba-header .after-label { color: var(--green); }
+
+  /* ===== PROCESS ===== */
+  .steps {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0;
+    position: relative;
+  }
+  .steps::before {
+    content: '';
+    position: absolute;
+    top: 32px;
+    left: 16.66%;
+    right: 16.66%;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent), #1f8fad);
+    border-radius: 2px;
+    z-index: 0;
+  }
+  .step {
+    text-align: center;
+    padding: 0 16px;
+    position: relative;
+    z-index: 1;
+  }
+  .step-dot {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), #1f8fad);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    font-weight: 800;
+    margin: 0 auto 20px;
+    box-shadow: 0 4px 16px rgba(26,107,138,0.25);
+  }
+  .step h3 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .step .timeline {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 16px;
+  }
+  .step ul {
+    list-style: none;
+    text-align: left;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    line-height: 1.55;
+    margin-bottom: 16px;
+  }
+  .step li { padding: 3px 0; }
+  .step li::before {
+    content: '\2022';
+    color: var(--accent);
+    font-weight: 700;
+    margin-right: 8px;
+  }
+  .step-deliver {
+    font-size: 0.82rem;
+    background: var(--accent-light);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    color: var(--text);
+    line-height: 1.4;
+  }
+  .step-deliver strong { color: var(--accent-dark); }
+  .step-phase {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--accent-dark);
+    text-align: left;
+    margin-top: 12px;
+    margin-bottom: 4px;
+  }
+  .step-phase:first-of-type { margin-top: 0; }
+  .step-summary {
+    font-size: 0.82rem;
+    text-align: left;
+    color: var(--text-secondary);
+    line-height: 1.45;
+    margin-top: 8px;
+    margin-bottom: 4px;
+  }
+  .step-price {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  /* ===== PRICING ===== */
+  .pricing { background: var(--surface); }
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 20px;
+    align-items: start;
+    margin-bottom: 40px;
+  }
+  .price-card {
+    background: #fff;
+    border-radius: var(--radius);
+    padding: 36px 28px;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid rgba(0,0,0,0.06);
+    position: relative;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .price-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+  .price-card.featured {
+    border: 2px solid var(--accent);
+    padding: 44px 28px 36px;
+    box-shadow: var(--shadow-lg);
+    transform: scale(1.04);
+  }
+  .price-card.featured:hover {
+    transform: scale(1.04) translateY(-2px);
+  }
+  .price-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 4px 12px;
+    border-radius: 20px;
+    margin-bottom: 16px;
+  }
+  .badge-start {
+    background: var(--accent-light);
+    color: var(--accent);
+  }
+  .badge-popular {
+    background: var(--accent);
+    color: #fff;
+  }
+  .badge-scale {
+    background: var(--surface);
+    color: var(--text-secondary);
+  }
+  .price-card h3 {
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .price-amount {
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: var(--accent);
+    margin-bottom: 4px;
+    letter-spacing: -0.02em;
+  }
+  .price-period {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+  .price-desc {
+    font-size: 0.92rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    padding-top: 16px;
+    border-top: 1px solid rgba(0,0,0,0.06);
+  }
+  .pricing-footnote {
+    text-align: center;
+    font-size: 1.05rem;
+    color: var(--text);
+    font-weight: 500;
+    line-height: 1.55;
+  }
+  .pricing-footnote strong { color: var(--accent-dark); }
+
+  /* ===== TRUST ===== */
+  .trust-list {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  .trust-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 14px 0;
+  }
+  .trust-check {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--green-bg);
+    color: var(--green);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    font-weight: 700;
+    margin-top: 1px;
+  }
+  .trust-item p {
+    font-size: 1rem;
+    line-height: 1.55;
+    color: var(--text);
+  }
+
+  /* ===== CTA ===== */
+  .cta-section {
+    background: linear-gradient(135deg, #0d3d4f 0%, var(--accent) 50%, #1f8fad 100%);
+    color: #fff;
+    text-align: center;
+    padding: 96px 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .cta-section::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px;
+    height: 800px;
+    background: radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 60%);
+    border-radius: 50%;
+  }
+  .cta-section .wrap { position: relative; z-index: 1; }
+  .cta-section h2 {
+    font-size: 2.2rem;
+    font-weight: 800;
+    margin-bottom: 16px;
+    letter-spacing: -0.02em;
+  }
+  .cta-section .sub {
+    font-size: 1.1rem;
+    opacity: 0.9;
+    max-width: 520px;
+    margin: 0 auto 12px;
+    line-height: 1.55;
+  }
+  .cta-section .subsub {
+    font-size: 0.95rem;
+    opacity: 0.7;
+    max-width: 480px;
+    margin: 0 auto 36px;
+    line-height: 1.5;
+  }
+  .cta-btn {
+    display: inline-block;
+    background: #fff;
+    color: var(--accent-dark);
+    font-size: 1.05rem;
+    font-weight: 700;
+    padding: 16px 40px;
+    border-radius: 50px;
+    text-decoration: none;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    cursor: pointer;
+  }
+  .cta-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+  }
+  .cta-note {
+    margin-top: 28px;
+    font-size: 0.88rem;
+    opacity: 0.65;
+  }
+
+  /* ===== MOBILE ===== */
+  @media (max-width: 768px) {
+    section { padding: 64px 0; }
+    .hero { min-height: auto; padding: 80px 0 60px; }
+    .hero h1 { font-size: 2rem; }
+    .hero-stat { flex-direction: column; gap: 4px; padding: 16px 24px; }
+    .hero-stat .num { font-size: 2.2rem; }
+    .pain-grid { grid-template-columns: 1fr; }
+    .cost-grid { grid-template-columns: 1fr; }
+    .ba-row { grid-template-columns: 1fr; gap: 8px; }
+    .ba-arrow { transform: rotate(90deg); padding: 4px 0; }
+    .ba-header { display: none; }
+    .ba-today::before { content: 'Today: '; font-weight: 700; }
+    .ba-after::before { content: 'With Us: '; font-weight: 700; }
+    .steps { grid-template-columns: 1fr; gap: 40px; }
+    .steps::before { display: none; }
+    .pricing-grid { grid-template-columns: 1fr; }
+    .price-card.featured { transform: none; }
+    .price-card.featured:hover { transform: translateY(-2px); }
+    h2 { font-size: 1.65rem; }
+    .cta-section h2 { font-size: 1.8rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ========== HERO ========== -->
+<section class="hero">
+  <div class="wrap">
+    <h1>Your Sales Team Answers 47 Inquiries a Day.<br>How Many Turn Into Orders?</h1>
+    <p>We help export manufacturers stop losing orders to slow response times, scattered product data, and follow-ups that never happen.</p>
+    <div class="hero-stat">
+      <span class="num">133-167</span>
+      <span class="unit">hours per month lost to manual inquiry handling</span>
+    </div>
+  </div>
+</section>
+
+<!-- ========== PAIN POINTS ========== -->
+<section class="pain">
+  <div class="wrap">
+    <span class="label">Sound Familiar?</span>
+    <h2>The Problems Nobody Talks About<br>at the Canton Fair</h2>
+    <p class="section-subtitle">These are the things that keep factory owners up at night. Not the big strategic questions. The small, relentless operational ones.</p>
+    <div class="pain-grid">
+      <div class="pain-card">
+        <div class="pain-icon">47</div>
+        <h3>Monday morning: 47 unread inquiries across email, Alibaba, and WhatsApp</h3>
+        <p>Your team is already behind before the day even starts. Inquiries pile up over the weekend and it takes half the day just to sort through them.</p>
+      </div>
+      <div class="pain-card">
+        <div class="pain-icon">3x</div>
+        <h3>A quote that should take 10 minutes takes 45</h3>
+        <p>Pricing lives in one spreadsheet, specs in another, MOQs in someone's head. Every quotation is assembled from scratch.</p>
+      </div>
+      <div class="pain-card">
+        <div class="pain-icon">0</div>
+        <h3>Follow-ups go out late, or never</h3>
+        <p>By the time your team replies, the buyer found another supplier. Not because your product is worse. Because someone else was faster.</p>
+      </div>
+      <div class="pain-card">
+        <div class="pain-icon">?</div>
+        <h3>Your best salesperson's knowledge is in their head</h3>
+        <p>Product details, buyer preferences, pricing history. When they leave, years of institutional knowledge walk out the door with them.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== HIDDEN COST ========== -->
+<section>
+  <div class="wrap">
+    <span class="label">The Hidden Cost</span>
+    <h2>What This Is Actually Costing You Every Month</h2>
+    <p class="section-subtitle">Most factory owners know things are slow. Few have calculated what that slowness costs in real money.</p>
+    <div class="cost-grid">
+      <div class="cost-card">
+        <div class="cost-num">133-167</div>
+        <div class="cost-unit">hours per month</div>
+        <div class="cost-desc">Skilled sales time wasted on manual data entry, copy-pasting specs, and chasing incomplete information</div>
+      </div>
+      <div class="cost-card">
+        <div class="cost-num">&#165;6,650-13,360</div>
+        <div class="cost-unit">per month</div>
+        <div class="cost-desc">Direct labor cost wasted on tasks that should take a fraction of the time</div>
+      </div>
+      <div class="cost-card">
+        <div class="cost-num">15-30%</div>
+        <div class="cost-unit">of qualified inquiries</div>
+        <div class="cost-desc">Never get a follow-up at all. Buyers who wanted to order, but you never got back to them in time</div>
+      </div>
+      <div class="cost-card">
+        <div class="cost-num">6-8 hrs</div>
+        <div class="cost-unit">average response time</div>
+        <div class="cost-desc">Your competitor replies in 20 minutes. In export sales, speed wins. Every time.</div>
+      </div>
+    </div>
+    <div class="cost-bottom">This isn't a technology problem. It's revenue walking out the door.</div>
+  </div>
+</section>
+
+<!-- ========== BEFORE / AFTER ========== -->
+<section class="change">
+  <div class="wrap">
+    <span class="label">What Changes</span>
+    <h2>The Difference Between Today and 6 Weeks From Now</h2>
+    <p class="section-subtitle">No magic. No buzzwords. Just faster, more consistent operations built around how your team already works.</p>
+    <div class="ba-header">
+      <span class="today-label">Today</span>
+      <span></span>
+      <span class="after-label">With Us</span>
+    </div>
+    <div class="ba-row">
+      <div class="ba-today">Inquiries sit in the inbox for hours. Urgent ones get buried under routine ones.</div>
+      <div class="ba-arrow">&rarr;</div>
+      <div class="ba-after">Every inquiry triaged and prioritized within 5 minutes. Hot leads surfaced instantly.</div>
+    </div>
+    <div class="ba-row">
+      <div class="ba-today">Quotations assembled manually from 3 different systems. Errors happen weekly.</div>
+      <div class="ba-arrow">&rarr;</div>
+      <div class="ba-after">Draft quotations generated in under 2 minutes with correct pricing, specs, and MOQs.</div>
+    </div>
+    <div class="ba-row">
+      <div class="ba-today">Follow-ups depend on who remembers. Most fall through the cracks.</div>
+      <div class="ba-arrow">&rarr;</div>
+      <div class="ba-after">Automated follow-up sequences for every qualified lead. Nothing gets forgotten.</div>
+    </div>
+    <div class="ba-row">
+      <div class="ba-today">English, Spanish, Arabic replies are rough Google Translate. Buyers notice.</div>
+      <div class="ba-arrow">&rarr;</div>
+      <div class="ba-after">Professional multilingual responses your buyers actually trust.</div>
+    </div>
+    <div class="ba-row">
+      <div class="ba-today">New hires take 3 months to learn your products. Expensive trial and error.</div>
+      <div class="ba-arrow">&rarr;</div>
+      <div class="ba-after">Instant access to your entire product knowledge base. New hires are productive in days.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== PROCESS ========== -->
+<section>
+  <div class="wrap">
+    <span class="label">How It Works</span>
+    <h2>Three Steps. No Surprises.</h2>
+    <p class="section-subtitle">We've done this before. Here's exactly what happens, when it happens, and what it costs.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-dot">1</div>
+        <h3>We Audit &amp; Prove</h3>
+        <div class="timeline">Week 1 (3 days remote + 2 days on-site)</div>
+        <div class="step-phase">Before we visit (3 days remote prep):</div>
+        <ul>
+          <li>We collect 50 of your real buyer inquiries, your product catalog, and pricing rules</li>
+          <li>We build a working prototype customized to YOUR products and YOUR buyers</li>
+          <li>By the time we walk in, we already have something to show you</li>
+        </ul>
+        <div class="step-phase">On-site (2 days):</div>
+        <ul>
+          <li>Day 1 AM: shadow your sales team, watch real inquiries come in</li>
+          <li>Day 1 PM: run that morning's ACTUAL inquiries through our prototype &mdash; you watch your 9 AM inbox get triaged in 90 seconds instead of 3 hours</li>
+          <li>Day 2: your team tests it on live inquiries alongside their current process. We measure the difference together</li>
+        </ul>
+        <div class="step-phase">What you get (the deliverable):</div>
+        <ul>
+          <li>Process map of your actual workflow with time/cost per step</li>
+          <li>Working prototype tested on 30-50 of YOUR real inquiries (before vs. after)</li>
+          <li>Custom ROI model using your salary data and inquiry volume</li>
+          <li>Honest go/no-go recommendation &mdash; if this won't help enough, we tell you</li>
+        </ul>
+        <div class="step-price">&#165;15,000 - 30,000</div>
+        <div class="step-summary">Fee credited toward the pilot if you proceed</div>
+      </div>
+      <div class="step">
+        <div class="step-dot">2</div>
+        <h3>We Build</h3>
+        <div class="timeline">Weeks 2-6</div>
+        <div class="step-summary">We don't start from scratch &mdash; we build on the prototype you already saw working during the audit.</div>
+        <ul>
+          <li>Set up the system using your real data</li>
+          <li>Your team tests on live inquiries alongside current process</li>
+          <li>We adjust until it works the way your business needs</li>
+        </ul>
+        <div class="step-deliver"><strong>Deliverable:</strong> Working system handling real inquiries</div>
+        <div class="step-price">&#165;50,000 - 100,000</div>
+      </div>
+      <div class="step">
+        <div class="step-dot">3</div>
+        <h3>We Run</h3>
+        <div class="timeline">Ongoing</div>
+        <ul>
+          <li>We manage and improve the system month by month</li>
+          <li>Your team focuses on closing deals, not typing emails</li>
+          <li>Monthly performance reports</li>
+        </ul>
+        <div class="step-deliver"><strong>Cancel anytime</strong> &mdash; month to month, no lock-in</div>
+        <div class="step-price">&#165;15,000 - 30,000/mo</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== PRICING ========== -->
+<section class="pricing">
+  <div class="wrap">
+    <span class="label">The Investment</span>
+    <h2>Straightforward Pricing. No Hidden Fees.</h2>
+    <p class="section-subtitle">Start small. See results. Scale when you're ready.</p>
+    <div class="pricing-grid">
+      <div class="price-card">
+        <span class="price-badge badge-start">Start Here</span>
+        <h3>Diagnostic</h3>
+        <div class="price-amount">&#165;15,000 - 30,000</div>
+        <div class="price-period">1 week</div>
+        <p class="price-desc">Working prototype tested on YOUR data + full process audit with custom ROI model. Specific recommendations before you spend another yuan.<br><strong style="color:var(--accent);font-size:0.82rem;">Fee credited toward pilot if you proceed.</strong></p>
+      </div>
+      <div class="price-card featured">
+        <span class="price-badge badge-popular">Most Popular</span>
+        <h3>Pilot</h3>
+        <div class="price-amount">&#165;50,000 - 100,000</div>
+        <div class="price-period">4-6 weeks</div>
+        <p class="price-desc">See it work on real inquiries before you commit. Your team runs the new system alongside current process. Zero risk to your operations.</p>
+      </div>
+      <div class="price-card">
+        <span class="price-badge badge-scale">Scale When Ready</span>
+        <h3>Managed Service</h3>
+        <div class="price-amount">&#165;15,000 - 30,000</div>
+        <div class="price-period">per month, ongoing</div>
+        <p class="price-desc">We keep it running, optimized, and improving so your team can focus on what they do best: selling and closing deals.</p>
+      </div>
+    </div>
+    <p class="pricing-footnote"><strong>Total first-year investment:</strong> Less than the cost of one junior sales hire.<br>But it doesn't take sick days.</p>
+  </div>
+</section>
+
+<!-- ========== TRUST ========== -->
+<section>
+  <div class="wrap">
+    <span class="label">No Risk</span>
+    <h2>Built for Business Owners Who've Been<br>Burned by Tech Before</h2>
+    <p class="section-subtitle" style="margin-left:auto;margin-right:auto;text-align:center;">We know you've heard promises from software vendors before. Here's how we're different.</p>
+    <div class="trust-list">
+      <div class="trust-item">
+        <div class="trust-check">&#10003;</div>
+        <p><strong>No IT department required.</strong> We handle everything. Your team doesn't need to learn new software or change how they work.</p>
+      </div>
+      <div class="trust-item">
+        <div class="trust-check">&#10003;</div>
+        <p><strong>See your own data processed live during the first week</strong> &mdash; before you commit to anything else. This isn't a 6-month implementation with steering committees.</p>
+      </div>
+      <div class="trust-item">
+        <div class="trust-check">&#10003;</div>
+        <p><strong>Your team approves every response before it goes out</strong> (in the beginning). Nothing leaves your company without a human review until you're comfortable.</p>
+      </div>
+      <div class="trust-item">
+        <div class="trust-check">&#10003;</div>
+        <p><strong>Month-to-month service.</strong> No annual contract. No lock-in. If it's not working, you stop. Simple.</p>
+      </div>
+      <div class="trust-item">
+        <div class="trust-check">&#10003;</div>
+        <p><strong>Works with your existing tools.</strong> Email, WeChat, Alibaba backend. We plug into what you already use. No rip-and-replace.</p>
+      </div>
+      <div class="trust-item">
+        <div class="trust-check">&#10003;</div>
+        <p><strong>If it doesn't save you at least 80 hours/month in the pilot, we'll tell you honestly.</strong> We'd rather lose the deal than waste your money.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== CTA ========== -->
+<section class="cta-section">
+  <div class="wrap">
+    <h2>See It Work Before You Decide</h2>
+    <p class="sub">Book a 30-minute diagnostic conversation. No slides. No sales pitch. Just your workflow and our screen.</p>
+    <p class="subsub">We'll show you exactly where the hours are hiding &mdash; and what they're costing you.</p>
+    <span class="cta-btn">Book a 30-Minute Conversation</span>
+    <p class="cta-note">Most factory owners see the first results within 3 weeks of starting.</p>
+  </div>
+</section>
+
+</body>
+</html>

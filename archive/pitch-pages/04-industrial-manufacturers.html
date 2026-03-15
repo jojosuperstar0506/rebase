@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Get Your Quality Team Back on the Floor</title>
+<style>
+  :root {
+    --accent: #37474f;
+    --accent-dark: #263238;
+    --accent-light: #546e7a;
+    --accent-subtle: #eceff1;
+    --white: #ffffff;
+    --offwhite: #f8f9fb;
+    --text: #1a1a1a;
+    --text-secondary: #5f6368;
+    --text-muted: #9aa0a6;
+    --border: #e0e0e0;
+    --shadow: 0 4px 24px rgba(0,0,0,0.06);
+    --shadow-hover: 0 8px 40px rgba(0,0,0,0.12);
+    --radius: 16px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: var(--text);
+    background: var(--white);
+    line-height: 1.7;
+    font-size: 17px;
+  }
+
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* ===== HERO ===== */
+  .hero {
+    min-height: 70vh;
+    background: linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 50%, var(--accent-light) 100%);
+    color: var(--white);
+    display: flex;
+    align-items: center;
+    position: relative;
+    overflow: hidden;
+    padding: 80px 0;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -20%;
+    width: 600px;
+    height: 600px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.03);
+    pointer-events: none;
+  }
+
+  .hero::after {
+    content: '';
+    position: absolute;
+    bottom: -30%;
+    left: -10%;
+    width: 400px;
+    height: 400px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.02);
+    pointer-events: none;
+  }
+
+  .hero .container { position: relative; z-index: 1; }
+
+  .hero-label {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.6);
+    margin-bottom: 24px;
+  }
+
+  .hero h1 {
+    font-size: 42px;
+    font-weight: 800;
+    line-height: 1.15;
+    margin-bottom: 24px;
+    max-width: 800px;
+  }
+
+  .hero .subtitle {
+    font-size: 19px;
+    line-height: 1.6;
+    color: rgba(255,255,255,0.85);
+    max-width: 640px;
+    margin-bottom: 48px;
+  }
+
+  .hero-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 16px;
+    background: rgba(255,255,255,0.1);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 12px;
+    padding: 20px 28px;
+  }
+
+  .hero-stat .number {
+    font-size: 48px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .hero-stat .label {
+    font-size: 15px;
+    color: rgba(255,255,255,0.8);
+    line-height: 1.4;
+    max-width: 260px;
+  }
+
+  /* ===== SECTIONS ===== */
+  .section {
+    padding: 88px 0;
+  }
+
+  .section--gray {
+    background: var(--offwhite);
+  }
+
+  .section-label {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+
+  .section h2 {
+    font-size: 34px;
+    font-weight: 800;
+    line-height: 1.2;
+    margin-bottom: 20px;
+    max-width: 700px;
+  }
+
+  .section .lead {
+    font-size: 18px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    max-width: 640px;
+    margin-bottom: 48px;
+  }
+
+  /* ===== PAIN CARDS ===== */
+  .pain-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  .pain-card {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px;
+    box-shadow: var(--shadow);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    position: relative;
+  }
+
+  .pain-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+  }
+
+  .pain-card .pain-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--accent-subtle);
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 16px;
+  }
+
+  .pain-card p {
+    font-size: 16px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+  }
+
+  /* ===== COST SECTION ===== */
+  .cost-numbers {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    margin-bottom: 48px;
+  }
+
+  .cost-item {
+    text-align: center;
+    padding: 32px 20px;
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+  }
+
+  .cost-item:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+  }
+
+  .cost-item .big-number {
+    font-size: 48px;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+
+  .cost-item .big-number span {
+    font-size: 28px;
+  }
+
+  .cost-item .unit {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-light);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+
+  .cost-item .desc {
+    font-size: 14px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .cost-two {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 48px;
+  }
+
+  .bottom-line {
+    background: var(--accent-subtle);
+    border-radius: var(--radius);
+    padding: 32px 40px;
+    border-left: 4px solid var(--accent);
+  }
+
+  .bottom-line p {
+    font-size: 17px;
+    line-height: 1.7;
+    color: var(--text);
+    margin: 0;
+  }
+
+  /* ===== BEFORE/AFTER ===== */
+  .compare-row {
+    display: grid;
+    grid-template-columns: 1fr 48px 1fr;
+    gap: 0;
+    align-items: center;
+    margin-bottom: 24px;
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+  }
+
+  .compare-row:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+  }
+
+  .compare-row:last-child {
+    margin-bottom: 0;
+  }
+
+  .compare-before, .compare-after {
+    padding: 28px 32px;
+  }
+
+  .compare-before {
+    background: #fafafa;
+  }
+
+  .compare-before .compare-tag {
+    color: #b71c1c;
+    background: #ffebee;
+  }
+
+  .compare-after .compare-tag {
+    color: #1b5e20;
+    background: #e8f5e9;
+  }
+
+  .compare-tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 6px;
+    margin-bottom: 10px;
+  }
+
+  .compare-text {
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+
+  .compare-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent);
+    color: var(--white);
+    font-size: 20px;
+    height: 100%;
+    min-height: 80px;
+  }
+
+  /* ===== TIMELINE / STEPS ===== */
+  .steps {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0;
+    position: relative;
+  }
+
+  .steps::before {
+    content: '';
+    position: absolute;
+    top: 40px;
+    left: 16.67%;
+    right: 16.67%;
+    height: 3px;
+    background: var(--border);
+    z-index: 0;
+  }
+
+  .step {
+    text-align: center;
+    position: relative;
+    z-index: 1;
+    padding: 0 16px;
+  }
+
+  .step-circle {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--white);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    font-weight: 800;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 16px rgba(55,71,79,0.25);
+  }
+
+  .step h3 {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+
+  .step .step-time {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 16px;
+  }
+
+  .step ul {
+    list-style: none;
+    text-align: left;
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+
+  .step ul li {
+    padding: 4px 0;
+    padding-left: 16px;
+    position: relative;
+  }
+
+  .step ul li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 12px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent-light);
+  }
+
+  .step .deliverable-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+
+  .step .deliverable-text {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+
+  .step .step-price {
+    display: inline-block;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--accent-subtle);
+    padding: 6px 16px;
+    border-radius: 8px;
+  }
+
+  .step .step-sub-header {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    text-align: left;
+    margin-top: 12px;
+    margin-bottom: 4px;
+  }
+
+  .step .step-sub-header:first-of-type {
+    margin-top: 0;
+  }
+
+  .step .step-detail {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent);
+    text-align: left;
+    margin-top: 12px;
+    margin-bottom: 4px;
+  }
+
+  /* ===== PRICING CARDS ===== */
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 24px;
+    align-items: start;
+    margin-bottom: 40px;
+  }
+
+  .pricing-card {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 40px 32px;
+    text-align: center;
+    box-shadow: var(--shadow);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    position: relative;
+  }
+
+  .pricing-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+  }
+
+  .pricing-card.featured {
+    border: 2px solid var(--accent);
+    box-shadow: var(--shadow-hover);
+    transform: scale(1.04);
+    z-index: 2;
+    padding: 48px 32px;
+  }
+
+  .pricing-card.featured:hover {
+    transform: scale(1.04) translateY(-2px);
+  }
+
+  .pricing-badge {
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--accent);
+    color: var(--white);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 5px 18px;
+    border-radius: 20px;
+  }
+
+  .pricing-card h3 {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+
+  .pricing-card .pricing-price {
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--accent);
+    margin-bottom: 4px;
+    line-height: 1.2;
+  }
+
+  .pricing-card .pricing-period {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+  }
+
+  .pricing-card .pricing-desc {
+    font-size: 15px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  .pricing-card .pricing-cta-label {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-subtle);
+    padding: 6px 14px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+  }
+
+  .pricing-note {
+    text-align: center;
+    font-size: 17px;
+    color: var(--text-secondary);
+    max-width: 640px;
+    margin: 0 auto;
+    line-height: 1.7;
+  }
+
+  /* ===== CHECKLIST ===== */
+  .checklist {
+    list-style: none;
+    max-width: 680px;
+  }
+
+  .checklist li {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 17px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+
+  .checklist li:last-child {
+    border-bottom: none;
+  }
+
+  .check-icon {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #e8f5e9;
+    color: #2e7d32;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 700;
+    margin-top: 2px;
+  }
+
+  /* ===== CTA ===== */
+  .cta {
+    background: linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 50%, var(--accent-light) 100%);
+    color: var(--white);
+    padding: 100px 0;
+    text-align: center;
+  }
+
+  .cta h2 {
+    font-size: 38px;
+    font-weight: 800;
+    margin-bottom: 16px;
+    max-width: none;
+  }
+
+  .cta .cta-subtitle {
+    font-size: 19px;
+    color: rgba(255,255,255,0.85);
+    max-width: 580px;
+    margin: 0 auto 12px;
+    line-height: 1.6;
+  }
+
+  .cta .cta-subtext {
+    font-size: 15px;
+    color: rgba(255,255,255,0.6);
+    max-width: 480px;
+    margin: 0 auto 40px;
+    line-height: 1.6;
+  }
+
+  .cta-button {
+    display: inline-block;
+    background: var(--white);
+    color: var(--accent-dark);
+    font-size: 16px;
+    font-weight: 700;
+    padding: 16px 40px;
+    border-radius: 10px;
+    text-decoration: none;
+    letter-spacing: 0.3px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    cursor: pointer;
+    border: none;
+  }
+
+  .cta-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+  }
+
+  .cta-footnote {
+    font-size: 14px;
+    color: rgba(255,255,255,0.5);
+    margin-top: 28px;
+  }
+
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 768px) {
+    .hero {
+      min-height: auto;
+      padding: 60px 0;
+    }
+
+    .hero h1 {
+      font-size: 28px;
+    }
+
+    .hero .subtitle {
+      font-size: 16px;
+    }
+
+    .hero-stat {
+      flex-direction: column;
+      text-align: center;
+      gap: 8px;
+      padding: 16px 20px;
+    }
+
+    .hero-stat .number {
+      font-size: 36px;
+    }
+
+    .section {
+      padding: 60px 0;
+    }
+
+    .section h2 {
+      font-size: 26px;
+    }
+
+    .pain-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .cost-numbers {
+      grid-template-columns: 1fr;
+    }
+
+    .cost-two {
+      grid-template-columns: 1fr;
+    }
+
+    .compare-row {
+      grid-template-columns: 1fr;
+    }
+
+    .compare-arrow {
+      min-height: 36px;
+      font-size: 16px;
+    }
+
+    .compare-arrow svg {
+      transform: rotate(90deg);
+    }
+
+    .steps {
+      grid-template-columns: 1fr;
+      gap: 40px;
+    }
+
+    .steps::before {
+      display: none;
+    }
+
+    .pricing-grid {
+      grid-template-columns: 1fr;
+      max-width: 400px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .pricing-card.featured {
+      transform: none;
+    }
+
+    .pricing-card.featured:hover {
+      transform: translateY(-2px);
+    }
+
+    .cta h2 {
+      font-size: 28px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .hero h1 {
+      font-size: 24px;
+    }
+
+    .container {
+      padding: 0 16px;
+    }
+
+    .pain-card, .compare-before, .compare-after {
+      padding: 24px;
+    }
+
+    .pricing-card {
+      padding: 32px 24px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== HERO ===== -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-label">For Industrial Parts Manufacturers</div>
+    <h1>Your QC Team Spends 40 Minutes Documenting Every Defect. Your Finance Team Is Chasing &#165;12 Million in Overdue Payments.</h1>
+    <p class="subtitle">We help manufacturers turn quality paperwork and AR collections from a bottleneck into a system &mdash; so your people spend time on prevention and collection, not documentation.</p>
+    <div class="hero-stat">
+      <div class="number">112.5</div>
+      <div class="label">hours per month lost to manual quality documentation alone</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SOUND FAMILIAR ===== -->
+<section class="section section--gray">
+  <div class="container">
+    <div class="section-label">Sound Familiar?</div>
+    <h2>You know these problems. You deal with them every day.</h2>
+    <div class="pain-grid">
+      <div class="pain-card">
+        <div class="pain-number">1</div>
+        <p>A defect is found on the line &mdash; your QC inspector spends 40 minutes writing up the NCR by hand, photographing, classifying, and filing. Meanwhile, the line keeps running.</p>
+      </div>
+      <div class="pain-card">
+        <div class="pain-number">2</div>
+        <p>Shift handover is a 5-minute verbal dump at the gate. Night shift misses the defect pattern that day shift noticed. The same problem recurs for 3 days before anyone connects the dots.</p>
+      </div>
+      <div class="pain-card">
+        <div class="pain-number">3</div>
+        <p>A customer audit is next week &mdash; your team scrambles to pull SOPs, inspection records, and corrective actions from 4 different folders and 2 different people's desks.</p>
+      </div>
+      <div class="pain-card">
+        <div class="pain-number">4</div>
+        <p>Finance sends &#165;12M in overdue payment reminders. The same polite WeChat message to 200 accounts. Nobody tracks who actually responded. Cash keeps aging.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== THE HIDDEN COST ===== -->
+<section class="section">
+  <div class="container">
+    <div class="section-label">The Hidden Cost</div>
+    <h2>This is what it's actually costing you.</h2>
+    <div class="cost-numbers">
+      <div class="cost-item">
+        <div class="big-number">112.5</div>
+        <div class="unit">hours / month</div>
+        <div class="desc">QC time spent on documentation instead of prevention</div>
+      </div>
+      <div class="cost-item">
+        <div class="big-number">40<span>min</span></div>
+        <div class="unit">per NCR</div>
+        <div class="desc">Should take 10 minutes. Four times what it should.</div>
+      </div>
+      <div class="cost-item">
+        <div class="big-number">&#165;12M<span>+</span></div>
+        <div class="unit">overdue AR</div>
+        <div class="desc">Sitting uncollected while your team sends the same message 200 times</div>
+      </div>
+    </div>
+    <div class="cost-two">
+      <div class="cost-item">
+        <div class="big-number">0.3&ndash;0.5<span>pp</span></div>
+        <div class="unit">margin eroded</div>
+        <div class="desc">By quality rework and late collections eating into your bottom line</div>
+      </div>
+      <div class="cost-item">
+        <div class="big-number">3&ndash;5</div>
+        <div class="unit">days</div>
+        <div class="desc">Average time to compile documents for a customer audit</div>
+      </div>
+    </div>
+    <div class="bottom-line">
+      <p><strong>The bottom line:</strong> Your quality people should be preventing defects, not writing about them. Your finance people should be collecting cash, not sending the same WeChat message 200 times.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===== WHAT CHANGES ===== -->
+<section class="section section--gray">
+  <div class="container">
+    <div class="section-label">What Changes</div>
+    <h2>Here's what your operation looks like after we get involved.</h2>
+    <p class="lead">Side by side &mdash; what your team does today versus what your team does with our system in place.</p>
+
+    <div class="compare-row">
+      <div class="compare-before">
+        <div class="compare-tag">Today</div>
+        <div class="compare-text">QC inspector writes NCR for 40 minutes &mdash; by hand, from scratch, every single time</div>
+      </div>
+      <div class="compare-arrow">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10h12m0 0l-4-4m4 4l-4 4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="compare-after">
+        <div class="compare-tag">With Us</div>
+        <div class="compare-text">Defect photo taken, NCR auto-drafted in 5 minutes &mdash; inspector reviews and submits</div>
+      </div>
+    </div>
+
+    <div class="compare-row">
+      <div class="compare-before">
+        <div class="compare-tag">Today</div>
+        <div class="compare-text">Shift handover is verbal and incomplete &mdash; patterns get lost between shifts</div>
+      </div>
+      <div class="compare-arrow">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10h12m0 0l-4-4m4 4l-4 4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="compare-after">
+        <div class="compare-tag">With Us</div>
+        <div class="compare-text">Structured digital handover with trends, flags, and unresolved issues &mdash; nothing falls through the cracks</div>
+      </div>
+    </div>
+
+    <div class="compare-row">
+      <div class="compare-before">
+        <div class="compare-tag">Today</div>
+        <div class="compare-text">Customer audit prep takes 3&ndash;5 days of scrambling across folders, binders, and people's desks</div>
+      </div>
+      <div class="compare-arrow">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10h12m0 0l-4-4m4 4l-4 4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="compare-after">
+        <div class="compare-tag">With Us</div>
+        <div class="compare-text">Any SOP, inspection record, or corrective action retrieved in seconds</div>
+      </div>
+    </div>
+
+    <div class="compare-row">
+      <div class="compare-before">
+        <div class="compare-tag">Today</div>
+        <div class="compare-text">AR follow-up is copy-paste WeChat to 200 accounts &mdash; no context, no escalation, no tracking</div>
+      </div>
+      <div class="compare-arrow">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10h12m0 0l-4-4m4 4l-4 4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="compare-after">
+        <div class="compare-tag">With Us</div>
+        <div class="compare-text">Personalized collection messages with payment history context, automatic escalation for non-responders</div>
+      </div>
+    </div>
+
+    <div class="compare-row">
+      <div class="compare-before">
+        <div class="compare-tag">Today</div>
+        <div class="compare-text">Supplier quality complaints take a week to compile from scattered inspection records</div>
+      </div>
+      <div class="compare-arrow">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10h12m0 0l-4-4m4 4l-4 4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="compare-after">
+        <div class="compare-tag">With Us</div>
+        <div class="compare-text">Complaint summaries with defect data auto-generated from inspection records</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== HOW IT WORKS ===== -->
+<section class="section">
+  <div class="container">
+    <div class="section-label">How It Works</div>
+    <h2>Three steps. No IT department required.</h2>
+    <p class="lead">We designed this for factory owners who make decisions fast and don't have time for 12-month implementation cycles.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-circle">1</div>
+        <h3>We Audit &amp; Prove</h3>
+        <div class="step-time">Week 1</div>
+        <div class="step-sub-header">Before we visit (3 days remote prep):</div>
+        <ul>
+          <li>We collect 30 recent NCR reports, your SOP library, defect classification categories, and AR aging report</li>
+          <li>We build a working prototype: photograph a real defect &rarr; system classifies it, drafts the NCR with root cause suggestions, links to relevant SOPs &mdash; in 5 minutes instead of 40</li>
+          <li>By the time we walk onto your factory floor, we're already processing your quality data</li>
+        </ul>
+        <div class="step-sub-header">On-site (2 days):</div>
+        <ul>
+          <li>Day 1 morning: shadow your QC inspectors on the line and your finance team doing AR follow-up. Watch real NCRs being written, real payment reminders being sent</li>
+          <li>Day 1 afternoon: take that morning's ACTUAL defect reports and run them through the prototype. Your QC lead watches an NCR get drafted in 5 minutes instead of 40 &mdash; using their real defect photos and your real classification system</li>
+          <li>Day 2: your QC team tests it on live defects alongside their current process. Your finance team sees a demo of automated AR follow-up using their real overdue accounts. We measure the difference together</li>
+        </ul>
+        <div class="step-sub-header">What you get:</div>
+        <ul>
+          <li>Process map of your quality documentation and AR collection workflow with time/cost per step</li>
+          <li>Working prototype tested on 30+ of YOUR real NCRs (before vs. after time comparison)</li>
+          <li>AR analysis: which accounts are costing you the most in collection effort</li>
+          <li>Custom ROI model using your QC staff costs, defect volume, and AR aging data</li>
+          <li>Honest go/no-go recommendation &mdash; if this won't save you enough, we tell you</li>
+        </ul>
+        <div class="step-detail">Timeline: 1 week total (3 days remote + 2 days on-site)</div>
+        <div class="step-detail">Cost: &#165;15,000&ndash;25,000 (credited toward the pilot if you proceed)</div>
+      </div>
+
+      <div class="step">
+        <div class="step-circle">2</div>
+        <h3>We Build</h3>
+        <div class="step-time">Weeks 2&ndash;6</div>
+        <ul>
+          <li>We don't start from scratch &mdash; we build on the prototype your QC team already saw working during the audit</li>
+          <li>Set up the system using your real defect data and AR records</li>
+          <li>Your QC and finance teams test alongside current process</li>
+          <li>We adjust until it fits YOUR quality standards and collection rules</li>
+        </ul>
+        <div class="deliverable-label">Deliverable</div>
+        <div class="deliverable-text">Working system handling real NCRs and AR follow-ups</div>
+        <div class="step-price">&#165;40,000&ndash;80,000</div>
+      </div>
+
+      <div class="step">
+        <div class="step-circle">3</div>
+        <h3>We Run</h3>
+        <div class="step-time">Ongoing</div>
+        <ul>
+          <li>Manage and improve the system month by month</li>
+          <li>Your QC team focuses on prevention, your finance team on collection strategy</li>
+          <li>Monthly reports on time saved and AR aging improved</li>
+        </ul>
+        <div class="deliverable-label">Commitment</div>
+        <div class="deliverable-text">Cancel anytime &mdash; month to month</div>
+        <div class="step-price">&#165;10,000&ndash;25,000/mo</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== THE INVESTMENT ===== -->
+<section class="section section--gray">
+  <div class="container">
+    <div class="section-label">The Investment</div>
+    <h2>Straightforward pricing. No surprises.</h2>
+    <p class="lead">Start small, prove it works, then scale. Every engagement begins with a conversation, not a contract.</p>
+
+    <div class="pricing-grid">
+      <div class="pricing-card">
+        <div class="pricing-cta-label">Start Here</div>
+        <h3>Diagnostic</h3>
+        <div class="pricing-price">&#165;15,000&ndash;25,000</div>
+        <div class="pricing-period">1 week</div>
+        <div class="pricing-desc">Working prototype on YOUR defect data + full process audit. Walk away with a clear picture &mdash; no commitment to proceed.</div>
+        <div style="font-size: 13px; font-weight: 600; color: var(--accent); margin-top: 12px;">Fee credited toward pilot</div>
+      </div>
+
+      <div class="pricing-card featured">
+        <div class="pricing-badge">Most Popular</div>
+        <div class="pricing-cta-label">Prove It Works</div>
+        <h3>Pilot</h3>
+        <div class="pricing-price">&#165;40,000&ndash;80,000</div>
+        <div class="pricing-period">4&ndash;6 weeks</div>
+        <div class="pricing-desc">Test it on real NCRs and real invoices. Your team uses it alongside the current process. You see the difference before you commit to anything else.</div>
+      </div>
+
+      <div class="pricing-card">
+        <div class="pricing-cta-label">Keep It Running</div>
+        <h3>Managed Service</h3>
+        <div class="pricing-price">&#165;10,000&ndash;25,000</div>
+        <div class="pricing-period">per month &middot; ongoing</div>
+        <div class="pricing-desc">We keep it running so your teams can focus. Monthly reporting on time saved and cash collected. Cancel anytime.</div>
+      </div>
+    </div>
+
+    <div class="pricing-note">Less than the cost of one QC clerk. But it works across both the factory floor and the finance office.</div>
+  </div>
+</section>
+
+<!-- ===== BUILT FOR FACTORY OWNERS ===== -->
+<section class="section">
+  <div class="container">
+    <div class="section-label">Built for Skeptics</div>
+    <h2>Built for factory owners who've seen software collect dust before.</h2>
+    <p class="lead">We know you've been burned by technology promises. Here's how this is different.</p>
+
+    <ul class="checklist">
+      <li>
+        <span class="check-icon">&#10003;</span>
+        <span><strong>No IT department required</strong> &mdash; we handle everything from setup to maintenance</span>
+      </li>
+      <li>
+        <span class="check-icon">&#10003;</span>
+        <span><strong>See your own defect reports processed live during the first week</strong> &mdash; before you commit to anything else</span>
+      </li>
+      <li>
+        <span class="check-icon">&#10003;</span>
+        <span><strong>Your QC team approves every report</strong> &mdash; nothing gets filed without their sign-off</span>
+      </li>
+      <li>
+        <span class="check-icon">&#10003;</span>
+        <span><strong>Month-to-month</strong> &mdash; no annual contract, cancel anytime</span>
+      </li>
+      <li>
+        <span class="check-icon">&#10003;</span>
+        <span><strong>Works alongside your existing systems</strong> &mdash; MES, ERP, or even paper forms we'll digitize</span>
+      </li>
+      <li>
+        <span class="check-icon">&#10003;</span>
+        <span><strong>If NCR documentation time doesn't drop by 60% in the pilot, we'll tell you honestly</strong> &mdash; no games, no spin</span>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- ===== CTA ===== -->
+<section class="cta">
+  <div class="container">
+    <h2>Get Your Quality Team Back on the Floor</h2>
+    <p class="cta-subtitle">Book a 30-minute conversation. Bring your messiest NCR and your longest overdue invoice &mdash; we'll show you what's possible.</p>
+    <p class="cta-subtext">No slides. No sales pitch. Just your workflow and our screen.</p>
+    <a href="mailto:hello@example.com" class="cta-button">Book a Conversation</a>
+    <p class="cta-footnote">Most factories see documentation time drop within the first 2 weeks.</p>
+  </div>
+</section>
+
+</body>
+</html>

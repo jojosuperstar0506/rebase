@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Merged Business Roadmap — Consulting-Led AI Agent Deployment Firm</title>
+<style>
+  :root {
+    --accent: #1a3a4a;
+    --accent-light: #ecf2f5;
+    --phase1: #1a6b8a;
+    --phase2: #a0522d;
+    --phase3: #2e7d4f;
+    --red: #b8352a;
+    --red-light: #fdf0ee;
+    --green: #1a7a4c;
+    --green-light: #edf8f2;
+    --text: #1a1a1a;
+    --text-secondary: #555;
+    --bg: #ffffff;
+    --surface: #f7f8fa;
+    --border: #e2e5ea;
+    --warning: #8a6d1b;
+    --warning-light: #fdf8ea;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+
+  .header {
+    border-bottom: 3px solid var(--accent);
+    padding: 48px 0 32px;
+  }
+  .header-inner { max-width: 840px; margin: 0 auto; padding: 0 32px; }
+  .header .meta {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--phase1); font-weight: 600; margin-bottom: 16px;
+  }
+  .header h1 { font-size: 34px; font-weight: 700; line-height: 1.2; margin-bottom: 12px; }
+  .header .subtitle { font-size: 18px; color: var(--text-secondary); font-style: italic; max-width: 680px; }
+
+  .content { max-width: 840px; margin: 0 auto; padding: 0 32px; }
+
+  .section { padding: 48px 0; border-bottom: 1px solid var(--border); }
+  .section:last-child { border-bottom: none; }
+  .section-number {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 11px; letter-spacing: 2.5px; text-transform: uppercase;
+    font-weight: 700; margin-bottom: 8px;
+  }
+  .sn-blue { color: var(--phase1); }
+  .sn-brown { color: var(--phase2); }
+  .sn-green { color: var(--phase3); }
+  .sn-dark { color: var(--accent); }
+  h2 { font-size: 24px; font-weight: 700; margin-bottom: 20px; line-height: 1.3; }
+  h3 { font-size: 19px; font-weight: 700; margin: 28px 0 12px; line-height: 1.3; }
+  p { margin-bottom: 16px; }
+  p:last-child { margin-bottom: 0; }
+
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-light);
+    padding: 20px 24px; margin: 24px 0; font-style: italic;
+  }
+  .callout-blue { border-left-color: var(--phase1); background: #e8f4f8; }
+  .callout-brown { border-left-color: var(--phase2); background: #faf3ee; }
+  .callout-green { border-left-color: var(--phase3); background: var(--green-light); }
+  .callout-red { border-left-color: var(--red); background: var(--red-light); }
+  .callout-warn { border-left-color: var(--warning); background: var(--warning-light); }
+
+  /* Phase banner */
+  .phase-banner {
+    padding: 20px 24px;
+    border-radius: 6px;
+    margin-bottom: 24px;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  .phase-banner h3 { color: #fff; margin: 0 0 4px; font-size: 20px; }
+  .phase-banner p { margin: 0; opacity: 0.9; font-size: 14px; }
+  .pb-1 { background: var(--phase1); }
+  .pb-2 { background: var(--phase2); }
+  .pb-3 { background: var(--phase3); }
+
+  /* Tables */
+  .data-table {
+    width: 100%; border-collapse: collapse; margin: 20px 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px;
+  }
+  .data-table th {
+    text-align: left; padding: 10px 14px; background: var(--accent); color: #fff;
+    font-weight: 600; font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase;
+  }
+  .data-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table .emphasis { font-weight: 700; color: var(--green); }
+  .data-table .cost { font-weight: 700; color: var(--phase1); }
+  .data-table .note {
+    font-size: 12px; color: var(--text-secondary); font-style: italic;
+    padding: 10px 14px; background: var(--surface);
+  }
+  .th-blue { background: var(--phase1) !important; }
+  .th-brown { background: var(--phase2) !important; }
+  .th-green { background: var(--phase3) !important; }
+
+  /* Checklist */
+  .checklist {
+    list-style: none; margin: 16px 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px;
+  }
+  .checklist li {
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+    display: flex; align-items: flex-start; gap: 12px;
+  }
+  .checklist li:last-child { border-bottom: none; }
+  .checklist .box {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border: 2px solid var(--border); border-radius: 4px;
+    flex-shrink: 0; margin-top: 1px; font-size: 12px; color: var(--green);
+  }
+  .checklist .filled { background: var(--green-light); border-color: var(--green); }
+
+  /* Timeline */
+  .week-block {
+    display: grid; grid-template-columns: 100px 1fr; gap: 16px;
+    padding: 16px 0; border-bottom: 1px solid var(--border);
+  }
+  .week-block:last-child { border-bottom: none; }
+  .week-label {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+    padding-top: 2px;
+  }
+  .wl-blue { color: var(--phase1); }
+  .wl-brown { color: var(--phase2); }
+  .wl-green { color: var(--phase3); }
+  .week-content h4 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+  .week-content p { font-size: 14px; margin-bottom: 0; }
+
+  /* Cost card row */
+  .cost-row {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin: 20px 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  .cost-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    padding: 20px; text-align: center;
+  }
+  .cost-card .number { font-size: 28px; font-weight: 800; line-height: 1; }
+  .cost-card .label { font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
+  .cc-blue .number { color: var(--phase1); }
+  .cc-brown .number { color: var(--phase2); }
+  .cc-green .number { color: var(--phase3); }
+
+  .footer {
+    margin-top: 48px; padding: 32px 0; border-top: 3px solid var(--accent);
+    text-align: center;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 12px; color: var(--text-secondary); letter-spacing: 1px; text-transform: uppercase;
+  }
+
+  @media (max-width: 768px) {
+    .header h1 { font-size: 26px; }
+    .cost-row { grid-template-columns: 1fr; }
+    .week-block { grid-template-columns: 1fr; gap: 4px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-inner">
+    <div class="meta">Master Roadmap &mdash; Merged Business Plan</div>
+    <h1>From AI Consulting to AI Agent Platform: The Three-Phase Roadmap</h1>
+    <div class="subtitle">A detailed execution plan that merges consulting-led implementation with autonomous AI agent deployment — including exact models, tools, costs, and what needs to happen before the first sales call.</div>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- ============================================ -->
+  <!-- PRE-SALES: WHAT YOU NEED BEFORE FIRST CALL   -->
+  <!-- ============================================ -->
+  <div class="section">
+    <div class="section-number sn-dark">Before You Sell &mdash; Pre-Sales Preparation</div>
+    <h2>What must be ready before the first outreach call</h2>
+    <p>You cannot pitch AI workflow transformation if you can't demonstrate it. The following is the minimum viable preparation required before your first client conversation. Target: <strong>2–3 weeks of focused effort</strong> for two co-founders working in parallel.</p>
+
+    <h3>A. Technology stack — set up and tested</h3>
+    <p>Your tech costs start near zero. The Chinese LLM ecosystem is mature, cheap, and in many cases free. Here's your Day 1 stack:</p>
+
+    <table class="data-table">
+      <thead><tr><th>Component</th><th>Tool</th><th>Monthly Cost</th><th>Why This One</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Primary LLM</strong></td>
+          <td>DeepSeek V3.2 API</td>
+          <td class="cost">$0–20</td>
+          <td>Best cost/performance ratio in market. $0.25/M input tokens. MIT license. Excellent Chinese + English.</td>
+        </tr>
+        <tr>
+          <td><strong>Free LLM for demos</strong></td>
+          <td>Zhipu GLM-4.7-Flash</td>
+          <td class="cost">Free</td>
+          <td>Genuinely free with no daily quota. Good enough for demos and prototyping. Sign up at bigmodel.cn.</td>
+        </tr>
+        <tr>
+          <td><strong>Workflow platform</strong></td>
+          <td>Dify (self-hosted)</td>
+          <td class="cost">$20–50</td>
+          <td>Open-source, model-agnostic, visual workflow builder with built-in RAG. Deploy on any cloud VM with Docker.</td>
+        </tr>
+        <tr>
+          <td><strong>Backup for quick demos</strong></td>
+          <td>Coze (ByteDance)</td>
+          <td class="cost">Free tier</td>
+          <td>No-code agent builder. Great for rapid prototyping with non-technical stakeholders. Integrates with Feishu.</td>
+        </tr>
+        <tr>
+          <td><strong>Document processing</strong></td>
+          <td>Dify's built-in RAG pipeline</td>
+          <td class="cost">$0</td>
+          <td>Handles PDF, Word, PPT ingestion. For complex Chinese docs, add RagFlow (free, open-source).</td>
+        </tr>
+        <tr>
+          <td><strong>Client communication</strong></td>
+          <td>Feishu / DingTalk</td>
+          <td class="cost">Free</td>
+          <td>Must be on the same platform your clients use. Feishu for tech-forward clients, DingTalk for traditional SMBs.</td>
+        </tr>
+      </tbody>
+      <tr><td colspan="4" class="note">Total Day 1 infrastructure cost: ¥150–500/month ($20–70). This runs your entire demo and pilot capability. Scale costs only increase when client volume justifies it.</td></tr>
+    </table>
+
+    <div class="callout-blue callout">
+      Key principle: Your model layer is replaceable. Never lock yourself into one LLM provider. Dify lets you swap models with a dropdown. Start with DeepSeek for cost, add Qwen-Plus for multilingual tasks, add a local model (Ollama + Qwen 14B) for data-sensitive clients. The model is the commodity — your workflow design is the moat.
+    </div>
+
+    <h3>B. Commercial documents — written and reviewed</h3>
+    <ul class="checklist">
+      <li><span class="box"></span><div><strong>Service one-pager (per vertical):</strong> One page. What you do, for whom, typical outcomes, three engagement tiers. This is what you send before the first meeting. Use the 5 pitch pages you already have as the basis.</div></li>
+      <li><span class="box"></span><div><strong>AI Readiness Assessment questionnaire:</strong> 20–30 questions covering: current tools and systems, data maturity, workflow pain points, team digital comfort, compliance requirements, budget expectations. Standardised intake — use for every prospect.</div></li>
+      <li><span class="box"></span><div><strong>Master Services Agreement (MSA):</strong> Legal template covering IP ownership, data handling, liability, confidentiality, payment terms, termination. Get this reviewed by a lawyer familiar with Chinese commercial law. One-time cost.</div></li>
+      <li><span class="box"></span><div><strong>Statement of Work (SOW) template:</strong> Per-engagement document. Scope, deliverables, timeline, acceptance criteria, pricing. Fill-in-the-blanks after each audit.</div></li>
+      <li><span class="box"></span><div><strong>Pricing calculator (internal):</strong> Spreadsheet that estimates engagement costs: your labour hours, LLM token costs, platform costs, travel. Ensures you don't underprice.</div></li>
+    </ul>
+
+    <h3>C. Demo capability — one working prototype per lead vertical</h3>
+    <p>Before your first sales conversation, you need at least <strong>one live demo</strong> that shows real AI workflow automation on real-ish data. Not slides. A working prototype.</p>
+    <p>For each of your top 2 verticals, build a 30-minute demo in Dify that does one of these:</p>
+
+    <table class="data-table">
+      <thead><tr><th>Vertical</th><th>Demo Workflow</th><th>Build Time</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Export Sales Desk</td>
+          <td>Upload a real product inquiry email → AI classifies, extracts specs, drafts a quotation in English and Chinese, flags missing info. Show the before (manual) vs. after (30 seconds).</td>
+          <td>3–5 days</td>
+        </tr>
+        <tr>
+          <td>Construction Tender Desk</td>
+          <td>Upload a 50-page tender PDF → AI extracts key requirements, BOQ summary, deadlines, and penalty clauses. Generates a one-page bid/no-bid recommendation. Show the before (6 hours) vs. after (5 minutes).</td>
+          <td>3–5 days</td>
+        </tr>
+        <tr>
+          <td>Distributor Order Desk</td>
+          <td>Paste a WeChat text order → AI parses into structured order format, flags a pricing anomaly, generates a confirmation draft. Show the before (4 min manual entry) vs. after (15 seconds).</td>
+          <td>2–3 days</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout-warn callout">
+      The demo is your most important sales asset. If you can show a prospect their actual pain being solved in 30 seconds — using a document or message that looks like what they deal with every day — the conversation shifts from "is this real?" to "when can we start?" Invest the time to make the demo sharp.
+    </div>
+
+    <div class="callout-blue callout">
+      <strong>From demo to diagnostic prototype:</strong> These demos become the starting point for your audit prototypes. When a prospect agrees to a workflow audit, you take the generic demo and customise it with their actual data during the 3-day remote prep phase. The demo opens the door; the audit-specific prototype — built on their real transactions — closes the deal.
+    </div>
+
+    <h3>D. Domain preparation — know their world before you call</h3>
+    <ul class="checklist">
+      <li><span class="box"></span><div><strong>15–20 discovery interviews:</strong> Talk to SMB owners, ops managers, sales directors in your target vertical. Not selling — listening. Ask: biggest admin bottleneck, current tools, failed software projects, what ROI they would pay for.</div></li>
+      <li><span class="box"></span><div><strong>Industry vocabulary list:</strong> Know the terms your clients use. For export: FOB, CIF, incoterms, BOL, proforma invoice. For construction: VO, BOQ, RFI, retention, LAD. For distribution: SKU, MOQ, UOM, lead time. Speaking their language builds instant credibility.</div></li>
+      <li><span class="box"></span><div><strong>Competitive awareness:</strong> Know what tools they've already tried or heard of. Know why those tools didn't fully solve the problem. Position yourself as the missing layer, not a replacement.</div></li>
+    </ul>
+
+    <h3>Pre-sales preparation timeline (2 co-founders, parallel work)</h3>
+    <div class="week-block">
+      <div class="week-label wl-blue">Week 1</div>
+      <div class="week-content">
+        <h4>Tech setup + document drafting</h4>
+        <p>Co-founder A: Set up DeepSeek API, Dify instance, GLM-4.7-Flash access. Build first demo prototype. Co-founder B: Draft service one-pager, AI readiness questionnaire, pricing calculator. Start MSA with legal counsel.</p>
+      </div>
+    </div>
+    <div class="week-block">
+      <div class="week-label wl-blue">Week 2</div>
+      <div class="week-content">
+        <h4>Demo polish + interview outreach</h4>
+        <p>Co-founder A: Refine demo with realistic sample data. Test end-to-end. Prepare screen recording for async sharing. Co-founder B: Begin outreach for discovery interviews. Schedule 15–20 conversations over next 2 weeks. Finalise SOW template.</p>
+      </div>
+    </div>
+    <div class="week-block">
+      <div class="week-label wl-blue">Week 3</div>
+      <div class="week-content">
+        <h4>Interviews + iteration</h4>
+        <p>Both: Conduct 8–12 interviews. Refine demo based on real feedback. Identify 2–3 prospects who express willingness to do a paid workflow audit. Adjust pricing based on market feedback. Prepare for first audit engagement.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================ -->
+  <!-- PHASE 1: CONSULTING-LED                      -->
+  <!-- ============================================ -->
+  <div class="section">
+    <div class="section-number sn-blue">Phase 1 &mdash; Months 1–12</div>
+
+    <div class="phase-banner pb-1">
+      <h3>Consulting-Led AI Workflow Implementation</h3>
+      <p>Generate revenue from week 1. Build domain expertise across 10–20 engagements. Accumulate the workflow IP that makes Phase 2 possible.</p>
+    </div>
+
+    <h2>What this phase is</h2>
+    <p>You are a high-touch AI workflow consulting firm. You diagnose, design, implement, and manage AI-powered workflows for SMBs in 1–2 specific verticals. Every engagement follows a three-layer model: paid workflow audit &amp; proof-of-concept, paid pilot, paid managed retainer. Revenue starts at the audit — there is no free discovery period.</p>
+    <p>You are not building a product yet. You are building domain knowledge, delivery playbooks, and client trust — which is the raw material for Phase 2.</p>
+
+    <h3>AI models and tools for Phase 1 engagements</h3>
+    <table class="data-table">
+      <thead><tr><th class="th-blue">Task Type</th><th class="th-blue">Recommended Model</th><th class="th-blue">Cost/1M Tokens</th><th class="th-blue">When to Use</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>High-volume classification, triage, simple extraction</td>
+          <td><strong>Doubao-Seed-1.6-Flash</strong> or <strong>GLM-4.7-Flash</strong></td>
+          <td class="cost">¥0.15/M (Doubao) or Free (GLM)</td>
+          <td>Inquiry triage, complaint classification, order parsing, defect categorisation. High volume, low complexity — use the cheapest model that works.</td>
+        </tr>
+        <tr>
+          <td>Document summarisation, report drafting, content generation</td>
+          <td><strong>DeepSeek V3.2</strong></td>
+          <td class="cost">$0.25 input / $0.40 output</td>
+          <td>Progress reports, tender summaries, quotation drafts, NCR first drafts, meeting minutes. The workhorse for 70% of tasks.</td>
+        </tr>
+        <tr>
+          <td>Multilingual translation and adaptation</td>
+          <td><strong>Qwen-Plus (Qwen3.5-Plus)</strong></td>
+          <td class="cost">~$0.40 input / $1.20 output</td>
+          <td>Export sales content in English, Spanish, Arabic, Portuguese. Qwen has the best multilingual coverage (100+ languages) in the Chinese LLM ecosystem.</td>
+        </tr>
+        <tr>
+          <td>Complex reasoning, long-document analysis (50+ pages)</td>
+          <td><strong>DeepSeek R1</strong> or <strong>Kimi K2.5</strong></td>
+          <td class="cost">$0.45–0.60 input</td>
+          <td>Tender pack analysis, contract clause extraction, root-cause analysis for quality issues. Use sparingly — these are the most expensive models.</td>
+        </tr>
+        <tr>
+          <td>Document Q&A and SOP retrieval (RAG)</td>
+          <td><strong>Dify RAG + DeepSeek V3.2</strong> as the generator</td>
+          <td class="cost">See above</td>
+          <td>SOP search, corrective action retrieval, project document search. Dify handles the retrieval pipeline; DeepSeek generates the answer.</td>
+        </tr>
+        <tr>
+          <td>Data-sensitive clients (on-premise required)</td>
+          <td><strong>Qwen2.5-14B or DeepSeek-R1-Distill-32B</strong> via Ollama</td>
+          <td class="cost">$0 (self-hosted)</td>
+          <td>Clients in finance, government, or healthcare who can't send data to external APIs. Runs on a single machine with 32GB+ RAM and a decent GPU.</td>
+        </tr>
+      </tbody>
+      <tr><td colspan="4" class="note">Strategy: route each task to the cheapest model that meets quality requirements. Use free/near-free models for classification and triage. Use mid-tier models for drafting. Reserve premium reasoning models for complex analysis. This keeps client costs low and your margins high.</td></tr>
+    </table>
+
+    <h3>Workflow platform: Dify as your delivery engine</h3>
+    <p><strong>Why Dify, not Coze or Baidu AppBuilder:</strong> Dify is open-source, model-agnostic, self-hostable, and has the best RAG pipeline in the Chinese open-source ecosystem. Coze is excellent for prototyping but locks you into ByteDance. Baidu AppBuilder locks you into ERNIE. Since your core principle is vendor neutrality and model replaceability, Dify is the right foundation.</p>
+    <p><strong>What you build in Dify for each client:</strong> A custom workflow (or set of workflows) that encodes their specific business rules, templates, approval logic, and exception handling. This is not a generic chatbot — it's a configured pipeline that handles their exact use case.</p>
+
+    <h3>Phase 1 engagement structure: the three layers in detail</h3>
+
+    <div class="week-block">
+      <div class="week-label wl-blue">Layer 1</div>
+      <div class="week-content">
+        <h4>Workflow Audit &amp; Live Proof-of-Concept (Weeks 1–2 of engagement)</h4>
+
+        <div class="callout-blue callout">
+          <strong>Why clients pay for this:</strong> The audit fee is a <strong>client filter</strong> as much as a revenue source. It proves three things:
+          <ul style="margin-top:8px; margin-bottom:8px;">
+            <li><strong>You're serious</strong> — you invest in understanding their problem before proposing solutions (not a vendor doing free demos hoping to upsell)</li>
+            <li><strong>They're serious</strong> — a company willing to invest &yen;15-30K in understanding their own operations is a company ready to act on the findings (this filters out tyre-kickers)</li>
+            <li><strong>Both sides commit before deeper engagement</strong> — this protects everyone's time and sets professional expectations from Day 1</li>
+          </ul>
+          <p>Think of it as a business health check. Every factory inspects their equipment annually. Every business does a financial audit. But nobody has ever audited their operational workflows — the repetitive tasks eating 40% of their team's day. You're offering the first one.</p>
+        </div>
+
+        <p><strong>What you do — a concrete day-by-day breakdown:</strong></p>
+
+        <div class="week-block">
+          <div class="week-label wl-blue">Days 1–3</div>
+          <div class="week-content">
+            <h4>Remote Preparation (Before You Visit)</h4>
+            <p><strong>Collect from client:</strong> 50 recent transaction samples (inquiries, orders, quality records — whatever applies to the vertical), product catalog, pricing rules, process documentation. Send them a simple checklist; most of this lives in their ERP exports, WeChat history, and email inbox.</p>
+            <p><strong>You do:</strong> Load their data into Dify. Build a working prototype of the primary workflow (e.g., inquiry triage + quotation draft for export manufacturers, or order parsing + confirmation generation for distributors). Configure the AI pipeline with their actual products, their actual pricing rules, their actual templates.</p>
+            <p><strong>By the time you walk in, you already have something to demonstrate.</strong> This is not a generic demo with sample data. This is their data, their products, their workflow — running through a real AI pipeline. This prep work is invisible to the client, but it's what makes Day 4 magical.</p>
+          </div>
+        </div>
+
+        <div class="week-block">
+          <div class="week-label wl-blue">Days 4–5</div>
+          <div class="week-content">
+            <h4>On-Site Audit (At the Client)</h4>
+            <p><strong>Morning, Day 4:</strong> Shadow the team for half a day. Watch real work happen. Note timing, friction points, workarounds, tribal knowledge. Map the workflow end to end — not how the manual says it should work, but how it actually works. Inventory their data sources (ERP, Excel, WeChat, email, paper).</p>
+            <p><strong>Afternoon, Day 4:</strong> Take that morning's REAL transactions and run them through your prototype. Show the team: "This inquiry came in at 9:14 AM. Here's what the system produced in 90 seconds. Here's what your team sent at 2:47 PM. Compare." Let them see the before and after side by side, using work they did <em>that same morning</em>.</p>
+            <p><strong>Day 5:</strong> Refine with team feedback. Let 2–3 staff members test on live work alongside their current process. Measure the time difference on each task. Interview the boss about priorities and "what success looks like." Identify the top 3–5 AI opportunities. Score each on business impact (1–5) and implementation feasibility (1–5).</p>
+          </div>
+        </div>
+
+        <div class="week-block">
+          <div class="week-label wl-blue">Day 6</div>
+          <div class="week-content">
+            <h4>Deliverable Assembly (Remote)</h4>
+            <p>Compile all findings, prototype results, time comparisons, and recommendations into the final deliverable package. This is not a vague strategy deck — it's a data-backed operational report with a working system attached.</p>
+          </div>
+        </div>
+
+        <p><strong>Key deliverables:</strong></p>
+        <ol style="margin: 8px 0 16px 20px; line-height: 1.8;">
+          <li><strong>Process map of current workflow</strong> with actual time/cost per step — using THEIR numbers from the on-site observation, not industry averages</li>
+          <li><strong>Waste quantification report</strong> — exactly how many hours/&yen; are being lost where, based on observed data from the shadowing and time measurements</li>
+          <li><strong>Working prototype</strong> tested on 30–50 of their REAL transactions with before/after time comparisons documented</li>
+          <li><strong>Prioritised automation roadmap</strong> — what to fix first, second, third, with estimated ROI for each opportunity</li>
+          <li><strong>Custom ROI model</strong> using their salary data, transaction volume, and error rates — not a generic calculator, but a model built on their numbers</li>
+          <li><strong>Go/no-go recommendation</strong> with honest assessment — if automation won't help enough, you say so. Your credibility is worth more than one pilot fee.</li>
+        </ol>
+
+        <div class="callout-warn callout">
+          <strong>The prototype is your secret weapon.</strong> The single most powerful moment in the audit is when you show the client their own data being processed. Not sample data. Not a generic demo. THEIR Monday morning inbox. THEIR actual purchase order. THEIR real quality report.
+          <br><br>
+          When a factory owner watches their 47 morning inquiries get triaged in 3 minutes instead of 3 hours — using their actual products and their actual buyers — the conversation shifts from "is this real?" to "when can we start?"
+          <br><br>
+          This is why the 3 days of remote prep matter. You're not showing up to observe. You're showing up to prove.
+        </div>
+
+        <p><strong>Risk reversal — why this is safe for the client:</strong></p>
+        <ul style="margin: 8px 0 16px 20px; line-height: 1.8;">
+          <li>The audit fee (&yen;15-30K) is <strong>credited toward the pilot</strong> if the client proceeds. So it's not a sunk cost — it's an advance payment on the next phase.</li>
+          <li>If the audit finds the client's workflows aren't suitable for automation (rare, but possible), you tell them honestly. No upsell, no pilot, just the truth and the process map they can use however they want.</li>
+          <li>The prototype stays with the client regardless — they can show it to other vendors, use it internally, or throw it away. It's theirs.</li>
+          <li>Total time commitment from the client's team: <strong>~6 hours across 2 days</strong> (shadowing morning + testing afternoon). Not weeks of disruption.</li>
+        </ul>
+
+        <p><strong>What this costs the client:</strong> &yen;15,000–30,000 (fixed fee). This covers 3 days of remote preparation + 2 days on-site + deliverable assembly. It also filters out unserious prospects — if a company won't invest &yen;15-30K to understand their own operational waste, they're not ready for the pilot.</p>
+
+        <p><strong>What you learn:</strong> Which workflows are truly automatable, what data actually exists, who the internal champion is, what "success" means to the owner. But you also learn whether this client is worth your time. The audit is a two-way evaluation. You're assessing their data quality, their team's willingness to adopt new tools, and whether the economics justify a pilot. Not every audit leads to a pilot — and that's by design. This knowledge feeds Phase 2 agent design.</p>
+      </div>
+    </div>
+
+    <div class="week-block">
+      <div class="week-label wl-blue">Layer 2</div>
+      <div class="week-content">
+        <h4>Pilot Implementation (Weeks 3–8 of engagement)</h4>
+        <p><strong>What you do:</strong> Build the AI workflow in Dify for one specific use case, one department, one KPI owner. Load client data (historical quotes, orders, quality records, SOPs — whatever applies). Configure the AI pipeline: ingestion → processing → draft generation → human review queue. Train the end-user team (hands-on, not manuals). Go live in week 3–4. Monitor daily. Iterate on prompts and rules based on real performance. Measure everything: task completion time, accuracy, adoption rate, user feedback.</p>
+        <p><strong>What this costs the client:</strong> ¥40,000–100,000 (project fee, varies by complexity).</p>
+        <p><strong>Key deliverables:</strong> (1) Working AI workflow deployed and operational, (2) Performance Benchmark Report (before vs. after), (3) User Training Materials, (4) Technical Documentation for handover.</p>
+        <p><strong>What you learn:</strong> Exactly which prompt patterns work, which data formats cause problems, where humans still need to intervene, what exception handling is required. This is the IP that becomes a reusable agent template in Phase 2.</p>
+      </div>
+    </div>
+
+    <div class="week-block">
+      <div class="week-label wl-blue">Layer 3</div>
+      <div class="week-content">
+        <h4>Managed Operations Retainer (Ongoing from week 9+)</h4>
+        <p><strong>What you do:</strong> Run QA on AI outputs weekly (sample 5–10% of outputs, check for accuracy and tone). Update templates and rules as products, prices, or processes change. Retrain staff as turnover occurs. Expand to adjacent workflows (e.g., from inquiry triage → quotation drafting → post-order documents). Produce a monthly KPI dashboard: hours saved, error rates, cost impact, adoption metrics.</p>
+        <p><strong>What this costs the client:</strong> ¥10,000–30,000/month (recurring).</p>
+        <p><strong>Key deliverables:</strong> (1) Monthly Performance Dashboard, (2) Workflow Optimisation Recommendations, (3) Updated training materials as needed.</p>
+        <p><strong>What you learn:</strong> How workflows drift over time, what breaks, what new use cases emerge, how to maintain adoption through staff changes. This operational knowledge is the hardest part to replicate — and the most valuable part of your moat.</p>
+      </div>
+    </div>
+
+    <h3>Phase 1 economics</h3>
+    <div class="cost-row">
+      <div class="cost-card cc-blue">
+        <div class="number">¥65K–130K</div>
+        <div class="label">Revenue per full engagement<br>(audit + pilot + 3-month retainer)</div>
+      </div>
+      <div class="cost-card cc-blue">
+        <div class="number">¥150–500</div>
+        <div class="label">Your monthly infrastructure cost<br>(LLM APIs + Dify hosting)</div>
+      </div>
+      <div class="cost-card cc-blue">
+        <div class="number">10–20</div>
+        <div class="label">Target engagements in Year 1<br>(builds the IP library for Phase 2)</div>
+      </div>
+    </div>
+
+    <h3>Phase 1 milestones (Month by month)</h3>
+
+    <div class="week-block">
+      <div class="week-label wl-blue">Months 1–3</div>
+      <div class="week-content">
+        <h4>Land first 2–3 paid workflow audits, convert 1–2 to pilots</h4>
+        <p>Focus on one vertical only. Use your demo to open doors. Price audits low enough to reduce buyer friction but high enough to filter unserious prospects. The goal is learning speed, not revenue maximisation. Document everything — every workflow pattern, every data quality issue, every client objection.</p>
+      </div>
+    </div>
+    <div class="week-block">
+      <div class="week-label wl-blue">Months 4–6</div>
+      <div class="week-content">
+        <h4>Complete first 2 pilots, convert to retainers, start building playbook</h4>
+        <p>By now you've seen enough engagements to notice patterns. The AR collections workflow looks 70% identical across clients. The inquiry triage logic is 80% the same. Start documenting these patterns as reusable templates. Write your first case study with hard numbers. Use it in every subsequent sales conversation.</p>
+      </div>
+    </div>
+    <div class="week-block">
+      <div class="week-label wl-blue">Months 7–9</div>
+      <div class="week-content">
+        <h4>Scale to 6–10 active engagements, consider second vertical</h4>
+        <p>Revenue should cover both co-founders' living costs by now. Start thinking about whether to add a second vertical or go deeper in the first. The right answer depends on demand signal from your interviews and inbound interest. Begin hiring your first delivery team member (part-time or contract).</p>
+      </div>
+    </div>
+    <div class="week-block">
+      <div class="week-label wl-blue">Months 10–12</div>
+      <div class="week-content">
+        <h4>10–15 total engagements complete, IP library established, Phase 2 planning begins</h4>
+        <p>You now have: a library of workflow templates, a set of prompt patterns that work, a clear understanding of common data issues, and 3–5 case studies with ROI proof. This is the foundation for Phase 2. Start designing the reusable agent architecture.</p>
+      </div>
+    </div>
+
+    <div class="callout-red callout">
+      Phase 1 discipline: Do not try to build a product in Phase 1. Do not try to serve both US and China in Phase 1. Do not try to automate everything. The entire point of Phase 1 is to accumulate domain knowledge, prove the model works, generate revenue, and build the IP that makes Phase 2 possible. Every shortcut here weakens Phase 2.
+    </div>
+  </div>
+
+  <!-- ============================================ -->
+  <!-- PHASE 2: PRODUCTIZED AGENTS                  -->
+  <!-- ============================================ -->
+  <div class="section">
+    <div class="section-number sn-brown">Phase 2 &mdash; Months 9–18</div>
+
+    <div class="phase-banner pb-2">
+      <h3>Productised AI Agent Templates</h3>
+      <p>Turn consulting IP into reusable, configurable agent systems. Reduce delivery time per client from 8 weeks to 2 weeks. This is where your co-founder's vision starts to materialise.</p>
+    </div>
+
+    <h2>What this phase is</h2>
+    <p>After 10–20 consulting engagements, you've seen enough patterns to know that 60–80% of the workflow logic is identical across clients in the same vertical. The AR collections desk for Distributor A looks very similar to the one for Distributor B. The tender extraction pipeline for Contractor A reuses 70% of Contractor B's configuration.</p>
+    <p>Phase 2 is about extracting those patterns into <strong>reusable, configurable AI agent templates</strong> — pre-built workflow agents that encode your domain expertise. A new client engagement now starts from a 70% complete agent, with 30% customisation for their specific data, rules, and approvals.</p>
+
+    <h3>Technical architecture for Phase 2</h3>
+    <table class="data-table">
+      <thead><tr><th class="th-brown">Component</th><th class="th-brown">Tool / Framework</th><th class="th-brown">Why</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Agent orchestration framework</strong></td>
+          <td>LangGraph (for complex stateful workflows) or CrewAI (for role-based multi-agent patterns)</td>
+          <td>LangGraph gives fine-grained control over agent state and handoffs. CrewAI is faster to prototype multi-agent crews. Choose based on co-founder's technical preference. Both support Chinese LLMs.</td>
+        </tr>
+        <tr>
+          <td><strong>Workflow UI (internal)</strong></td>
+          <td>Dify (continued from Phase 1) + custom configuration layer</td>
+          <td>Dify remains the visual workflow builder. You add a configuration layer on top that lets you template and clone workflows across clients.</td>
+        </tr>
+        <tr>
+          <td><strong>Agent-to-agent communication</strong></td>
+          <td>MCP (Model Context Protocol) for tool integration; A2A for inter-agent messaging</td>
+          <td>MCP is now the de facto standard (adopted by OpenAI, Google, Microsoft). A2A handles agent-to-agent handoffs. Both are open standards — no vendor lock-in.</td>
+        </tr>
+        <tr>
+          <td><strong>Model layer</strong></td>
+          <td>Same as Phase 1, but with smarter routing</td>
+          <td>Build an LLM router: simple tasks → free models (GLM Flash, Doubao Flash), medium tasks → DeepSeek V3.2, complex reasoning → DeepSeek R1 or Kimi K2.5. This optimises cost automatically.</td>
+        </tr>
+        <tr>
+          <td><strong>Agent monitoring</strong></td>
+          <td>LangSmith (if using LangGraph) or Dify's built-in observability</td>
+          <td>You need to monitor agent performance, catch errors, and track costs across all client deployments. Observability is non-negotiable in multi-agent systems.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>What "productised agents" look like in practice</h3>
+    <p>For each vertical, you build an agent template that contains:</p>
+    <ul class="checklist">
+      <li><span class="box filled">&#10003;</span><div><strong>Pre-built workflow graph:</strong> The sequence of AI tasks, decision nodes, human approval gates, and exception handlers — already designed from your Phase 1 experience.</div></li>
+      <li><span class="box filled">&#10003;</span><div><strong>Prompt library:</strong> Tested, optimised prompts for each task type (classification, extraction, summarisation, drafting) — tuned from dozens of real engagements.</div></li>
+      <li><span class="box filled">&#10003;</span><div><strong>Data ingestion templates:</strong> Pre-configured parsers for common document types in that vertical (tender PDFs, purchase orders, invoice formats, QC reports).</div></li>
+      <li><span class="box filled">&#10003;</span><div><strong>Business rule framework:</strong> Configurable rules for pricing validation, approval thresholds, escalation triggers, exception categories — filled in per client during a 1–2 week customisation.</div></li>
+      <li><span class="box filled">&#10003;</span><div><strong>Human-in-the-loop gates:</strong> Pre-defined approval points where humans must review and sign off before the workflow continues. These are non-removable by design.</div></li>
+      <li><span class="box filled">&#10003;</span><div><strong>KPI dashboard template:</strong> Pre-built reporting that shows the client their time saved, error rate, and cost impact — automatically, every month.</div></li>
+    </ul>
+
+    <h3>What changes for the client</h3>
+    <table class="data-table">
+      <thead><tr><th class="th-brown">Dimension</th><th class="th-brown">Phase 1 (Consulting)</th><th class="th-brown">Phase 2 (Productised)</th></tr></thead>
+      <tbody>
+        <tr><td>Time to go live</td><td>6–8 weeks</td><td class="emphasis">2–3 weeks</td></tr>
+        <tr><td>Custom development %</td><td>80–100%</td><td class="emphasis">20–30%</td></tr>
+        <tr><td>Cost to client</td><td>¥55K–130K (diagnostic + pilot)</td><td class="emphasis">¥30K–60K (configuration + go-live)</td></tr>
+        <tr><td>Ongoing retainer</td><td>¥10K–30K/month</td><td class="emphasis">¥8K–20K/month (more automated QA)</td></tr>
+        <tr><td>Agent capabilities</td><td>Single workflow, human-reviewed</td><td class="emphasis">Multi-step agents, some overnight batch processing</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Phase 2 is where multi-agent collaboration becomes real</h3>
+    <p>This is where your co-founder's vision of collaborating agents starts to materialise — but with the guardrails you learned in Phase 1:</p>
+    <p><strong>Sequential handoffs (reliable today):</strong> The inquiry triage agent classifies and routes to the quotation agent, which pulls pricing and drafts a quote, which hands to the follow-up agent for scheduling. Each agent has a defined role and clear inputs/outputs.</p>
+    <p><strong>Overnight batch processing (reliable today):</strong> The collections agent runs overnight — scanning all overdue accounts, matching statements, drafting reminders, prioritising the queue. The finance team reviews the output at 8am. No human needed during execution, but human review before any action is sent externally.</p>
+    <p><strong>What's NOT yet ready:</strong> Agents dynamically deciding to involve other agents, agents resolving conflicts with each other, or fully autonomous decision-making on financial or contractual matters. Keep human approval gates on all high-stakes decisions.</p>
+
+    <h3>Phase 2 milestones</h3>
+    <div class="week-block">
+      <div class="week-label wl-brown">Months 9–12</div>
+      <div class="week-content">
+        <h4>Build first 2 agent templates from consulting IP</h4>
+        <p>Extract patterns from your 10+ completed engagements. Build the first reusable agent template for your primary vertical. Test it by deploying to a new client in half the time. Iterate.</p>
+      </div>
+    </div>
+    <div class="week-block">
+      <div class="week-label wl-brown">Months 12–15</div>
+      <div class="week-content">
+        <h4>Deploy agent templates to 5–10 new clients, validate 2-week delivery</h4>
+        <p>Each new client engagement should now take 2–3 weeks, not 6–8. Your margins improve dramatically because you're reusing 70% of the work. Start building the LLM router for cost optimisation across clients.</p>
+      </div>
+    </div>
+    <div class="week-block">
+      <div class="week-label wl-brown">Months 15–18</div>
+      <div class="week-content">
+        <h4>Add multi-agent capabilities, start US market research</h4>
+        <p>Add overnight batch processing and sequential agent handoffs to your templates. Begin 15–20 discovery interviews in the US market (start with one vertical — likely the most transferable pattern). Evaluate US tech stack requirements (OpenAI/Anthropic APIs, different workflow platforms).</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================ -->
+  <!-- PHASE 3: PLATFORM SCALE                      -->
+  <!-- ============================================ -->
+  <div class="section">
+    <div class="section-number sn-green">Phase 3 &mdash; Months 18–36</div>
+
+    <div class="phase-banner pb-3">
+      <h3>Platform Scale — The Agent Operating System</h3>
+      <p>Your consulting arm generates domain knowledge. Your agent platform scales it. Each feeds the other. This is where the business becomes defensible and where geographic expansion becomes feasible.</p>
+    </div>
+
+    <h2>What this phase is</h2>
+    <p>You now have two business arms that reinforce each other:</p>
+    <p><strong>Consulting arm (high-touch, high-margin):</strong> Continues to serve new verticals, complex clients, and custom requirements. Every new engagement generates domain knowledge that feeds the platform. This arm is also responsible for diagnostic, change management, and training — the human-judgment work that agents can't do.</p>
+    <p><strong>Agent platform (scalable, recurring revenue):</strong> A library of vertical-specific agent templates that can be configured and deployed in 1–2 weeks. Clients pay a monthly subscription for the agent platform plus a lower-cost retainer for human oversight and optimisation. This arm scales without linear headcount growth.</p>
+
+    <h3>Phase 3 agent capabilities (what's realistic by 2027–2028)</h3>
+    <table class="data-table">
+      <thead><tr><th class="th-green">Capability</th><th class="th-green">Readiness</th><th class="th-green">How It Works</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Autonomous overnight task execution</td>
+          <td class="emphasis">Production-ready</td>
+          <td>Batch processing, report generation, data reconciliation, collections prep — all run overnight. Human reviews output each morning. No autonomous external communication.</td>
+        </tr>
+        <tr>
+          <td>Multi-agent sequential workflows</td>
+          <td class="emphasis">Production-ready</td>
+          <td>Agent A → Agent B → Agent C pipelines with defined handoffs. E.g., Order Parser → Pricing Validator → Exception Flagger → Human Review Queue.</td>
+        </tr>
+        <tr>
+          <td>Cross-department agent coordination</td>
+          <td style="color: var(--phase2); font-weight: 700;">Emerging</td>
+          <td>Sales agent detects a quality issue pattern → flags to quality agent → quality agent searches for related NCRs → generates summary for cross-functional review. Pre-defined orchestration, not emergent.</td>
+        </tr>
+        <tr>
+          <td>Self-improving agents (learning from corrections)</td>
+          <td style="color: var(--phase2); font-weight: 700;">Emerging</td>
+          <td>Agents log human corrections and use them to refine future outputs. Not full self-learning — more like a feedback loop that improves prompts and rules over time with human oversight.</td>
+        </tr>
+        <tr>
+          <td>Fully autonomous decision-making</td>
+          <td style="color: var(--red); font-weight: 700;">Not recommended</td>
+          <td>Agents that move money, commit contracts, or approve claims without human sign-off. Even in Phase 3, this should remain human-approved. The risk/trust equation doesn't justify full autonomy for SMBs.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Geographic expansion: US market entry</h3>
+    <p>Phase 3 is when US expansion becomes realistic — not because the technology is different, but because you now have a proven delivery model, case studies, and reusable agents to adapt.</p>
+
+    <table class="data-table">
+      <thead><tr><th class="th-green">Dimension</th><th class="th-green">China (Existing)</th><th class="th-green">US (New)</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>LLM stack</td>
+          <td>DeepSeek, Qwen, GLM, Doubao</td>
+          <td>OpenAI GPT-4o, Anthropic Claude, Google Gemini</td>
+        </tr>
+        <tr>
+          <td>Workflow platform</td>
+          <td>Dify, Coze, Feishu integration</td>
+          <td>Dify (works globally), n8n, Make, Zapier integration</td>
+        </tr>
+        <tr>
+          <td>Client ecosystem</td>
+          <td>WeChat/WeCom, DingTalk, local ERP</td>
+          <td>Slack, Microsoft Teams, QuickBooks, HubSpot, Shopify</td>
+        </tr>
+        <tr>
+          <td>Compliance</td>
+          <td>Data sovereignty, AI labeling rules</td>
+          <td>SOC 2, HIPAA (healthcare), state privacy laws</td>
+        </tr>
+        <tr>
+          <td>What transfers</td>
+          <td colspan="2" class="emphasis">Methodology, engagement framework, workflow patterns, pricing model, delivery playbook. The 80% that is process and domain knowledge, not technology.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Phase 3 milestones</h3>
+    <div class="week-block">
+      <div class="week-label wl-green">Months 18–24</div>
+      <div class="week-content">
+        <h4>Agent platform launched, 20+ active clients, US pilot</h4>
+        <p>Agent template library covers 2–3 verticals. Most new clients deploy in 1–2 weeks via configured templates. Consulting arm focuses on new verticals and complex clients. First 2–3 US pilot engagements launched, adapted from China playbook.</p>
+      </div>
+    </div>
+    <div class="week-block">
+      <div class="week-label wl-green">Months 24–30</div>
+      <div class="week-content">
+        <h4>Multi-agent capabilities in production, cross-market playbook validated</h4>
+        <p>Overnight batch processing and multi-agent sequential workflows available for all template types. US market playbook validated with 5–10 clients. Cross-market pattern library established: what transfers directly, what needs localisation.</p>
+      </div>
+    </div>
+    <div class="week-block">
+      <div class="week-label wl-green">Months 30–36</div>
+      <div class="week-content">
+        <h4>The flywheel turns</h4>
+        <p>Consulting arm finds new workflows → Platform team builds agent templates → Templates accelerate new client deployment → More clients generate more data → Agents improve → Cycle repeats. Revenue split shifts from 80% consulting / 20% platform toward 50/50. Margin profile improves significantly.</p>
+      </div>
+    </div>
+
+    <h3>Phase 3 economics (target Year 3)</h3>
+    <div class="cost-row">
+      <div class="cost-card cc-green">
+        <div class="number">50+</div>
+        <div class="label">Active client deployments<br>(across 3–4 verticals, 2 markets)</div>
+      </div>
+      <div class="cost-card cc-green">
+        <div class="number">2 weeks</div>
+        <div class="label">Average time to deploy<br>(vs. 6–8 weeks in Phase 1)</div>
+      </div>
+      <div class="cost-card cc-green">
+        <div class="number">50/50</div>
+        <div class="label">Revenue split target<br>(consulting / platform recurring)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================ -->
+  <!-- CO-FOUNDER ROLE CLARITY                      -->
+  <!-- ============================================ -->
+  <div class="section">
+    <div class="section-number sn-dark">Co-Founder Alignment</div>
+    <h2>How both visions map to the phased model</h2>
+
+    <table class="data-table">
+      <thead><tr><th>Dimension</th><th>Your Focus</th><th>Her Focus</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Phase 1 role</strong></td>
+          <td>Client-facing: sales, diagnostics, domain expertise, delivery management, case study development</td>
+          <td>Technical: tech stack setup, workflow building in Dify, prompt engineering, data pipeline configuration, demo development</td>
+        </tr>
+        <tr>
+          <td><strong>Phase 2 role</strong></td>
+          <td>Consulting arm lead: new client acquisition, vertical expansion, training and change management</td>
+          <td>Platform architect: extract consulting IP into reusable agent templates, build LLM router, design multi-agent orchestration</td>
+        </tr>
+        <tr>
+          <td><strong>Phase 3 role</strong></td>
+          <td>Business lead: geographic expansion, enterprise partnerships, market strategy</td>
+          <td>CTO: platform scaling, agent autonomy development, US tech stack adaptation, engineering team building</td>
+        </tr>
+        <tr>
+          <td><strong>Core thesis</strong></td>
+          <td>"Win the trust, design the workflow"</td>
+          <td>"Build the agents that scale the workflow"</td>
+        </tr>
+      </tbody>
+      <tr><td colspan="3" class="note">The two roles are complementary, not overlapping. The business only works if both sides execute. Consulting without product caps at headcount. Product without consulting builds the wrong thing.</td></tr>
+    </table>
+  </div>
+
+  <!-- ============================================ -->
+  <!-- THE SEQUENCING RULE                          -->
+  <!-- ============================================ -->
+  <div class="section">
+    <div class="section-number sn-dark">The One Rule That Protects Everything</div>
+    <h2>Do not skip Phase 1</h2>
+    <p>The research is unambiguous on this: 42% of AI initiatives failed in 2025. Gartner predicts 40%+ of agentic AI projects will be cancelled by end of 2027. 30% of GenAI projects are abandoned after proof-of-concept. Only 130 of thousands of vendors claiming "agentic AI" are legitimate.</p>
+    <p>The companies that fail almost always make the same mistake: they build the technology before understanding the workflow. They ship agents before earning trust. They automate before diagnosing.</p>
+    <p>Phase 1 is not the slow part of the business. It is the part that makes everything else work. The domain knowledge you accumulate, the delivery discipline you build, the client trust you earn, and the IP you create — that is the foundation the agent platform stands on.</p>
+    <p>Your co-founder's vision of autonomous, collaborating agents that reduce operational cost is the right endgame. The fastest path to that endgame goes through Phase 1, not around it.</p>
+
+    <div class="callout">
+      The conversation between co-founders should not be "your idea or mine." It should be: "We agree on the destination. The consulting model generates revenue and knowledge from day 1. The agent platform scales that knowledge from month 9 onward. Both are necessary. Neither works alone."
+    </div>
+  </div>
+
+</div>
+
+<div class="footer content">
+  Internal strategy document &mdash; Co-founder discussion only &mdash; March 2026
+</div>
+
+</body>
+</html>

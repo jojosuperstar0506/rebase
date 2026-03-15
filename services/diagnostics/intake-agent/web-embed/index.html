@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Operations Diagnostic — Business Intake</title>
+    <style>
+        /* ============================================================
+           BRANDED WEB EMBED PAGE FOR DIFY CHAT WIDGET
+
+           This page hosts the Dify chatbot iframe/widget for the
+           AI intake agent. It provides the branded wrapper around
+           the chat interface.
+
+           TO CONFIGURE:
+           1. Replace DIFY_APP_URL with your actual Dify chat URL
+           2. Replace DIFY_API_KEY if using the JS SDK approach
+           3. Update the company branding as needed
+           ============================================================ */
+
+        :root {
+            --primary: #1a1a2e;
+            --primary-light: #16213e;
+            --accent: #0f9690;
+            --accent-light: #11b3ac;
+            --accent-glow: rgba(15, 150, 144, 0.15);
+            --text: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --surface: #1e1e32;
+            --surface-hover: #252542;
+            --border: rgba(255,255,255,0.08);
+            --bg: #0d0d1a;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .header {
+            background: var(--primary);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-logo {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-light));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 700;
+            color: white;
+        }
+
+        .header-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .header-subtitle {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 1px;
+        }
+
+        .header-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--accent-light);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--accent-light);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Main Content Area */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            max-width: 900px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 0;
+        }
+
+        /* Welcome Panel - shown before chat starts */
+        .welcome-panel {
+            padding: 40px 24px;
+            text-align: center;
+        }
+
+        .welcome-panel h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 12px;
+            line-height: 1.3;
+        }
+
+        .welcome-panel h1 span {
+            color: var(--accent-light);
+        }
+
+        .welcome-panel p {
+            font-size: 16px;
+            color: var(--text-muted);
+            max-width: 520px;
+            margin: 0 auto 32px;
+            line-height: 1.6;
+        }
+
+        .welcome-features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            max-width: 680px;
+            margin: 0 auto 32px;
+            text-align: left;
+        }
+
+        .feature-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .feature-icon {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+
+        .feature-card h3 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: var(--text);
+        }
+
+        .feature-card p {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin: 0;
+            line-height: 1.5;
+        }
+
+        .time-estimate {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--accent-glow);
+            border: 1px solid rgba(15, 150, 144, 0.3);
+            border-radius: 20px;
+            padding: 8px 16px;
+            font-size: 13px;
+            color: var(--accent-light);
+            margin-bottom: 24px;
+        }
+
+        .start-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-light));
+            color: white;
+            border: none;
+            border-radius: 12px;
+            padding: 14px 32px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .start-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 20px rgba(15, 150, 144, 0.3);
+        }
+
+        /* Chat Container */
+        .chat-container {
+            flex: 1;
+            display: none;
+            flex-direction: column;
+            border-left: 1px solid var(--border);
+            border-right: 1px solid var(--border);
+        }
+
+        .chat-container.active {
+            display: flex;
+        }
+
+        /* Dify iframe embed */
+        .chat-container iframe {
+            flex: 1;
+            width: 100%;
+            border: none;
+            background: var(--surface);
+        }
+
+        /* Upload reminder bar */
+        .upload-bar {
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .upload-bar .icon {
+            font-size: 16px;
+        }
+
+        /* Footer */
+        .footer {
+            background: var(--primary);
+            border-top: 1px solid var(--border);
+            padding: 12px 24px;
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+
+        .footer a {
+            color: var(--accent-light);
+            text-decoration: none;
+        }
+
+        /* Language toggle */
+        .lang-toggle {
+            display: flex;
+            gap: 4px;
+            background: var(--surface);
+            border-radius: 8px;
+            padding: 2px;
+        }
+
+        .lang-btn {
+            padding: 4px 10px;
+            border-radius: 6px;
+            border: none;
+            font-size: 12px;
+            cursor: pointer;
+            background: transparent;
+            color: var(--text-muted);
+            transition: all 0.2s;
+        }
+
+        .lang-btn.active {
+            background: var(--accent);
+            color: white;
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .welcome-panel { padding: 24px 16px; }
+            .welcome-panel h1 { font-size: 22px; }
+            .welcome-features { grid-template-columns: 1fr; }
+            .header { padding: 12px 16px; }
+        }
+
+        /* Security notice */
+        .security-note {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            background: rgba(15, 150, 144, 0.08);
+            border: 1px solid rgba(15, 150, 144, 0.2);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin: 16px auto 0;
+            max-width: 520px;
+            text-align: left;
+            font-size: 12px;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        .security-note .icon {
+            font-size: 14px;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="header-brand">
+            <div class="header-logo">D</div>
+            <div>
+                <div class="header-title">Operations Diagnostic</div>
+                <div class="header-subtitle">Business Intake Assessment</div>
+            </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 16px;">
+            <div class="lang-toggle">
+                <button class="lang-btn active" onclick="setLang('en')">EN</button>
+                <button class="lang-btn" onclick="setLang('zh')">CN</button>
+            </div>
+            <div class="header-status">
+                <span class="status-dot"></span>
+                <span id="statusText">Ready</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+
+        <!-- Welcome Panel (shown first) -->
+        <div class="welcome-panel" id="welcomePanel">
+
+            <div class="time-estimate">
+                <span>~15 minutes</span>
+                <span style="color: var(--text-muted);">|</span>
+                <span>Conversational format</span>
+            </div>
+
+            <h1>Tell us about your business.<br><span>We'll show you what's possible.</span></h1>
+
+            <p>
+                Have a quick conversation with our operations analyst.
+                Share how your business runs day-to-day, and upload a few documents.
+                You'll receive a detailed findings report within 24 hours.
+            </p>
+
+            <div class="welcome-features">
+                <div class="feature-card">
+                    <div class="feature-icon">&#128172;</div>
+                    <h3>Conversational</h3>
+                    <p>No forms to fill out. Just answer questions naturally about how your team works.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#128196;</div>
+                    <h3>Document Analysis</h3>
+                    <p>Upload orders, invoices, or any business document. We'll analyze them automatically.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#128202;</div>
+                    <h3>24-Hour Report</h3>
+                    <p>Receive a detailed analysis showing exactly where your team's time and money go.</p>
+                </div>
+            </div>
+
+            <button class="start-btn" onclick="startChat()">
+                Start the Conversation &#8594;
+            </button>
+
+            <div class="security-note">
+                <span class="icon">&#128274;</span>
+                <span>Your information is confidential and used only for this diagnostic analysis. Documents can be uploaded securely during the conversation. You can redact sensitive details if preferred.</span>
+            </div>
+        </div>
+
+        <!-- Chat Container (shown after clicking start) -->
+        <div class="chat-container" id="chatContainer">
+            <!--
+                OPTION A: Dify iframe embed (simplest)
+                Replace the src URL with your Dify app's embed URL.
+                Format: https://your-dify-instance.com/chatbot/YOUR_APP_ID
+            -->
+            <iframe
+                id="difyFrame"
+                src=""
+                allow="microphone; clipboard-write"
+                style="min-height: 500px;"
+            ></iframe>
+
+            <div class="upload-bar">
+                <span class="icon">&#128206;</span>
+                <span>You can upload documents directly in the chat — PDFs, images, Excel files, and screenshots are all supported.</span>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        Powered by advanced operations analysis &middot; Confidential &middot; <a href="#">Privacy Policy</a>
+    </footer>
+
+    <script>
+        // ============================================================
+        // CONFIGURATION — Update these values for your deployment
+        // ============================================================
+
+        const CONFIG = {
+            // Option A: Dify iframe embed URL
+            // Get this from Dify → Your App → Embed → Copy URL
+            DIFY_EMBED_URL: 'https://YOUR_DIFY_INSTANCE/chatbot/YOUR_APP_ID',
+
+            // Option B: Dify JS SDK (for more control)
+            // Uncomment and use this instead if you want the floating widget
+            // DIFY_API_BASE: 'https://YOUR_DIFY_INSTANCE/api',
+            // DIFY_APP_ID: 'YOUR_APP_ID',
+            // DIFY_API_KEY: 'app-YOUR_API_KEY',
+
+            // Pre-filled client info (populated from engagement link params)
+            clientName: new URLSearchParams(window.location.search).get('name') || '',
+            clientEmail: new URLSearchParams(window.location.search).get('email') || '',
+            engagementId: new URLSearchParams(window.location.search).get('eid') || generateEngagementId(),
+            verticalHint: new URLSearchParams(window.location.search).get('vertical') || '',
+            language: new URLSearchParams(window.location.search).get('lang') || 'en'
+        };
+
+        function generateEngagementId() {
+            const now = new Date();
+            const datePart = now.toISOString().slice(0,10).replace(/-/g, '');
+            const randPart = Math.random().toString(36).substring(2, 6).toUpperCase();
+            return `ENG-${datePart}-${randPart}`;
+        }
+
+        // ============================================================
+        // LANGUAGE SUPPORT
+        // ============================================================
+        const STRINGS = {
+            en: {
+                title: 'Tell us about your business.',
+                subtitle: "We'll show you what's possible.",
+                description: "Have a quick conversation with our operations analyst. Share how your business runs day-to-day, and upload a few documents. You'll receive a detailed findings report within 24 hours.",
+                startBtn: 'Start the Conversation',
+                status: 'Ready',
+                statusActive: 'In conversation',
+                feature1Title: 'Conversational',
+                feature1Desc: 'No forms to fill out. Just answer questions naturally about how your team works.',
+                feature2Title: 'Document Analysis',
+                feature2Desc: "Upload orders, invoices, or any business document. We'll analyze them automatically.",
+                feature3Title: '24-Hour Report',
+                feature3Desc: "Receive a detailed analysis showing exactly where your team's time and money go.",
+                uploadHint: 'You can upload documents directly in the chat — PDFs, images, Excel files, and screenshots are all supported.',
+                security: 'Your information is confidential and used only for this diagnostic analysis. Documents can be uploaded securely during the conversation.'
+            },
+            zh: {
+                title: '\u544A\u8BC9\u6211\u4EEC\u60A8\u7684\u4E1A\u52A1\u60C5\u51B5',
+                subtitle: '\u6211\u4EEC\u5C06\u5411\u60A8\u5C55\u793A\u53EF\u80FD\u6027',
+                description: '\u4E0E\u6211\u4EEC\u7684\u8FD0\u8425\u5206\u6790\u5E08\u8FDB\u884C\u4E00\u6B21\u7B80\u77ED\u7684\u5BF9\u8BDD\u3002\u5206\u4EAB\u60A8\u7684\u4E1A\u52A1\u65E5\u5E38\u8FD0\u4F5C\u65B9\u5F0F\uFF0C\u5E76\u4E0A\u4F20\u4E00\u4E9B\u6587\u4EF6\u3002\u60A8\u5C06\u572824\u5C0F\u65F6\u5185\u6536\u5230\u8BE6\u7EC6\u7684\u5206\u6790\u62A5\u544A\u3002',
+                startBtn: '\u5F00\u59CB\u5BF9\u8BDD',
+                status: '\u5C31\u7EEA',
+                statusActive: '\u5BF9\u8BDD\u4E2D',
+                feature1Title: '\u5BF9\u8BDD\u5F0F',
+                feature1Desc: '\u65E0\u9700\u586B\u5199\u8868\u683C\u3002\u53EA\u9700\u81EA\u7136\u5730\u56DE\u7B54\u5173\u4E8E\u60A8\u56E2\u961F\u5DE5\u4F5C\u65B9\u5F0F\u7684\u95EE\u9898\u3002',
+                feature2Title: '\u6587\u4EF6\u5206\u6790',
+                feature2Desc: '\u4E0A\u4F20\u8BA2\u5355\u3001\u53D1\u7968\u6216\u4EFB\u4F55\u4E1A\u52A1\u6587\u4EF6\u3002\u6211\u4EEC\u5C06\u81EA\u52A8\u5206\u6790\u5B83\u4EEC\u3002',
+                feature3Title: '24\u5C0F\u65F6\u62A5\u544A',
+                feature3Desc: '\u6536\u5230\u8BE6\u7EC6\u5206\u6790\uFF0C\u51C6\u786E\u663E\u793A\u60A8\u56E2\u961F\u7684\u65F6\u95F4\u548C\u8D44\u91D1\u53BB\u5411\u3002',
+                uploadHint: '\u60A8\u53EF\u4EE5\u5728\u804A\u5929\u4E2D\u76F4\u63A5\u4E0A\u4F20\u6587\u4EF6 \u2014 \u652F\u6301PDF\u3001\u56FE\u7247\u3001Excel\u6587\u4EF6\u548C\u622A\u56FE\u3002',
+                security: '\u60A8\u7684\u4FE1\u606F\u662F\u4FDD\u5BC6\u7684\uFF0C\u4EC5\u7528\u4E8E\u6B64\u6B21\u8BCA\u65AD\u5206\u6790\u3002\u6587\u4EF6\u53EF\u4EE5\u5728\u5BF9\u8BDD\u4E2D\u5B89\u5168\u4E0A\u4F20\u3002'
+            }
+        };
+
+        function setLang(lang) {
+            CONFIG.language = lang;
+            document.querySelectorAll('.lang-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.textContent.trim() === (lang === 'en' ? 'EN' : 'CN'));
+            });
+            applyLanguage(lang);
+        }
+
+        function applyLanguage(lang) {
+            const s = STRINGS[lang] || STRINGS.en;
+            const h1 = document.querySelector('.welcome-panel h1');
+            h1.innerHTML = `${s.title}<br><span>${s.subtitle}</span>`;
+            document.querySelector('.welcome-panel > p').textContent = s.description;
+            document.querySelector('.start-btn').innerHTML = `${s.startBtn} &#8594;`;
+            document.getElementById('statusText').textContent = s.status;
+
+            const cards = document.querySelectorAll('.feature-card');
+            cards[0].querySelector('h3').textContent = s.feature1Title;
+            cards[0].querySelector('p').textContent = s.feature1Desc;
+            cards[1].querySelector('h3').textContent = s.feature2Title;
+            cards[1].querySelector('p').textContent = s.feature2Desc;
+            cards[2].querySelector('h3').textContent = s.feature3Title;
+            cards[2].querySelector('p').textContent = s.feature3Desc;
+
+            document.querySelector('.upload-bar span:last-child').textContent = s.uploadHint;
+            document.querySelector('.security-note span:last-child').textContent = s.security;
+        }
+
+        // ============================================================
+        // CHAT INITIALIZATION
+        // ============================================================
+        function startChat() {
+            const welcomePanel = document.getElementById('welcomePanel');
+            const chatContainer = document.getElementById('chatContainer');
+            const difyFrame = document.getElementById('difyFrame');
+            const statusText = document.getElementById('statusText');
+
+            // Build the Dify embed URL with parameters
+            const params = new URLSearchParams();
+            if (CONFIG.clientName) params.set('client_name', CONFIG.clientName);
+            if (CONFIG.clientEmail) params.set('client_email', CONFIG.clientEmail);
+            if (CONFIG.engagementId) params.set('engagement_id', CONFIG.engagementId);
+            if (CONFIG.verticalHint) params.set('vertical_hint', CONFIG.verticalHint);
+            if (CONFIG.language) params.set('language', CONFIG.language);
+
+            const embedUrl = CONFIG.DIFY_EMBED_URL + (params.toString() ? '?' + params.toString() : '');
+            difyFrame.src = embedUrl;
+
+            // Transition UI
+            welcomePanel.style.display = 'none';
+            chatContainer.classList.add('active');
+
+            const s = STRINGS[CONFIG.language] || STRINGS.en;
+            statusText.textContent = s.statusActive;
+
+            // Log engagement start
+            console.log('[Intake Agent] Session started', {
+                engagementId: CONFIG.engagementId,
+                language: CONFIG.language,
+                verticalHint: CONFIG.verticalHint,
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        // ============================================================
+        // DIFY JS SDK APPROACH (Alternative to iframe)
+        // Uncomment this section if you prefer the floating widget
+        // ============================================================
+        /*
+        function initDifyWidget() {
+            const script = document.createElement('script');
+            script.src = CONFIG.DIFY_API_BASE + '/embed.min.js';
+            script.onload = function() {
+                window.difyChatbotConfig = {
+                    token: CONFIG.DIFY_API_KEY,
+                    baseUrl: CONFIG.DIFY_API_BASE,
+                    inputs: {
+                        client_name: CONFIG.clientName,
+                        client_email: CONFIG.clientEmail,
+                        engagement_id: CONFIG.engagementId,
+                        vertical_hint: CONFIG.verticalHint,
+                        language: CONFIG.language
+                    }
+                };
+            };
+            document.head.appendChild(script);
+        }
+        */
+
+        // Apply initial language
+        if (CONFIG.language === 'zh') {
+            setLang('zh');
+        }
+    </script>
+
+</body>
+</html>
