@@ -21,7 +21,12 @@ This ensures we can switch from Alibaba Cloud Hong Kong to Guangzhou (or any oth
 
 - **`.env.example`** — template with all variable names and comments. Copy to `.env` for local dev.
 - **`.env`** — your actual secrets. NEVER commit this (it's in `.gitignore`).
-- **`ROADMAP.md`** — single source of truth for what we're building and who owns what.
+- **`ROADMAP.md`** — single source of truth for sprint plans, task ownership, and cloud strategy.
+- **`README.md`** — project overview, team roles, tech stack, quick start.
+
+## Document Consistency
+
+`README.md` and `ROADMAP.md` must stay in sync. When updating one, check if the other needs matching changes — especially for: team roles, tech stack, cloud strategy, and current work status.
 
 ## Cloud Strategy
 
