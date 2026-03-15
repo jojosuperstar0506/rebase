@@ -1,6 +1,6 @@
 # Rebase
 
-> We empower SMBs business owners to breathe and refocus on what they truly want to do - making greater products for happier customers, not managing the day-to-day mundane tasks.
+> We empower SMBs business owners to refocus on what they truly want to do - making greater products for happier customers, not managing the day-to-day mundane tasks.
 
 ---
 
