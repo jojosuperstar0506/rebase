@@ -94,12 +94,44 @@ The diagnostic tool is the first thing clients experience — their "wow" moment
 ### 1D. Cloud & Deployment
 > Get the diagnostics tool live and accessible to clients
 
+**Cloud Strategy: Start Hong Kong → Add Guangzhou Later**
+
+```
+Phase 1 (Now):     Alibaba Cloud Hong Kong — launch fast, no ICP paperwork
+                    ├── Backend server (ECS — 2 CPU, 4GB RAM, ~¥300/mo)
+                    ├── Database (RDS PostgreSQL, ~¥150/mo)
+                    ├── File storage (OSS — uploaded docs, ~¥20/mo)
+                    └── Access to all AI models (Chinese + international)
+
+Phase 2 (Scale):   Add Alibaba Cloud Guangzhou — enterprise-ready
+                    ├── Client data moves to mainland (PIPL compliance)
+                    ├── Faster for all mainland users
+                    ├── ICP filing shows legitimacy to enterprise clients
+                    └── Hong Kong becomes dev/staging environment
+```
+
+**Why Hong Kong first:** No ICP filing needed (launch in days, not weeks). Still fast for Southern China clients. Same Alibaba Cloud tools — switching to Guangzhou later is just changing a config file, not rewriting code.
+
+**AI Model APIs (called from backend):**
+
+| Model | Provider | Cost | Use For |
+|-------|----------|------|---------|
+| DeepSeek V3 | DeepSeek (深度求索) | ¥0.25/M tokens | Main workhorse — intake analysis, doc classification, reports |
+| Qwen (通义千问) | Alibaba | Free tier available | Backup, Chinese language tasks |
+| GLM-4 | Zhipu AI (智谱) | Free tier | Development/testing |
+
+**Estimated monthly cost (starting out): ~¥400-900/mo** — scales with clients.
+
 | Task | Owner | Status | Notes |
 |------|-------|--------|-------|
-| Cloud provider selection | Joanna | TODO | |
-| Infrastructure setup | Joanna | TODO | |
-| Deployment pipeline | Joanna | TODO | |
-| Domain / access setup | Joanna | TODO | |
+| Set up Alibaba Cloud HK account | Joanna | TODO | Sign up, credit card, create project |
+| Provision ECS server (Hong Kong) | Joanna | TODO | 2 CPU, 4GB RAM starter instance |
+| Set up RDS PostgreSQL | Joanna | TODO | Managed database for client data |
+| Set up OSS bucket | Joanna | TODO | Object storage for uploaded documents |
+| Get DeepSeek API key | Joanna | TODO | Sign up at deepseek.com |
+| Domain name registration | Joanna | TODO | rebase.cn or similar |
+| Deploy backend (Docker) | William | TODO | Dockerize FastAPI app, deploy to ECS |
+| Start ICP filing (parallel) | Joanna | TODO | Begin paperwork for future mainland move, 1-3 weeks |
 
 ### 1E. Product Definition & FRD
 > Defining what the overall product is and what it does
