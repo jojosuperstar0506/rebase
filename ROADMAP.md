@@ -24,6 +24,7 @@
 | Diagnostics product build | William | In progress | Grinding through intake agent + analysis pipeline |
 | FRD (functional requirements) | Joanna | In progress | Defining overall product features & functions |
 | Cloud infrastructure & deployment | Joanna | In progress | Setting up so diagnostics tool can be deployed |
+| Internal agents ("virtual employees") | Joanna | In progress | Product structure, marketing, image gen |
 | Overall product roadmap | Both | Just created | This document |
 
 ---
@@ -93,6 +94,44 @@ The diagnostic product is the first thing clients experience. Fully automated Da
 
 ---
 
+## Internal Agents — "Virtual Employees" (Parallel Track)
+
+> Accumulating helpful AI agents for Rebase's own internal operations. Each agent is a one-button tool that encodes our business assumptions so anyone on the team can run it.
+
+### Agent 1: Product Structure Agent
+> Inventory tracking, reorder decisions, product catalog management
+
+| Task | Owner | Status | Notes |
+|------|-------|--------|-------|
+| Define product catalog schema | Joanna | TODO | What fields do we track per product? |
+| Inventory tracking logic | Joanna | TODO | Current stock, burn rate, thresholds |
+| Reorder decision engine | Joanna | TODO | When to place orders, how much, from whom |
+| Supplier/pricing data integration | Joanna | TODO | Connect to existing order data |
+| One-button "should I reorder?" report | Joanna | TODO | Output: reorder recommendations with reasoning |
+
+### Agent 2: Marketing Agent (Xiaohongshu)
+> One-button content creator for Xiaohongshu, pre-loaded with our brand voice and business assumptions
+
+| Task | Owner | Status | Notes |
+|------|-------|--------|-------|
+| Define brand voice & tone guidelines | Joanna | TODO | What does Rebase sound like on XHS? |
+| Content templates per post type | Joanna | TODO | Educational, case study, behind-the-scenes, etc. |
+| Pre-built business assumptions | Joanna | TODO | Target audience, value props, key messages |
+| Image + copy generation pipeline | Joanna | TODO | One button → ready-to-post XHS content |
+| Post scheduling / batch generation | Joanna | TODO | Generate a week's content at once |
+
+### Agent 3: World-Class Image Generator
+> High-quality image generation for marketing, pitch materials, and client deliverables
+
+| Task | Owner | Status | Notes |
+|------|-------|--------|-------|
+| Define use cases & style guide | Joanna | TODO | What kinds of images, what aesthetic |
+| Model selection & API setup | Joanna | TODO | Which image gen model(s) to use |
+| Prompt templates per use case | Joanna | TODO | Marketing visuals, report graphics, social media |
+| One-button generation workflow | Joanna | TODO | Input context → output polished image |
+
+---
+
 ## Phase 2: Workflow Discovery + Agent Execution (Future)
 
 > AI discovers client workflows, decomposes goals into tasks, executes autonomously
@@ -122,6 +161,7 @@ The diagnostic product is the first thing clients experience. Fully automated Da
 |------|----------|-----|---------|
 | 2026-03-15 | Created this roadmap as single source of truth | Both | Need one place to track everything |
 | 2026-03-15 | Clarified roles: Joanna = vision/product, William = technical/build | Both | Previous docs had it reversed |
+| 2026-03-15 | Added internal agents track — accumulate "virtual employees" alongside client product | Joanna | Product structure, XHS marketing, image gen |
 
 ---
 
