@@ -1,4 +1,22 @@
-import { useState, useEffect } from "react";
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Workforce Calculator - Test</title>
+<link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #F8FAFC; font-family: Inter, -apple-system, 'Noto Sans SC', system-ui, sans-serif; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useEffect } = React;
 
 // ─── DATA ───────────────────────────────────────────────────────────────────
 const SALARY_TABLE = {
@@ -345,7 +363,7 @@ function TierBar({ score, theme }) {
 }
 
 // ─── MAIN ───────────────────────────────────────────────────────────────────
-export default function App() {
+function App() {
   const [step, setStep] = useState(0);
   const [darkMode, setDarkMode] = useState(false);
   const [cn, setCn] = useState(""); const [cs, setCs] = useState(""); const [rev, setRev] = useState(""); const [ind, setInd] = useState("");
@@ -1022,3 +1040,8 @@ export default function App() {
     </div>
   );
 }
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
