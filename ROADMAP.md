@@ -14,7 +14,6 @@
 | **Owns** | What we build & why — product direction, agent design, client experience | How we build it — system architecture, core infrastructure, technical decisions |
 | **Technical spike** | Agent prototyping — 3 internal "virtual employees" that dog-food the platform | Diagnostics tool — the first product clients touch, from AI conversation to instant insights |
 | **Current focus** | FRD + 3 agent prototypes + frontend/cloud | Building the diagnostics tool as our first landing touchpoint — the AI-powered entry door for every client |
-| **Strengths** | Structured thinking, industry insight, product sense | System architecture, prompt engineering, backend engineering |
 
 ---
 
