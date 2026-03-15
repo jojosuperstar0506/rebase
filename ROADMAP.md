@@ -132,6 +132,9 @@ Phase 2 (Scale):   Add Alibaba Cloud Guangzhou — enterprise-ready
 | Domain name registration | Joanna | TODO | rebase.cn or similar |
 | Deploy backend (Docker) | William | TODO | Dockerize FastAPI app, deploy to ECS |
 | Start ICP filing (parallel) | Joanna | TODO | Begin paperwork for future mainland move, 1-3 weeks |
+| Set up `.env.example` + `CLAUDE.md` | Both | Done | Environment variable template + dev guidelines to prevent hardcoding. See `.env.example` for all config vars |
+
+**Environment Variables Rule:** All external service URLs, API keys, and region-specific config MUST come from `.env` — never hardcoded in source code. This is enforced via `CLAUDE.md` (read by Claude Code every session) and documented in `.env.example`. When switching from HK to Guangzhou, only `.env` changes — zero code changes.
 
 ### 1E. Product Definition & FRD
 > Defining what the overall product is and what it does
