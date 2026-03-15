@@ -6,7 +6,7 @@
 
 ## What We're Building
 
-An AI-powered platform that gives SMB owners an honest look at their current operations and shows them where they could deploy AI tools to fill in the gaps — starting with an automated and personalized diagnostic tool, then expanding into workflow discovery and optimization, autonomous agent execution, and multi-agent collaboration. Essentially, an easy-to-use best-in-class vibe business that co-pilots with SMB onwers without any business ops knowledge and background.
+An easy-to-use best-in-class vibe business that co-pilots with SMB onwers without any business ops knowledge and background. It gives SMB owners an honest look at their current operations, and shows them where they could deploy AI tools to fill in the gaps — starting with an automated and personalized diagnostic tool, then expanding into workflow discovery and optimization, autonomous agent execution, and multi-agent collaboration. 
 
 **The client experience (Phase 1 — Diagnostics):**
 ```
