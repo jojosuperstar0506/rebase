@@ -76,23 +76,20 @@ const getTier = (score) => {
 };
 
 const NEXT_STEPS = {
-  generic: {
-    1: { action: "先选一个部门试点", detail: "不要全面铺开，找一个痛点最明显的部门，先跑通一个AI工具" },
-    2: { action: "解决'买了没用'问题", detail: "指定使用负责人，设定周度使用目标，追踪工具登录率" },
-    3: { action: "从试点到标准化", detail: "将成功的AI用法写成SOP，在部门内推广为默认流程" },
-    4: { action: "建立数据反馈闭环", detail: "用AI产出的数据优化AI输入，形成持续改进循环" },
-    5: { action: "持续优化", detail: "对标行业最佳实践，探索AI+业务创新的新场景" },
-  },
-  department: {
-    media:            { 2: "让内容团队每周至少用AI出3篇初稿，对比效率", 3: "建立AI内容模板库，统一品牌调性" },
-    customer_service: { 2: "选1个高频问题类型，让AI客服先处理这一类", 3: "设定AI解决率KPI，低于阈值转人工" },
-    sales:            { 2: "要求SDR每天用AI筛选线索并记录，周会复盘效果", 3: "将AI推荐话术嵌入CRM流程" },
-    finance:          { 2: "从发票识别开始，每月对比人工vs AI准确率", 3: "打通发票→记账→报表的自动化链路" },
-    hr:               { 2: "先用AI筛选简历，HR复核，记录匹配率", 3: "将AI筛选标准写入招聘SOP" },
-    admin:            { 2: "从会议纪要AI生成开始，让行政习惯AI辅助", 3: "采购比价和合同管理流程标准化" },
-    legal:            { 2: "用AI做合同初审，法务复核，记录偏差率", 3: "建立合同模板+AI审查的标准流程" },
-    it:               { 2: "要求开发者每天至少用Copilot写30%代码", 3: "将AI测试集成到CI/CD流程中" },
-  },
+  1: { action: "先选一个部门试点", detail: "不要全面铺开，找一个痛点最明显的部门，先跑通一个AI工具" },
+  2: { action: "解决'买了没用'问题", detail: "工具买了不等于用了。需要专业指导找到正确切入点，才能让团队真正用起来" },
+  3: { action: "从试点到标准化", detail: "将成功的AI用法写成SOP，在部门内推广为默认流程" },
+  4: { action: "建立数据反馈闭环", detail: "用AI产出的数据优化AI输入，形成持续改进循环" },
+  5: { action: "持续优化", detail: "对标行业最佳实践，探索AI+业务创新的新场景" },
+};
+
+// Tier progression target descriptions
+const TIER_TARGETS = {
+  1: "选定试点部门，完成首个AI工具部署",
+  2: "关键部门开始规模化使用AI，形成可复制经验",
+  3: "成功做法标准化，推广为部门默认流程",
+  4: "AI嵌入核心业务流程，用数据衡量ROI",
+  5: "AI驱动持续优化，探索业务创新场景",
 };
 
 // Shared usage-reality answer options (same for all questions)
@@ -485,7 +482,7 @@ function App() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             {["每个部门的AI成熟度等级 (L1-L5)", "AI工具使用现状与落地差距分析", "当前 vs AI辅助 vs 全AI三种状态对比", "基于城市薪资水平的精确资源释放额", "各部门的AI升级路径与具体建议", "可被AI优化的具体工作流清单"].map((t, i) => (
               <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 6, fontSize: 13, color: T.textSecondary, lineHeight: 1.5 }}>
-                <span style={{ color: T.accent, marginTop: 2, fontSize: 10 }}>&#10003;</span>{t}
+                <span style={{ color: T.accent, marginTop: 2, fontSize: 10 }}>✓</span>{t}
               </div>
             ))}
           </div>
@@ -496,7 +493,7 @@ function App() {
             border: "none", background: T.accent, color: "#FFFFFF", cursor: "pointer",
             boxShadow: T.shadowLg, transition: "all 0.15s",
           }}>
-            开始5分钟AI诊断 &#8594;
+            开始5分钟AI诊断 →
           </button>
           <p style={{ fontSize: 11, color: T.textMuted, marginTop: 14 }}>数据来源：McKinsey / Stanford/MIT / GitHub / WEF / 智联招聘/BOSS直聘</p>
         </div>
@@ -541,8 +538,8 @@ function App() {
         </div>
       </div>
       <div style={{ display: "flex", gap: 10, marginTop: 28 }}>
-        <button onClick={() => setStep(0)} style={bB}>&#8592;</button>
-        <button onClick={() => ok && setStep(2)} disabled={!ok} style={bP(ok)}>下一步 &#8594;</button>
+        <button onClick={() => setStep(0)} style={bB}>←</button>
+        <button onClick={() => ok && setStep(2)} disabled={!ok} style={bP(ok)}>下一步 →</button>
       </div>
     </div></div>);
   }
@@ -566,7 +563,7 @@ function App() {
               <div style={{
                 width: 20, height: 20, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center",
                 border: `2px solid ${s ? T.accent : T.border}`, background: s ? T.accent : "transparent",
-              }}>{s && <span style={{ color: "#fff", fontSize: 12, fontWeight: 700 }}>&#10003;</span>}</div>
+              }}>{s && <span style={{ color: "#fff", fontSize: 12, fontWeight: 700 }}>✓</span>}</div>
             </div>
             {s && <div onClick={e => e.stopPropagation()} style={{ marginTop: 10 }}>
               <input type="number" placeholder="该部门总人数" value={dhc[d.id] || ""} onChange={e => setDhc(p => ({ ...p, [d.id]: parseInt(e.target.value) || 0 }))} style={{ ...inp, fontSize: 13, padding: "8px 10px" }} />
@@ -574,8 +571,8 @@ function App() {
           </div>); })}
       </div>
       <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
-        <button onClick={() => setStep(1)} style={bB}>&#8592;</button>
-        <button onClick={() => { if (ok) { setCcd(0); setStep(3); } }} disabled={!ok} style={bP(ok)}>开始AI成熟度评估 &#8594;</button>
+        <button onClick={() => setStep(1)} style={bB}>←</button>
+        <button onClick={() => { if (ok) { setCcd(0); setStep(3); } }} disabled={!ok} style={bP(ok)}>开始AI成熟度评估 →</button>
       </div>
     </div></div>);
   }
@@ -627,9 +624,9 @@ function App() {
       </div>
 
       <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
-        <button onClick={() => ccd > 0 ? setCcd(p => p - 1) : setStep(2)} style={bB}>&#8592;</button>
+        <button onClick={() => ccd > 0 ? setCcd(p => p - 1) : setStep(2)} style={bB}>←</button>
         <button onClick={() => { if (!allA) return; if (isL) { initRC(); setCrd(0); setStep(4); } else setCcd(p => p + 1); }} disabled={!allA} style={bP(allA)}>
-          {isL ? "进入岗位配置 &#8594;" : `下一个：${ad[ccd + 1]?.name} &#8594;`}
+          {isL ? "进入岗位配置 →" : `下一个：${ad[ccd + 1]?.name} →`}
         </button>
       </div>
     </div></div>);
@@ -687,8 +684,8 @@ function App() {
         })}
       </div>
       <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
-        <button onClick={() => crd > 0 ? setCrd(p => p - 1) : setStep(3)} style={bB}>&#8592;</button>
-        <button onClick={() => isL ? setStep(5) : setCrd(p => p + 1)} style={bP(true)}>{isL ? "生成完整报告 &#8594;" : "下一个部门 &#8594;"}</button>
+        <button onClick={() => crd > 0 ? setCrd(p => p - 1) : setStep(3)} style={bB}>←</button>
+        <button onClick={() => isL ? setStep(5) : setCrd(p => p + 1)} style={bP(true)}>{isL ? "生成完整报告 →" : "下一个部门 →"}</button>
       </div>
     </div></div>);
   }
@@ -719,43 +716,71 @@ function App() {
   const prodPerCapitaB = gfa > 0 ? Math.round(((gtc / gfa) - 1) * 100) : 0;
   const tierLabel = CITY_TIERS.find(t => t.id === cityTier)?.label || "一线城市";
 
-  const stateCard = (state) => {
-    const colors = { current: T.textMuted, withAI: T.positive, fullAI: T.accent };
-    const c = colors[state.id];
+  // Tier progression: current → +1 level (3-6mo) → +2 levels (12-18mo), capped at L5
+  const currentLevel = overallTier.level;
+  const target6mo = Math.min(currentLevel + 1, 5);
+  const target18mo = Math.min(currentLevel + 2, 5);
+  const tier6mo = TIER_DEFS[target6mo - 1];
+  const tier18mo = TIER_DEFS[target18mo - 1];
+  const currentAnnualCost = results.reduce((s, r) => {
+    return s + r.rr.reduce((rs, role) => rs + role.salary * role.cc * 14, 0);
+  }, 0);
+
+  const journeyStages = [
+    { id: "now", label: "现在", tierDef: overallTier, headcount: gtc, annualCost: currentAnnualCost, savings: 0, outputGrowth: 0, prodGrowth: 0, desc: `${te}人企业 / ${tierLabel} / 年营收${rv.toLocaleString()}万` },
+    { id: "6mo", label: "3-6个月目标", tierDef: tier6mo, headcount: gwa, annualCost: currentAnnualCost - gcw, savings: Math.round(gcw / 10000), outputGrowth: outputGrowthA, prodGrowth: prodPerCapitaA, desc: TIER_TARGETS[target6mo] },
+    { id: "18mo", label: "12-18个月目标", tierDef: tier18mo, headcount: gfa, annualCost: currentAnnualCost - gcf, savings: Math.round(gcf / 10000), outputGrowth: outputGrowthB, prodGrowth: prodPerCapitaB, desc: TIER_TARGETS[target18mo] },
+  ];
+
+  const journeyCard = (stage, idx) => {
+    const isNow = stage.id === "now";
+    const c = stage.tierDef.color;
     return (
-      <div style={{ ...cd, padding: "16px 14px", flex: 1, position: "relative", overflow: "hidden" }}>
-        {state.id !== "current" && <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: c }} />}
-        <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 2, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 500 }}>{state.phase}</div>
-        <div style={{ fontSize: 14, fontWeight: 700, color: c, marginBottom: 8, lineHeight: 1.4 }}>{state.title}</div>
-        <div style={{ fontSize: 11, color: T.textMuted, lineHeight: 1.5, marginBottom: 12, minHeight: 36 }}>{state.desc}</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={{ background: T.cardBgAlt, borderRadius: 6, padding: "8px 10px" }}>
-            <div style={{ fontSize: 10, color: T.textMuted }}>年度释放资源</div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: c }}><AN value={state.savings} prefix="¥" suffix="万" /></div>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-            <div style={{ background: T.cardBgAlt, borderRadius: 6, padding: "6px 8px" }}>
-              <div style={{ fontSize: 10, color: T.textMuted }}>产出增长</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: c }}>+{state.outputGrowth}%</div>
-            </div>
-            <div style={{ background: T.cardBgAlt, borderRadius: 6, padding: "6px 8px" }}>
-              <div style={{ fontSize: 10, color: T.textMuted }}>人效提升</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: c }}>+{state.prodGrowth}%</div>
-            </div>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: T.textMuted, paddingTop: 6, borderTop: `1px solid ${T.border}` }}>
-            <span>团队规模</span><span style={{ fontWeight: 600, color: c }}>{state.headcount}人</span>
-          </div>
+      <div style={{ ...cd, padding: "16px 14px", flex: 1, position: "relative", overflow: "hidden", opacity: isNow ? 0.85 : 1 }}>
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: c }} />
+        <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 6, fontWeight: 500, letterSpacing: 0.5 }}>{stage.label}</div>
+        <div style={{ marginBottom: 8 }}>
+          <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 4, fontSize: 12, fontWeight: 700, color: c, background: darkMode ? stage.tierDef.bgDark : stage.tierDef.bg }}>
+            L{stage.tierDef.level} {stage.tierDef.name}
+          </span>
+        </div>
+        <div style={{ fontSize: 11, color: T.textSecondary, lineHeight: 1.5, marginBottom: 12, minHeight: 32 }}>{stage.desc}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {isNow ? (
+            <>
+              <div style={{ background: T.cardBgAlt, borderRadius: 6, padding: "8px 10px" }}>
+                <div style={{ fontSize: 10, color: T.textMuted }}>年度人力成本</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: T.text }}>¥{Math.round(currentAnnualCost / 10000).toLocaleString()}万</div>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: T.textMuted, paddingTop: 6, borderTop: `1px solid ${T.border}` }}>
+                <span>团队规模</span><span style={{ fontWeight: 600, color: T.text }}>{stage.headcount}人</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ background: T.cardBgAlt, borderRadius: 6, padding: "8px 10px" }}>
+                <div style={{ fontSize: 10, color: T.textMuted }}>年度可释放资源</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: c }}><AN value={stage.savings} prefix="¥" suffix="万" /></div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                <div style={{ background: T.cardBgAlt, borderRadius: 6, padding: "6px 8px" }}>
+                  <div style={{ fontSize: 10, color: T.textMuted }}>产出增长</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: c }}>+{stage.outputGrowth}%</div>
+                </div>
+                <div style={{ background: T.cardBgAlt, borderRadius: 6, padding: "6px 8px" }}>
+                  <div style={{ fontSize: 10, color: T.textMuted }}>人效提升</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: c }}>+{stage.prodGrowth}%</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: T.textMuted, paddingTop: 6, borderTop: `1px solid ${T.border}` }}>
+                <span>团队规模</span><span style={{ fontWeight: 600, color: c }}>{stage.headcount}人</span>
+              </div>
+            </>
+          )}
         </div>
       </div>
     );
   };
-
-  const states = [
-    { id: "current", phase: "当前状态", title: `${cn || "当前"}现状`, desc: `${te}人 / 年营收${rv.toLocaleString()}万 / ${tierLabel}`, savings: 0, outputGrowth: 0, prodGrowth: 0, headcount: gtc },
-    { id: "withAI", phase: "方案A / AI辅助人工", title: "AI处理重复工作，人负责判断决策", desc: "AI接管数据录入、文档处理、常规客服等重复性工作。", savings: Math.round(gcw / 10000), outputGrowth: outputGrowthA, prodGrowth: prodPerCapitaA, headcount: gwa },
-    { id: "fullAI", phase: "方案B / AI Agent全管理", title: "AI Agent自主运行，人负责监督战略", desc: "AI Agent全流程自动执行，人做最终审核和例外处理。", savings: Math.round(gcf / 10000), outputGrowth: outputGrowthB, prodGrowth: prodPerCapitaB, headcount: gfa },
-  ];
 
   return (
     <div style={ct}><ThemeToggle />
@@ -789,23 +814,25 @@ function App() {
         {/* ═══ NEXT STEP RECOMMENDATION ═══ */}
         <div style={{ ...cd, marginBottom: 20, padding: "16px 20px", background: `${overallTier.color}08`, borderColor: `${overallTier.color}25` }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: overallTier.color, marginBottom: 4 }}>
-            下一步行动：{NEXT_STEPS.generic[overallTier.level]?.action}
+            下一步行动：{NEXT_STEPS[overallTier.level]?.action}
           </div>
           <div style={{ fontSize: 12, color: T.textSecondary, lineHeight: 1.6 }}>
-            {NEXT_STEPS.generic[overallTier.level]?.detail}
+            {NEXT_STEPS[overallTier.level]?.detail}
           </div>
         </div>
 
-        {/* ═══ 3-STATE COMPARISON ═══ */}
+        {/* ═══ TIER PROGRESSION ROADMAP ═══ */}
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 10, textAlign: "center" }}>三种状态对比</div>
-          <div style={{ display: "flex", gap: 10 }}>
-            {states.map(s => <div key={s.id} style={{ flex: 1 }}>{stateCard(s)}</div>)}
-          </div>
-          <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
-            <div style={{ flex: 1, textAlign: "center", fontSize: 10, color: T.textMuted }}>现在</div>
-            <div style={{ flex: 1, textAlign: "center" }}><span style={{ fontSize: 14, color: T.positive }}>&#8594;</span><div style={{ fontSize: 9, color: T.positive }}>3-6个月</div></div>
-            <div style={{ flex: 1, textAlign: "center" }}><span style={{ fontSize: 14, color: T.accent }}>&#8594;</span><div style={{ fontSize: 9, color: T.accent }}>12-18个月</div></div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 10, textAlign: "center" }}>AI成熟度升级路径</div>
+          <div style={{ display: "flex", gap: 6, alignItems: "stretch" }}>
+            {journeyStages.map((stage, idx) => (
+              <div key={stage.id} style={{ display: "flex", flex: 1, alignItems: "stretch" }}>
+                {journeyCard(stage, idx)}
+                {idx < journeyStages.length - 1 && (
+                  <div style={{ display: "flex", alignItems: "center", padding: "0 2px", color: journeyStages[idx + 1].tierDef.color, fontSize: 18, fontWeight: 700 }}>→</div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
 
@@ -817,8 +844,7 @@ function App() {
             const deptTier = getTier(capP);
             const industryTier = getTier(dept.aiLevel);
             const prodGain = PRODUCTIVITY_GAINS[dept.id];
-            const deptNextStep = NEXT_STEPS.department[dept.id]?.[deptTier.level];
-            const genericNext = NEXT_STEPS.generic[deptTier.level];
+            const gapScore = dept.aiLevel - capP;
 
             return (
               <div key={dept.id} style={{ ...cd, padding: 0, overflow: "hidden" }}>
@@ -835,76 +861,108 @@ function App() {
                     </div>
                   </div>
                   <div style={{ textAlign: "right", minWidth: 80 }}>
-                    <div style={{ fontSize: 12, color: T.textSecondary }}>{tc} &#8594; <span style={{ color: T.positive }}>{twAI}</span> &#8594; <span style={{ color: T.accent }}>{tfAI}</span></div>
-                    <div style={{ fontSize: 10, color: T.textMuted }}>释放 ¥{(tcwAI / 10000).toFixed(0)}~{(tcfAI / 10000).toFixed(0)}万/年</div>
+                    <div style={{ fontSize: 12, color: T.textSecondary }}>{tc}人 → <span style={{ color: T.positive }}>{twAI}</span> → <span style={{ color: T.accent }}>{tfAI}人</span></div>
+                    <div style={{ fontSize: 10, color: T.textMuted }}>可释放 ¥{(tcwAI / 10000).toFixed(0)}~{(tcfAI / 10000).toFixed(0)}万/年</div>
                   </div>
-                  <span style={{ color: T.textMuted, fontSize: 10, transition: "transform 0.3s", transform: isE ? "rotate(180deg)" : "none" }}>&#9660;</span>
+                  <span style={{ color: T.textMuted, fontSize: 10, transition: "transform 0.3s", transform: isE ? "rotate(180deg)" : "none" }}>▼</span>
                 </div>
 
                 {isE && (
                   <div style={{ padding: "0 16px 16px", borderTop: `1px solid ${T.border}` }}>
-                    {/* Next Step Recommendation */}
-                    <div style={{ margin: "12px 0", background: `${deptTier.color}08`, borderRadius: 6, padding: "10px 14px", border: `1px solid ${deptTier.color}20` }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: deptTier.color, marginBottom: 4 }}>升级建议：{genericNext?.action}</div>
-                      <div style={{ fontSize: 12, color: T.textSecondary, lineHeight: 1.6 }}>{genericNext?.detail}</div>
-                      {deptNextStep && <div style={{ fontSize: 12, color: T.textSecondary, lineHeight: 1.6, marginTop: 4, paddingTop: 4, borderTop: `1px solid ${deptTier.color}15` }}>具体做法：{deptNextStep}</div>}
-                    </div>
 
-                    {/* Productivity */}
-                    <div style={{ margin: "10px 0", background: T.cardBgAlt, borderRadius: 6, padding: "10px 14px" }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: T.text, marginBottom: 4 }}>效率提升预期</div>
-                      <div style={{ fontSize: 12, color: T.textSecondary, lineHeight: 1.6 }}>
-                        AI辅助: +{prodGain?.withAI || 20}% / 全AI: +{prodGain?.fullAI || 35}%
-                        <span style={{ fontSize: 10, color: T.textMuted, marginLeft: 6 }}>({prodGain?.source || "综合研究"})</span>
-                      </div>
-                      <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>{dept.futureVision}</div>
-                    </div>
-
-                    {/* Tools */}
-                    <div style={{ marginBottom: 10 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: T.text, marginBottom: 6 }}>推荐AI工具</div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>{dept.tools.map((t, i) => (
-                        <span key={i} style={{ padding: "3px 8px", borderRadius: 4, background: T.warningSoft, border: `1px solid ${T.warning}20`, fontSize: 11, color: T.warning }}>{t}</span>
-                      ))}</div>
-                    </div>
-
-                    {/* Role Details */}
-                    {rr.map(({ role, cc, wa, fa, salary, cwAI, cfAI }, ri) => (
-                      <div key={ri} style={{ marginBottom: 10, background: T.cardBgAlt, borderRadius: 6, padding: 12, border: `1px solid ${T.border}` }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                          <div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{role.title}</div>
-                            <div style={{ fontSize: 10, color: T.textMuted }}>当前{cc}人 / ¥{salary.toLocaleString()}/月 ({tierLabel})</div>
+                    {/* Section 1: Current Diagnosis */}
+                    <div style={{ margin: "12px 0", background: T.cardBgAlt, borderRadius: 6, padding: "12px 14px" }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: T.text, marginBottom: 6 }}>现状诊断</div>
+                      <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+                        <div style={{ flex: 1, minWidth: 120, background: darkMode ? "#1a1a2e" : "#F9FAFB", borderRadius: 4, padding: "8px 10px", border: `1px solid ${T.border}` }}>
+                          <div style={{ fontSize: 10, color: T.textMuted }}>当前水平</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: deptTier.color }}>L{deptTier.level} {deptTier.name}</div>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 120, background: darkMode ? "#1a1a2e" : "#F9FAFB", borderRadius: 4, padding: "8px 10px", border: `1px solid ${T.border}` }}>
+                          <div style={{ fontSize: 10, color: T.textMuted }}>行业可达</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: industryTier.color }}>L{industryTier.level} {industryTier.name}</div>
+                        </div>
+                        {gapScore > 0 && (
+                          <div style={{ flex: 1, minWidth: 120, background: darkMode ? "#1a1a2e" : "#FEF2F2", borderRadius: 4, padding: "8px 10px", border: `1px solid ${T.negative}20` }}>
+                            <div style={{ fontSize: 10, color: T.textMuted }}>差距</div>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: T.negative }}>{gapScore}分</div>
                           </div>
-                          <div style={{ display: "flex", gap: 4 }}>
-                            <div style={{ textAlign: "center", padding: "2px 8px", borderRadius: 4, background: T.positiveSoft }}>
-                              <div style={{ fontSize: 14, fontWeight: 700, color: T.positive }}>{wa}</div>
-                              <div style={{ fontSize: 9, color: T.textMuted }}>AI辅助</div>
-                            </div>
-                            <div style={{ textAlign: "center", padding: "2px 8px", borderRadius: 4, background: T.accentSoft }}>
-                              <div style={{ fontSize: 14, fontWeight: 700, color: T.accent }}>{fa}</div>
-                              <div style={{ fontSize: 9, color: T.textMuted }}>全AI</div>
-                            </div>
-                          </div>
-                        </div>
-                        <div style={{ marginBottom: 6 }}>
-                          <div style={{ fontSize: 11, fontWeight: 600, color: T.textSecondary, marginBottom: 4 }}>AI能做什么</div>
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>{role.aiCanDo.map((t, i) => (
-                            <div key={i} style={{ fontSize: 11, color: T.textSecondary, display: "flex", alignItems: "flex-start", gap: 4, lineHeight: 1.5 }}>
-                              <span style={{ color: T.accent, fontSize: 8, marginTop: 4 }}>&#9679;</span>{t}
-                            </div>
-                          ))}</div>
-                        </div>
-                        <div style={{ background: T.accentSoft, borderRadius: 4, padding: "6px 8px" }}>
-                          <div style={{ fontSize: 10, fontWeight: 600, color: T.accent, marginBottom: 2 }}>未来人才画像</div>
-                          <div style={{ fontSize: 11, color: T.textSecondary, lineHeight: 1.5 }}>{role.talentProfile}</div>
-                        </div>
+                        )}
                       </div>
-                    ))}
-
-                    {/* Insight */}
-                    <div style={{ background: T.accentSoft, borderRadius: 6, padding: "8px 12px" }}>
                       <div style={{ fontSize: 11, color: T.textSecondary, lineHeight: 1.6 }}>{dept.insight}</div>
+                    </div>
+
+                    {/* Section 2: What's Possible (headcount + savings) */}
+                    <div style={{ margin: "10px 0", background: T.cardBgAlt, borderRadius: 6, padding: "12px 14px" }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: T.text, marginBottom: 8 }}>升级可能性</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 8 }}>
+                        <div style={{ textAlign: "center", padding: "8px 4px", borderRadius: 4, background: darkMode ? "#1a1a2e" : "#F9FAFB", border: `1px solid ${T.border}` }}>
+                          <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 2 }}>当前团队</div>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: T.text }}>{tc}人</div>
+                        </div>
+                        <div style={{ textAlign: "center", padding: "8px 4px", borderRadius: 4, background: T.positiveSoft, border: `1px solid ${T.positive}20` }}>
+                          <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 2 }}>AI辅助后</div>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: T.positive }}>{twAI}人</div>
+                        </div>
+                        <div style={{ textAlign: "center", padding: "8px 4px", borderRadius: 4, background: T.accentSoft, border: `1px solid ${T.accent}20` }}>
+                          <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 2 }}>全AI管理</div>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: T.accent }}>{tfAI}人</div>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <div style={{ flex: 1, background: darkMode ? "#1a1a2e" : "#F0FDF4", borderRadius: 4, padding: "6px 10px", border: `1px solid ${T.positive}20` }}>
+                          <div style={{ fontSize: 10, color: T.textMuted }}>年度可释放资源</div>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: T.positive }}>¥{(tcwAI / 10000).toFixed(0)}~{(tcfAI / 10000).toFixed(0)}万</div>
+                        </div>
+                        <div style={{ flex: 1, background: darkMode ? "#1a1a2e" : "#F0FDF4", borderRadius: 4, padding: "6px 10px", border: `1px solid ${T.positive}20` }}>
+                          <div style={{ fontSize: 10, color: T.textMuted }}>效率提升预期</div>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: T.positive }}>+{prodGain?.withAI || 20}%~{prodGain?.fullAI || 35}%</div>
+                          <div style={{ fontSize: 9, color: T.textMuted }}>来源: {prodGain?.source || "综合研究"}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Section 3: Rebase CTA — Gate the "How" */}
+                    <div style={{ margin: "10px 0", background: `${T.accent}08`, borderRadius: 8, padding: "16px", border: `1px solid ${T.accent}30`, position: "relative", overflow: "hidden" }}>
+                      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: T.accent }} />
+                      <div style={{ fontSize: 13, fontWeight: 700, color: T.accent, marginBottom: 10 }}>
+                        解锁「{dept.name}」完整AI升级方案
+                      </div>
+                      <div style={{ fontSize: 12, color: T.textSecondary, lineHeight: 1.8, marginBottom: 12 }}>
+                        Rebase顾问将为您的团队量身定制：
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 14 }}>
+                        {[
+                          { icon: "01", title: "工作流诊断", desc: "找到最适合AI切入的环节" },
+                          { icon: "02", title: "工具选型", desc: "基于团队实际情况推荐方案" },
+                          { icon: "03", title: "落地陪跑", desc: "1v1指导，确保团队真正用起来" },
+                          { icon: "04", title: "ROI追踪", desc: "量化AI带来的效率提升" },
+                        ].map((item, i) => (
+                          <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                            <div style={{ minWidth: 22, height: 22, borderRadius: 4, background: T.accent, color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{item.icon}</div>
+                            <div>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: T.text }}>{item.title}</div>
+                              <div style={{ fontSize: 11, color: T.textMuted, lineHeight: 1.4 }}>{item.desc}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => {
+                          const el = document.getElementById("rebase-cta-form");
+                          if (el) el.scrollIntoView({ behavior: "smooth" });
+                        }}
+                        style={{
+                          width: "100%", padding: "10px 20px", fontSize: 13, fontWeight: 600, borderRadius: 6,
+                          border: "none", background: T.accent, color: "#FFFFFF", cursor: "pointer",
+                          transition: "opacity 0.2s",
+                        }}
+                        onMouseEnter={e => e.target.style.opacity = "0.9"}
+                        onMouseLeave={e => e.target.style.opacity = "1"}
+                      >预约免费诊断 →</button>
+                      <div style={{ fontSize: 11, color: T.textMuted, marginTop: 10, lineHeight: 1.6, fontStyle: "italic", textAlign: "center" }}>
+                        "强制员工用AI只会产出垃圾。我们帮你找到AI真正能提效的工作流，再手把手带团队跑通。"
+                      </div>
                     </div>
                   </div>
                 )}
@@ -917,7 +975,7 @@ function App() {
         <div style={{ ...cd, marginTop: 12, padding: 0, overflow: "hidden" }}>
           <div onClick={() => setShowSources(!showSources)} style={{ padding: "12px 16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted }}>数据来源与研究方法</div>
-            <span style={{ color: T.textMuted, fontSize: 10, transition: "transform 0.3s", transform: showSources ? "rotate(180deg)" : "none" }}>&#9660;</span>
+            <span style={{ color: T.textMuted, fontSize: 10, transition: "transform 0.3s", transform: showSources ? "rotate(180deg)" : "none" }}>▼</span>
           </div>
           {showSources && (
             <div style={{ padding: "0 16px 14px", borderTop: `1px solid ${T.border}` }}>
@@ -941,9 +999,9 @@ function App() {
         </div>
 
         {/* CTA */}
-        <div style={{ ...cd, marginTop: 12, textAlign: "center", borderTop: `3px solid ${T.accent}` }}>
-          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4, color: T.text }}>想把这份报告变成落地方案？</div>
-          <p style={{ fontSize: 12, color: T.textSecondary, marginBottom: 14, lineHeight: 1.6 }}>从诊断到执行：AI工具选型 &#8594; 工作流重构 &#8594; 人才转型路径 &#8594; ROI追踪</p>
+        <div id="rebase-cta-form" style={{ ...cd, marginTop: 12, textAlign: "center", borderTop: `3px solid ${T.accent}` }}>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4, color: T.text }}>让Rebase帮你把诊断变成落地方案</div>
+          <p style={{ fontSize: 12, color: T.textSecondary, marginBottom: 14, lineHeight: 1.6 }}>每个部门的AI升级路径不同。我们提供1v1指导，帮你的团队真正用起来。</p>
           {!leadSubmitted ? (
             <div style={{ maxWidth: 380, margin: "0 auto" }}>
               <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
@@ -957,7 +1015,7 @@ function App() {
                 cursor: leadName && leadContact ? "pointer" : "not-allowed",
               }}>预约1v1 AI转型咨询</button>
               <div style={{ fontSize: 10, color: T.textMuted, marginTop: 8, display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
-                <span>&#10003; 60分钟深度诊断</span><span>&#10003; 定制落地方案</span><span>&#10003; 工具选型清单</span><span>&#10003; 人才转型路线图</span>
+                <span>✓ 60分钟深度诊断</span><span>✓ 定制落地方案</span><span>✓ 工具选型清单</span><span>✓ 人才转型路线图</span>
               </div>
             </div>
           ) : (
@@ -983,8 +1041,7 @@ function App() {
   );
 }
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(React.createElement(App));
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 </script>
 </body>
 </html>
