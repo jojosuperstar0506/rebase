@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stop Losing Money to Wrong Orders | Smart Operations for Distributors</title>
+<style>
+  :root {
+    --accent: #2e7d4f;
+    --accent-dark: #215c3a;
+    --accent-light: #e8f5ed;
+    --text: #1a1a2e;
+    --text-secondary: #4a4a5a;
+    --text-muted: #7a7a8a;
+    --bg: #ffffff;
+    --bg-alt: #f8f9fb;
+    --shadow: 0 4px 24px rgba(0,0,0,0.06);
+    --shadow-hover: 0 8px 32px rgba(0,0,0,0.10);
+    --radius: 16px;
+    --max-w: 960px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.7;
+    font-size: 17px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .container {
+    max-width: var(--max-w);
+    margin: 0 auto;
+    padding: 0 32px;
+  }
+
+  /* ========== HERO ========== */
+  .hero {
+    min-height: 70vh;
+    background: linear-gradient(135deg, #1a4d30 0%, var(--accent) 40%, #3a9d65 100%);
+    display: flex;
+    align-items: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -20%;
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+
+  .hero::after {
+    content: '';
+    position: absolute;
+    bottom: -30%;
+    left: -10%;
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(255,255,255,0.03) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+
+  .hero .container { position: relative; z-index: 1; padding-top: 80px; padding-bottom: 80px; }
+
+  .hero h1 {
+    font-size: 48px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.15;
+    max-width: 720px;
+    margin-bottom: 20px;
+    letter-spacing: -0.5px;
+  }
+
+  .hero .subtitle {
+    font-size: 20px;
+    color: rgba(255,255,255,0.85);
+    max-width: 600px;
+    margin-bottom: 48px;
+    line-height: 1.6;
+    font-weight: 400;
+  }
+
+  .hero-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 16px;
+    background: rgba(255,255,255,0.12);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 12px;
+    padding: 20px 28px;
+  }
+
+  .hero-stat .number {
+    font-size: 42px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1;
+  }
+
+  .hero-stat .label {
+    font-size: 15px;
+    color: rgba(255,255,255,0.8);
+    max-width: 260px;
+    line-height: 1.4;
+  }
+
+  /* ========== SECTIONS ========== */
+  .section {
+    padding: 88px 0;
+  }
+
+  .section-alt {
+    background: var(--bg-alt);
+  }
+
+  .section-label {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+
+  .section-title {
+    font-size: 36px;
+    font-weight: 800;
+    line-height: 1.2;
+    margin-bottom: 16px;
+    letter-spacing: -0.3px;
+  }
+
+  .section-desc {
+    font-size: 18px;
+    color: var(--text-secondary);
+    max-width: 640px;
+    margin-bottom: 48px;
+    line-height: 1.7;
+  }
+
+  /* ========== PAIN POINT CARDS ========== */
+  .pain-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  .pain-card {
+    background: var(--bg);
+    border: 1px solid #e8e8ee;
+    border-radius: var(--radius);
+    padding: 32px;
+    box-shadow: var(--shadow);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    position: relative;
+  }
+
+  .pain-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+  }
+
+  .pain-card .pain-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: #fef2f0;
+    color: #c0392b;
+    font-size: 15px;
+    font-weight: 800;
+    margin-bottom: 16px;
+  }
+
+  .pain-card p {
+    font-size: 16px;
+    color: var(--text-secondary);
+    line-height: 1.65;
+  }
+
+  /* ========== COST NUMBERS ========== */
+  .cost-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 32px;
+  }
+
+  .cost-item {
+    text-align: center;
+    padding: 32px 16px;
+    background: var(--bg);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+  }
+
+  .cost-item:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+  }
+
+  .cost-item .big-number {
+    font-size: 48px;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1.1;
+    margin-bottom: 8px;
+  }
+
+  .cost-item .big-unit {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  .cost-item .cost-label {
+    font-size: 14px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin-top: 8px;
+  }
+
+  .cost-bottom {
+    text-align: center;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text);
+    padding: 32px;
+    background: var(--accent-light);
+    border-radius: var(--radius);
+    border-left: 4px solid var(--accent);
+    line-height: 1.5;
+  }
+
+  /* ========== BEFORE / AFTER ========== */
+  .ba-row {
+    display: grid;
+    grid-template-columns: 1fr 48px 1fr;
+    gap: 0;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+
+  .ba-card {
+    padding: 24px 28px;
+    border-radius: var(--radius);
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  .ba-before {
+    background: #fef7f5;
+    border: 1px solid #f0d9d3;
+    color: #6b3a30;
+  }
+
+  .ba-after {
+    background: var(--accent-light);
+    border: 1px solid #c5e4d1;
+    color: #1a4d30;
+  }
+
+  .ba-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .ba-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  .ba-before .ba-label { color: #c0392b; }
+  .ba-after .ba-label { color: var(--accent); }
+
+  /* ========== TIMELINE ========== */
+  .timeline {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0;
+    position: relative;
+    margin-top: 48px;
+  }
+
+  .timeline::before {
+    content: '';
+    position: absolute;
+    top: 40px;
+    left: 16.66%;
+    right: 16.66%;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent), #3a9d65);
+    border-radius: 2px;
+    z-index: 0;
+  }
+
+  .step {
+    text-align: center;
+    position: relative;
+    padding: 0 16px;
+  }
+
+  .step-dot {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 4px solid #fff;
+    box-shadow: 0 0 0 3px var(--accent);
+    margin: 26px auto 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .step-number {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .step h3 {
+    font-size: 22px;
+    font-weight: 800;
+    margin-bottom: 4px;
+    color: var(--text);
+  }
+
+  .step .step-time {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+
+  .step-details {
+    text-align: left;
+    background: var(--bg);
+    border-radius: var(--radius);
+    padding: 24px;
+    box-shadow: var(--shadow);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+  }
+
+  .step-details:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+  }
+
+  .step-details ul {
+    list-style: none;
+    margin-bottom: 16px;
+  }
+
+  .step-details ul li {
+    font-size: 14px;
+    color: var(--text-secondary);
+    padding: 4px 0;
+    padding-left: 18px;
+    position: relative;
+    line-height: 1.55;
+  }
+
+  .step-details ul li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 11px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0.5;
+  }
+
+  .step-deliverable {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-style: italic;
+    padding-top: 12px;
+    border-top: 1px solid #eee;
+    margin-bottom: 10px;
+  }
+
+  .step-price {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--accent);
+  }
+
+  /* ========== STEP 1 EXPANDED ========== */
+  .step-details h4 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin-top: 14px;
+    margin-bottom: 6px;
+  }
+
+  .step-details h4:first-child {
+    margin-top: 0;
+  }
+
+  .step-meta {
+    font-size: 13px;
+    color: var(--text-secondary);
+    padding-top: 10px;
+    border-top: 1px solid #eee;
+    margin-top: 12px;
+    line-height: 1.7;
+  }
+
+  .step-meta strong {
+    color: var(--text);
+  }
+
+  .pricing-credit {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-light);
+    padding: 3px 10px;
+    border-radius: 6px;
+    margin-top: 6px;
+  }
+
+  /* ========== PRICING ========== */
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+
+  .pricing-card {
+    background: var(--bg);
+    border: 1px solid #e8e8ee;
+    border-radius: var(--radius);
+    padding: 36px 32px;
+    text-align: center;
+    box-shadow: var(--shadow);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    position: relative;
+  }
+
+  .pricing-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+  }
+
+  .pricing-card.featured {
+    border: 2px solid var(--accent);
+    box-shadow: 0 8px 40px rgba(46,125,79,0.15);
+    transform: scale(1.04);
+    z-index: 2;
+  }
+
+  .pricing-card.featured:hover {
+    transform: scale(1.04) translateY(-2px);
+    box-shadow: 0 12px 48px rgba(46,125,79,0.2);
+  }
+
+  .pricing-badge {
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--accent);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 5px 20px;
+    border-radius: 20px;
+  }
+
+  .pricing-card h3 {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .pricing-card .pricing-amount {
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--accent);
+    margin: 16px 0 4px;
+  }
+
+  .pricing-card .pricing-period {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+  }
+
+  .pricing-card .pricing-desc {
+    font-size: 15px;
+    color: var(--text-secondary);
+    padding-top: 16px;
+    border-top: 1px solid #eee;
+  }
+
+  .pricing-note {
+    text-align: center;
+    margin-top: 40px;
+    font-size: 18px;
+    color: var(--text-secondary);
+    font-style: italic;
+    max-width: 640px;
+    margin-left: auto;
+    margin-right: auto;
+    line-height: 1.6;
+  }
+
+  /* ========== CHECKLIST ========== */
+  .checklist {
+    list-style: none;
+    max-width: 680px;
+  }
+
+  .checklist li {
+    padding: 18px 0;
+    border-bottom: 1px solid #eee;
+    font-size: 17px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    line-height: 1.55;
+  }
+
+  .checklist li:last-child { border-bottom: none; }
+
+  .check-icon {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 2px;
+  }
+
+  .check-icon svg {
+    width: 14px;
+    height: 14px;
+    stroke: var(--accent);
+    stroke-width: 3;
+    fill: none;
+  }
+
+  /* ========== CTA ========== */
+  .cta-section {
+    background: linear-gradient(135deg, #1a4d30 0%, var(--accent) 40%, #3a9d65 100%);
+    padding: 96px 0;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .cta-section::before {
+    content: '';
+    position: absolute;
+    top: -40%;
+    right: -15%;
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+
+  .cta-section .container { position: relative; z-index: 1; }
+
+  .cta-section h2 {
+    font-size: 40px;
+    font-weight: 800;
+    color: #fff;
+    margin-bottom: 16px;
+    letter-spacing: -0.3px;
+  }
+
+  .cta-section .cta-subtitle {
+    font-size: 20px;
+    color: rgba(255,255,255,0.85);
+    max-width: 560px;
+    margin: 0 auto 12px;
+    line-height: 1.6;
+  }
+
+  .cta-section .cta-subtext {
+    font-size: 16px;
+    color: rgba(255,255,255,0.6);
+    margin-bottom: 40px;
+    font-style: italic;
+  }
+
+  .cta-note {
+    display: inline-block;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 10px;
+    padding: 14px 28px;
+    font-size: 15px;
+    color: rgba(255,255,255,0.8);
+  }
+
+  /* ========== RESPONSIVE ========== */
+  @media (max-width: 768px) {
+    .hero h1 { font-size: 32px; }
+    .hero .subtitle { font-size: 17px; }
+    .hero-stat { flex-direction: column; text-align: center; padding: 16px 20px; }
+    .hero-stat .number { font-size: 36px; }
+
+    .section { padding: 60px 0; }
+    .section-title { font-size: 28px; }
+    .section-desc { font-size: 16px; }
+
+    .pain-grid { grid-template-columns: 1fr; }
+
+    .cost-grid { grid-template-columns: 1fr; }
+    .cost-item .big-number { font-size: 40px; }
+
+    .ba-row {
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+    .ba-arrow {
+      transform: rotate(90deg);
+      padding: 4px 0;
+    }
+
+    .timeline {
+      grid-template-columns: 1fr;
+      gap: 32px;
+    }
+    .timeline::before { display: none; }
+    .step-dot { margin: 0 auto 16px; }
+
+    .pricing-grid { grid-template-columns: 1fr; }
+    .pricing-card.featured {
+      transform: none;
+      order: -1;
+    }
+    .pricing-card.featured:hover { transform: translateY(-2px); }
+
+    .cta-section h2 { font-size: 30px; }
+    .cta-section .cta-subtitle { font-size: 17px; }
+  }
+
+  @media (max-width: 480px) {
+    .container { padding: 0 20px; }
+    .hero h1 { font-size: 28px; }
+    .section-title { font-size: 24px; }
+    .cost-item .big-number { font-size: 36px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ==================== HERO ==================== -->
+<section class="hero">
+  <div class="container">
+    <h1>Your Team Processes 200 Orders a Day.<br>How Many Have Errors?</h1>
+    <p class="subtitle">We help distributors stop losing money to wrong orders, late collections, and manual chaos.</p>
+    <div class="hero-stat">
+      <span class="number">220-261</span>
+      <span class="label">hours per month lost to manual order processing and follow-up</span>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== SOUND FAMILIAR ==================== -->
+<section class="section section-alt">
+  <div class="container">
+    <div class="section-label">Sound Familiar?</div>
+    <h2 class="section-title">The daily reality nobody talks about</h2>
+    <p class="section-desc">You built a successful distribution business. But every day, the same operational chaos eats your margins.</p>
+    <div class="pain-grid">
+      <div class="pain-card">
+        <div class="pain-number">1</div>
+        <p>Orders arrive via WeChat voice messages, blurry PDF photos, phone calls, and Alibaba chat &mdash; your team re-types every single one into the system.</p>
+      </div>
+      <div class="pain-card">
+        <div class="pain-number">2</div>
+        <p>A customer orders "the same as last time" &mdash; but last time was 3 months ago and nobody remembers the exact specs or pricing tier.</p>
+      </div>
+      <div class="pain-card">
+        <div class="pain-number">3</div>
+        <p>5-8% of orders ship with errors &mdash; wrong SKU, wrong quantity, wrong price &mdash; and each correction costs you time, goodwill, and margin.</p>
+      </div>
+      <div class="pain-card">
+        <div class="pain-number">4</div>
+        <p>Accounts receivable is a spreadsheet nightmare &mdash; your finance team spends days chasing overdue payments via WeChat, calling the same numbers repeatedly.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== HIDDEN COST ==================== -->
+<section class="section">
+  <div class="container">
+    <div class="section-label">The Hidden Cost</div>
+    <h2 class="section-title">What this chaos actually costs you every month</h2>
+    <p class="section-desc">These aren't hypotheticals. These are the numbers we see at distributors your size, every time.</p>
+    <div class="cost-grid">
+      <div class="cost-item">
+        <div class="big-number">220-261</div>
+        <div class="big-unit">hours / month</div>
+        <div class="cost-label">Staff time on manual order processing</div>
+      </div>
+      <div class="cost-item">
+        <div class="big-number">5-8%</div>
+        <div class="big-unit">error rate</div>
+        <div class="cost-label">Each error costs &yen;200-500 to fix</div>
+      </div>
+      <div class="cost-item">
+        <div class="big-number">&yen;11k-23.5k</div>
+        <div class="big-unit">per month</div>
+        <div class="cost-label">Direct labor waste alone</div>
+      </div>
+      <div class="cost-item">
+        <div class="big-number">45-60</div>
+        <div class="big-unit">day collection cycle</div>
+        <div class="cost-label">Should be 30 days</div>
+      </div>
+      <div class="cost-item">
+        <div class="big-number">15-20%</div>
+        <div class="big-unit">of AR overdue</div>
+        <div class="cost-label">At any given time</div>
+      </div>
+      <div class="cost-item" style="display:flex; align-items:center; justify-content:center;">
+        <div>
+          <div style="font-size:20px; font-weight:700; color:var(--text); line-height:1.4;">Every wrong order is a margin cut.<br>Every late collection is a cash flow hole.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== WHAT CHANGES ==================== -->
+<section class="section section-alt">
+  <div class="container">
+    <div class="section-label">What Changes</div>
+    <h2 class="section-title">Before and after, on your actual orders</h2>
+    <p class="section-desc">Here is what your operations look like after we get involved.</p>
+
+    <div class="ba-row">
+      <div class="ba-card ba-before">
+        <span class="ba-label">Today</span>
+        Orders re-typed from WeChat photos and voice messages
+      </div>
+      <div class="ba-arrow">&rarr;</div>
+      <div class="ba-card ba-after">
+        <span class="ba-label">With Us</span>
+        Orders captured automatically from any channel &mdash; WeChat, PDF, phone, email
+      </div>
+    </div>
+
+    <div class="ba-row">
+      <div class="ba-card ba-before">
+        <span class="ba-label">Today</span>
+        "Same as last time" means 15 minutes of detective work
+      </div>
+      <div class="ba-arrow">&rarr;</div>
+      <div class="ba-card ba-after">
+        <span class="ba-label">With Us</span>
+        Customer order history retrieved instantly, pre-filled for confirmation
+      </div>
+    </div>
+
+    <div class="ba-row">
+      <div class="ba-card ba-before">
+        <span class="ba-label">Today</span>
+        Pricing errors caught after shipping
+      </div>
+      <div class="ba-arrow">&rarr;</div>
+      <div class="ba-card ba-after">
+        <span class="ba-label">With Us</span>
+        Pricing anomalies flagged before the order ships
+      </div>
+    </div>
+
+    <div class="ba-row">
+      <div class="ba-card ba-before">
+        <span class="ba-label">Today</span>
+        Finance chases payments one by one via WeChat
+      </div>
+      <div class="ba-arrow">&rarr;</div>
+      <div class="ba-card ba-after">
+        <span class="ba-label">With Us</span>
+        Automated collection reminders + daily exception report of who actually needs a call
+      </div>
+    </div>
+
+    <div class="ba-row">
+      <div class="ba-card ba-before">
+        <span class="ba-label">Today</span>
+        End-of-day means reconciling orders until 9 PM
+      </div>
+      <div class="ba-arrow">&rarr;</div>
+      <div class="ba-card ba-after">
+        <span class="ba-label">With Us</span>
+        Daily exception summary ready by 5 PM &mdash; only problems need your attention
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== HOW IT WORKS ==================== -->
+<section class="section">
+  <div class="container">
+    <div class="section-label">How It Works</div>
+    <h2 class="section-title">Three steps. No disruption. Real orders from day one.</h2>
+    <p class="section-desc">We start small, prove it works, and only scale when you see the results.</p>
+
+    <div class="timeline">
+      <div class="step">
+        <div class="step-number">Step 1</div>
+        <div class="step-dot"></div>
+        <h3>"We Audit &amp; Prove"</h3>
+        <div class="step-time">Week 1</div>
+        <div class="step-details">
+          <h4>Before we visit (3 days remote prep):</h4>
+          <ul>
+            <li>We collect 50 recent orders (the messy ones &mdash; WeChat voice messages, blurry PDF photos, phone transcripts), your pricing sheets, and customer list</li>
+            <li>We build a working prototype: paste a real WeChat order &rarr; system parses it into structured format, flags pricing anomalies, generates confirmation draft</li>
+            <li>By the time we arrive, we're already processing your actual orders</li>
+          </ul>
+          <h4>On-site (2 days):</h4>
+          <ul>
+            <li>Day 1 morning: sit with your order desk &mdash; watch how orders come in across WeChat, phone, email. Watch your finance team chase overdue payments</li>
+            <li>Day 1 afternoon: take that morning's ACTUAL orders and run them through the prototype. Your team watches a messy WeChat order get parsed and confirmed in 30 seconds instead of 4 minutes of manual entry</li>
+            <li>Day 2: your order team tests it on live orders alongside their current process. We measure error rates and time savings together</li>
+          </ul>
+          <h4>What you get:</h4>
+          <ul>
+            <li>Process map of your order-to-collection workflow with time/cost per step</li>
+            <li>Working prototype tested on 30-50 of YOUR real orders (before vs. after)</li>
+            <li>Error analysis: which order types cause the most mistakes and why</li>
+            <li>Custom ROI model using your staff costs, order volume, and AR aging data</li>
+            <li>Honest go/no-go recommendation &mdash; if this won't save you enough, we tell you</li>
+          </ul>
+          <div class="step-meta">
+            <strong>Timeline:</strong> 1 week total (3 days remote + 2 days on-site)<br>
+            <strong>Cost:</strong> &yen;15,000&ndash;30,000 (credited toward the pilot if you proceed)
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-number">Step 2</div>
+        <div class="step-dot"></div>
+        <h3>"We Build"</h3>
+        <div class="step-time">Weeks 2 - 6</div>
+        <div class="step-details">
+          <ul>
+            <li>We don't start from scratch &mdash; we build on the prototype your team already saw working during the audit</li>
+            <li>Set up the system using your real orders and customer data</li>
+            <li>Your team tests it on live orders alongside current process</li>
+            <li>We adjust until it matches YOUR business rules and pricing logic</li>
+          </ul>
+          <div class="step-deliverable">Deliverable: Working system processing real orders</div>
+          <div class="step-price">&yen;50,000 - 100,000</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-number">Step 3</div>
+        <div class="step-dot"></div>
+        <h3>"We Run"</h3>
+        <div class="step-time">Ongoing</div>
+        <div class="step-details">
+          <ul>
+            <li>Manage and improve the system month by month</li>
+            <li>Your team focuses on customer relationships, not data entry</li>
+            <li>Monthly reports on errors caught, time saved, collections improved</li>
+            <li>Cancel anytime &mdash; month to month</li>
+          </ul>
+          <div class="step-deliverable">No lock-in. Results speak for themselves.</div>
+          <div class="step-price">&yen;15,000 - 30,000 / month</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== PRICING ==================== -->
+<section class="section section-alt">
+  <div class="container">
+    <div class="section-label">The Investment</div>
+    <h2 class="section-title">Transparent pricing. Start small.</h2>
+    <p class="section-desc">Pick where you want to begin. Most distributors start with the Diagnostic.</p>
+
+    <div class="pricing-grid">
+      <div class="pricing-card">
+        <h3>Diagnostic</h3>
+        <div class="pricing-amount">&yen;15,000 - 30,000</div>
+        <div class="pricing-period">1 week &middot; Start here</div>
+        <div class="pricing-desc">Working prototype on YOUR real orders + full process audit. Walk away with a clear action plan &mdash; no obligation to continue.</div>
+        <div class="pricing-credit">Fee credited toward pilot</div>
+      </div>
+      <div class="pricing-card featured">
+        <div class="pricing-badge">Recommended</div>
+        <h3>Pilot</h3>
+        <div class="pricing-amount">&yen;50,000 - 100,000</div>
+        <div class="pricing-period">4 - 6 weeks</div>
+        <div class="pricing-desc">Test it on real orders before you scale. Your team runs both systems side by side. If it doesn't work, you'll know fast.</div>
+      </div>
+      <div class="pricing-card">
+        <h3>Managed Service</h3>
+        <div class="pricing-amount">&yen;15,000 - 30,000</div>
+        <div class="pricing-period">per month &middot; Ongoing</div>
+        <div class="pricing-desc">We run it so your team can sell. Month-to-month, cancel anytime. We only stay if we keep earning it.</div>
+      </div>
+    </div>
+
+    <div class="pricing-note">Less than the cost of two order clerks. But it processes orders at 2 AM without complaining.</div>
+  </div>
+</section>
+
+<!-- ==================== TRUST SECTION ==================== -->
+<section class="section">
+  <div class="container">
+    <div class="section-label">Why Us</div>
+    <h2 class="section-title">Built for distributors who've been burned by ERP promises before</h2>
+    <p class="section-desc">We know you've heard "this system will change everything" before. Here is why this is different.</p>
+
+    <ul class="checklist">
+      <li>
+        <span class="check-icon"><svg viewBox="0 0 16 16"><path d="M3 8.5l3.5 3.5 6.5-7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        No IT department required &mdash; we handle everything
+      </li>
+      <li>
+        <span class="check-icon"><svg viewBox="0 0 16 16"><path d="M3 8.5l3.5 3.5 6.5-7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        See your own orders processed live during the first week &mdash; before you commit to anything else
+      </li>
+      <li>
+        <span class="check-icon"><svg viewBox="0 0 16 16"><path d="M3 8.5l3.5 3.5 6.5-7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        Your team reviews flagged orders &mdash; nothing ships without approval
+      </li>
+      <li>
+        <span class="check-icon"><svg viewBox="0 0 16 16"><path d="M3 8.5l3.5 3.5 6.5-7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        Month-to-month &mdash; no annual contract, cancel anytime
+      </li>
+      <li>
+        <span class="check-icon"><svg viewBox="0 0 16 16"><path d="M3 8.5l3.5 3.5 6.5-7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        Works alongside your existing ERP (Kingdee, Yonyou, or even Excel)
+      </li>
+      <li>
+        <span class="check-icon"><svg viewBox="0 0 16 16"><path d="M3 8.5l3.5 3.5 6.5-7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        If it doesn't cut your error rate in half during the pilot, we'll tell you honestly
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- ==================== CTA ==================== -->
+<section class="cta-section">
+  <div class="container">
+    <h2>Stop Losing Money to Wrong Orders</h2>
+    <p class="cta-subtitle">Book a 30-minute conversation. Bring your messiest WeChat order thread &mdash; we'll show you what's possible.</p>
+    <p class="cta-subtext">No slides. No sales pitch. Just your orders and our screen.</p>
+    <div class="cta-note">Most distributors see error rates drop within the first 2 weeks of pilot.</div>
+  </div>
+</section>
+
+</body>
+</html>

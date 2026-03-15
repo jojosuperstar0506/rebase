@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Get Your Project Managers Back on Site</title>
+<style>
+  :root {
+    --accent: #a0522d;
+    --accent-dark: #7a3e22;
+    --accent-light: #c4743f;
+    --red: #c0392b;
+    --red-bg: #fdf0ee;
+    --green: #1a7a4c;
+    --green-bg: #edf8f2;
+    --text: #1d1d1f;
+    --text-secondary: #6e6e73;
+    --bg: #ffffff;
+    --surface: #f8f9fb;
+    --border: #e5e5ea;
+    --shadow: 0 4px 24px rgba(0,0,0,0.06);
+    --shadow-hover: 0 8px 32px rgba(0,0,0,0.10);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.7;
+    font-size: 17px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 32px;
+  }
+
+  /* ===== HERO ===== */
+  .hero {
+    min-height: 70vh;
+    background: linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 50%, var(--accent-light) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: #fff;
+    padding: 80px 32px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle at 30% 70%, rgba(255,255,255,0.06) 0%, transparent 50%),
+                radial-gradient(circle at 70% 30%, rgba(255,255,255,0.04) 0%, transparent 50%);
+    pointer-events: none;
+  }
+  .hero-content {
+    position: relative;
+    max-width: 760px;
+  }
+  .hero h1 {
+    font-size: 46px;
+    font-weight: 800;
+    line-height: 1.15;
+    margin-bottom: 20px;
+    letter-spacing: -0.5px;
+  }
+  .hero .subtitle {
+    font-size: 20px;
+    font-weight: 400;
+    opacity: 0.92;
+    margin-bottom: 40px;
+    line-height: 1.6;
+  }
+  .hero-stat {
+    display: inline-block;
+    background: rgba(255,255,255,0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 16px;
+    padding: 24px 40px;
+  }
+  .hero-stat .number {
+    font-size: 52px;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .hero-stat .label {
+    font-size: 15px;
+    opacity: 0.85;
+    font-weight: 500;
+  }
+
+  /* ===== SECTIONS ===== */
+  .section {
+    padding: 88px 0;
+  }
+  .section-white { background: var(--bg); }
+  .section-gray { background: var(--surface); }
+  .section-label {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+  .section-title {
+    font-size: 36px;
+    font-weight: 800;
+    line-height: 1.2;
+    margin-bottom: 16px;
+    letter-spacing: -0.3px;
+  }
+  .section-subtitle {
+    font-size: 18px;
+    color: var(--text-secondary);
+    max-width: 640px;
+    line-height: 1.6;
+    margin-bottom: 48px;
+  }
+
+  /* ===== PAIN POINT CARDS ===== */
+  .pain-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  .pain-card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    box-shadow: var(--shadow);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+  }
+  .pain-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+  }
+  .pain-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: var(--red-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    margin-bottom: 16px;
+  }
+  .pain-card h3 {
+    font-size: 17px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    line-height: 1.35;
+  }
+  .pain-card p {
+    font-size: 15px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  /* ===== COST / STATS ===== */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 48px;
+  }
+  .stat-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 36px 32px;
+    box-shadow: var(--shadow);
+    text-align: center;
+    border: 1px solid var(--border);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+  }
+  .stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+  }
+  .stat-number {
+    font-size: 52px;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .stat-unit {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .stat-desc {
+    font-size: 15px;
+    color: var(--text-secondary);
+    margin-top: 8px;
+    line-height: 1.5;
+  }
+  .cost-bottom {
+    text-align: center;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+    padding: 32px;
+    background: #fff;
+    border-radius: 16px;
+    border: 2px solid var(--accent);
+    box-shadow: var(--shadow);
+  }
+
+  /* ===== BEFORE / AFTER ===== */
+  .ba-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .ba-row {
+    display: grid;
+    grid-template-columns: 1fr 48px 1fr;
+    gap: 0;
+    align-items: stretch;
+  }
+  .ba-before, .ba-after {
+    border-radius: 16px;
+    padding: 24px 28px;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  .ba-before {
+    background: var(--red-bg);
+    border: 1px solid #e8c8c4;
+    color: #7a2920;
+  }
+  .ba-before strong {
+    display: block;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 6px;
+    color: var(--red);
+    font-weight: 700;
+  }
+  .ba-after {
+    background: var(--green-bg);
+    border: 1px solid #b8dfc9;
+    color: #145a37;
+  }
+  .ba-after strong {
+    display: block;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 6px;
+    color: var(--green);
+    font-weight: 700;
+  }
+  .ba-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    color: var(--accent);
+    font-weight: 800;
+  }
+
+  /* ===== TIMELINE / HOW IT WORKS ===== */
+  .timeline {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0;
+    position: relative;
+    margin-top: 48px;
+  }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    top: 40px;
+    left: calc(16.67% + 16px);
+    right: calc(16.67% + 16px);
+    height: 3px;
+    background: var(--accent);
+    opacity: 0.3;
+    border-radius: 2px;
+    z-index: 0;
+  }
+  .timeline-step {
+    text-align: center;
+    position: relative;
+    padding: 0 16px;
+  }
+  .step-circle {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent-dark), var(--accent-light));
+    color: #fff;
+    font-size: 32px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px;
+    position: relative;
+    z-index: 1;
+    box-shadow: 0 4px 16px rgba(160,82,45,0.25);
+  }
+  .step-title {
+    font-size: 22px;
+    font-weight: 800;
+    margin-bottom: 4px;
+    color: var(--text);
+  }
+  .step-timing {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 16px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .step-details {
+    text-align: left;
+    background: #fff;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+  }
+  .step-details ul {
+    list-style: none;
+    margin-bottom: 16px;
+  }
+  .step-details ul li {
+    font-size: 14px;
+    color: var(--text-secondary);
+    padding: 4px 0;
+    padding-left: 18px;
+    position: relative;
+    line-height: 1.5;
+  }
+  .step-details ul li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 11px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .step-deliverable {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    padding: 10px 14px;
+    background: var(--surface);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    border-left: 3px solid var(--accent);
+  }
+  .step-price {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--accent);
+    text-align: center;
+  }
+
+  /* ===== PRICING CARDS ===== */
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 24px;
+    align-items: start;
+    margin-bottom: 40px;
+  }
+  .pricing-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 36px 28px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+    text-align: center;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+  }
+  .pricing-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+  }
+  .pricing-card.featured {
+    border: 2px solid var(--accent);
+    transform: scale(1.04);
+    box-shadow: var(--shadow-hover), 0 0 0 4px rgba(160,82,45,0.08);
+    position: relative;
+  }
+  .pricing-card.featured:hover {
+    transform: scale(1.04) translateY(-2px);
+  }
+  .pricing-badge {
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, var(--accent-dark), var(--accent-light));
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 6px 20px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+  .pricing-name {
+    font-size: 20px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+  .pricing-price {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .pricing-period {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+  }
+  .pricing-desc {
+    font-size: 15px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .pricing-quip {
+    text-align: center;
+    font-size: 17px;
+    color: var(--text-secondary);
+    font-style: italic;
+    max-width: 600px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  /* ===== TRUST / CHECKLIST ===== */
+  .trust-list {
+    list-style: none;
+    max-width: 700px;
+  }
+  .trust-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  .trust-list li:last-child {
+    border-bottom: none;
+  }
+  .check-icon {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--green-bg);
+    color: var(--green);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 800;
+    margin-top: 1px;
+  }
+
+  /* ===== CTA ===== */
+  .cta {
+    background: linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 50%, var(--accent-light) 100%);
+    padding: 88px 32px;
+    text-align: center;
+    color: #fff;
+    position: relative;
+    overflow: hidden;
+  }
+  .cta::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -30%;
+    width: 100%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  .cta-content {
+    position: relative;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  .cta h2 {
+    font-size: 40px;
+    font-weight: 800;
+    margin-bottom: 16px;
+    letter-spacing: -0.3px;
+  }
+  .cta .cta-subtitle {
+    font-size: 19px;
+    opacity: 0.92;
+    margin-bottom: 12px;
+    line-height: 1.6;
+  }
+  .cta .cta-subtext {
+    font-size: 15px;
+    opacity: 0.72;
+    margin-bottom: 36px;
+    line-height: 1.6;
+    font-style: italic;
+  }
+  .cta-btn {
+    display: inline-block;
+    background: #fff;
+    color: var(--accent-dark);
+    font-size: 17px;
+    font-weight: 700;
+    padding: 16px 40px;
+    border-radius: 12px;
+    text-decoration: none;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    cursor: pointer;
+    border: none;
+  }
+  .cta-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 24px rgba(0,0,0,0.2);
+  }
+  .cta-note {
+    margin-top: 28px;
+    font-size: 14px;
+    opacity: 0.7;
+  }
+
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 768px) {
+    .hero { min-height: auto; padding: 60px 24px; }
+    .hero h1 { font-size: 30px; }
+    .hero .subtitle { font-size: 17px; }
+    .hero-stat { padding: 20px 28px; }
+    .hero-stat .number { font-size: 40px; }
+    .wrap { padding: 0 20px; }
+    .section { padding: 60px 0; }
+    .section-title { font-size: 28px; }
+    .section-subtitle { font-size: 16px; }
+    .pain-grid { grid-template-columns: 1fr; }
+    .stats-grid { grid-template-columns: 1fr; }
+    .ba-row {
+      grid-template-columns: 1fr;
+      gap: 0;
+    }
+    .ba-arrow {
+      transform: rotate(90deg);
+      padding: 8px 0;
+    }
+    .timeline {
+      grid-template-columns: 1fr;
+      gap: 40px;
+    }
+    .timeline::before { display: none; }
+    .pricing-grid { grid-template-columns: 1fr; max-width: 400px; margin-left: auto; margin-right: auto; }
+    .pricing-card.featured { transform: none; }
+    .pricing-card.featured:hover { transform: translateY(-2px); }
+    .cta h2 { font-size: 30px; }
+    .stat-number { font-size: 40px; }
+    .cost-bottom { font-size: 18px; }
+  }
+
+  @media (max-width: 480px) {
+    .hero h1 { font-size: 26px; }
+    .hero-stat .number { font-size: 34px; }
+    .section-title { font-size: 24px; }
+    .step-details { padding: 18px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- =============================== HERO =============================== -->
+<section class="hero">
+  <div class="hero-content">
+    <h1>Your Project Managers Spend More Time Writing Reports Than Managing Projects</h1>
+    <p class="subtitle">We help construction contractors get their PMs back on-site &mdash; where they belong.</p>
+    <div class="hero-stat">
+      <div class="number">134&ndash;156</div>
+      <div class="label">PM hours per month lost to document admin</div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= SOUND FAMILIAR? ========================= -->
+<section class="section section-white">
+  <div class="wrap">
+    <div class="section-label">Sound Familiar?</div>
+    <div class="section-title">Your week probably looks like this</div>
+    <div class="section-subtitle">Every contractor we talk to tells us the same stories.</div>
+
+    <div class="pain-grid">
+      <div class="pain-card">
+        <div class="pain-icon">&#128203;</div>
+        <h3>Tender deadline looming, PMs are stuck in PDFs</h3>
+        <p>Your PMs are manually extracting BOQ line items from 200-page tender documents instead of reviewing pricing strategy.</p>
+      </div>
+      <div class="pain-card">
+        <div class="pain-icon">&#128196;</div>
+        <h3>Progress reports eat an entire day</h3>
+        <p>Weekly reports take a full day to compile because data lives in WeChat groups, site photos, and someone's notebook.</p>
+      </div>
+      <div class="pain-card">
+        <div class="pain-icon">&#128184;</div>
+        <h3>Variation orders get flagged too late</h3>
+        <p>By the time you notice the scope changed, you've already absorbed the cost. The paperwork trail is buried in chat logs.</p>
+      </div>
+      <div class="pain-card">
+        <div class="pain-icon">&#128269;</div>
+        <h3>Finding a document is a team sport</h3>
+        <p>A client asks for a document from 2 months ago. Three people spend an hour looking for it. Nobody finds the right version.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= THE HIDDEN COST ========================= -->
+<section class="section section-gray">
+  <div class="wrap">
+    <div class="section-label">The Hidden Cost</div>
+    <div class="section-title">The numbers behind the frustration</div>
+    <div class="section-subtitle">This is what document admin actually costs your business every month.</div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-number">134&ndash;156</div>
+        <div class="stat-desc">PM hours per month buried in document admin</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number">3&ndash;8<span class="stat-unit">%</span></div>
+        <div class="stat-desc">of project revenue lost to untracked variation orders</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number">1 <span class="stat-unit">day</span></div>
+        <div class="stat-desc">per PM per week spent on progress reports alone</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number">23 <span class="stat-unit">min</span></div>
+        <div class="stat-desc">average document retrieval time &mdash; across chat logs, drives, and email</div>
+      </div>
+    </div>
+
+    <div class="cost-bottom">
+      Your most expensive people are doing your cheapest work.
+    </div>
+  </div>
+</section>
+
+<!-- ========================= WHAT CHANGES ========================= -->
+<section class="section section-white">
+  <div class="wrap">
+    <div class="section-label">What Changes</div>
+    <div class="section-title">From firefighting to managing</div>
+    <div class="section-subtitle">Here's what your PMs' week looks like once we're involved.</div>
+
+    <div class="ba-list">
+      <div class="ba-row">
+        <div class="ba-before">
+          <strong>Today</strong>
+          PMs manually extract BOQ items from tender docs &mdash; hours of copy-paste before any real pricing work begins.
+        </div>
+        <div class="ba-arrow">&rarr;</div>
+        <div class="ba-after">
+          <strong>With Us</strong>
+          Tender documents parsed and structured in minutes, not hours. PMs go straight to pricing strategy.
+        </div>
+      </div>
+
+      <div class="ba-row">
+        <div class="ba-before">
+          <strong>Today</strong>
+          Progress reports compiled from 5 different sources &mdash; WeChat, site photos, notebooks, last week's report, and memory.
+        </div>
+        <div class="ba-arrow">&rarr;</div>
+        <div class="ba-after">
+          <strong>With Us</strong>
+          Weekly reports auto-drafted from site data. PMs just review and send. A 2-hour task becomes 20 minutes.
+        </div>
+      </div>
+
+      <div class="ba-row">
+        <div class="ba-before">
+          <strong>Today</strong>
+          Variation orders discovered when it's too late to claim. Revenue slips away quietly every project.
+        </div>
+        <div class="ba-arrow">&rarr;</div>
+        <div class="ba-after">
+          <strong>With Us</strong>
+          Scope changes flagged in real-time with cost impact estimates. Every VO gets tracked and submitted.
+        </div>
+      </div>
+
+      <div class="ba-row">
+        <div class="ba-before">
+          <strong>Today</strong>
+          "Where's that drawing?" is a daily question. Searching across folders, email, and chat logs wastes everyone's time.
+        </div>
+        <div class="ba-arrow">&rarr;</div>
+        <div class="ba-after">
+          <strong>With Us</strong>
+          Any document retrieved in seconds by describing what you need. No more folder diving.
+        </div>
+      </div>
+
+      <div class="ba-row">
+        <div class="ba-before">
+          <strong>Today</strong>
+          Project knowledge resets every time a PM changes sites. The new person starts from scratch.
+        </div>
+        <div class="ba-arrow">&rarr;</div>
+        <div class="ba-after">
+          <strong>With Us</strong>
+          Complete project context available to any team member instantly. Nothing gets lost in the handover.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= HOW IT WORKS ========================= -->
+<section class="section section-gray">
+  <div class="wrap">
+    <div class="section-label">How It Works</div>
+    <div class="section-title">Three steps. No disruption.</div>
+    <div class="section-subtitle">We start small, prove it works, then grow with you. No big-bang rollouts.</div>
+
+    <div class="timeline">
+      <div class="timeline-step">
+        <div class="step-circle">1</div>
+        <div class="step-title">We Audit &amp; Prove</div>
+        <div class="step-timing">1 Week (3 days remote + 2 days on-site)</div>
+        <div class="step-details">
+          <ul>
+            <li><strong>Before we visit (3 days remote prep):</strong></li>
+            <li>We collect a recent tender package, 5 weekly progress reports, and your VO tracking records</li>
+            <li>We build a working prototype: upload a real tender PDF &rarr; system extracts BOQ items, deadlines, penalty clauses, and generates a bid/no-bid summary in minutes</li>
+            <li>By the time we arrive on-site, we already have your documents being processed</li>
+          </ul>
+          <ul>
+            <li><strong>On-site (2 days):</strong></li>
+            <li>Day 1 morning: shadow your PM team on an active project &mdash; watch how they compile reports, track VOs, search for documents</li>
+            <li>Day 1 afternoon: take that morning's actual project data and run it through the prototype. Your PM watches a weekly progress report get drafted in 5 minutes instead of a full day</li>
+            <li>Day 2: your PMs test it alongside their current process on live project work. We measure the time difference together</li>
+          </ul>
+          <ul>
+            <li><strong>What you get:</strong></li>
+            <li>Process map of your actual document workflow with time/cost per step</li>
+            <li>Working prototype tested on YOUR real tender docs and project reports (before vs. after)</li>
+            <li>Custom ROI model using your PM salary data and project volume</li>
+            <li>Honest go/no-go recommendation &mdash; if this won't help enough, we tell you</li>
+          </ul>
+          <div class="step-deliverable">Fee credited toward the pilot if you proceed</div>
+          <div class="step-price">&yen;15,000&ndash;25,000</div>
+        </div>
+      </div>
+
+      <div class="timeline-step">
+        <div class="step-circle">2</div>
+        <div class="step-title">We Build</div>
+        <div class="step-timing">Weeks 2&ndash;6</div>
+        <div class="step-details">
+          <ul>
+            <li>We don't start from scratch &mdash; we build on the prototype your PMs already saw working during the audit</li>
+            <li>Set up the system on one live project</li>
+            <li>Your PMs test it alongside their current process</li>
+            <li>We adjust until it fits YOUR project workflow</li>
+          </ul>
+          <div class="step-deliverable">Deliverable: Working system on a real project</div>
+          <div class="step-price">&yen;40,000&ndash;80,000</div>
+        </div>
+      </div>
+
+      <div class="timeline-step">
+        <div class="step-circle">3</div>
+        <div class="step-title">We Run</div>
+        <div class="step-timing">Ongoing</div>
+        <div class="step-details">
+          <ul>
+            <li>Manage and improve the system across projects</li>
+            <li>Your PMs focus on managing work, not writing about it</li>
+            <li>Monthly reports on time saved and VOs captured</li>
+            <li>Cancel anytime &mdash; month to month</li>
+          </ul>
+          <div class="step-deliverable">Deliverable: Continuous improvement, zero overhead</div>
+          <div class="step-price">&yen;12,000&ndash;25,000/month</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= THE INVESTMENT ========================= -->
+<section class="section section-white">
+  <div class="wrap">
+    <div class="section-label">The Investment</div>
+    <div class="section-title">Pick where you want to start</div>
+    <div class="section-subtitle">Most contractors start with the Diagnostic. The ones who move fast go straight to Pilot.</div>
+
+    <div class="pricing-grid">
+      <div class="pricing-card">
+        <div class="pricing-name">Diagnostic</div>
+        <div class="pricing-price">&yen;15,000&ndash;25,000</div>
+        <div class="pricing-period">1 week &middot; Start here</div>
+        <div class="pricing-desc">Working prototype on YOUR tender docs + full process audit. Fee credited toward pilot if you proceed.</div>
+      </div>
+
+      <div class="pricing-card featured">
+        <div class="pricing-badge">Most Popular</div>
+        <div class="pricing-name">Pilot</div>
+        <div class="pricing-price">&yen;40,000&ndash;80,000</div>
+        <div class="pricing-period">4&ndash;6 weeks &middot; One live project</div>
+        <div class="pricing-desc">Test it on one live project before you scale. Your PMs use it on a real tender and real reports. If it doesn't work, you'll know fast.</div>
+      </div>
+
+      <div class="pricing-card">
+        <div class="pricing-name">Managed Service</div>
+        <div class="pricing-price">&yen;12,000&ndash;25,000</div>
+        <div class="pricing-period">Per month &middot; Cancel anytime</div>
+        <div class="pricing-desc">We run it so your PMs can manage. Ongoing operations, continuous improvement, monthly performance reporting.</div>
+      </div>
+    </div>
+
+    <div class="pricing-quip">Less than half the cost of one junior PM. But it never calls in sick on a Monday.</div>
+  </div>
+</section>
+
+<!-- ========================= TRUST SECTION ========================= -->
+<section class="section section-gray">
+  <div class="wrap">
+    <div class="section-label">No Surprises</div>
+    <div class="section-title">Built for contractors who've been burned by software before</div>
+    <div class="section-subtitle">We know you've sat through demos that promised everything and delivered nothing. Here's what makes this different.</div>
+
+    <ul class="trust-list">
+      <li>
+        <div class="check-icon">&#10003;</div>
+        <div>No IT department required &mdash; we handle everything. Setup, maintenance, troubleshooting. Your team just uses it.</div>
+      </li>
+      <li>
+        <div class="check-icon">&#10003;</div>
+        <div>See your own project documents processed live during the first week &mdash; before you commit to anything else. Not a demo environment. Not a test case. Your actual documents.</div>
+      </li>
+      <li>
+        <div class="check-icon">&#10003;</div>
+        <div>Your PMs review and approve everything &mdash; nothing goes out without their sign-off. They stay in control.</div>
+      </li>
+      <li>
+        <div class="check-icon">&#10003;</div>
+        <div>Month-to-month &mdash; no annual contract, cancel anytime. If it stops working for you, you stop paying. That simple.</div>
+      </li>
+      <li>
+        <div class="check-icon">&#10003;</div>
+        <div>Works with your existing tools &mdash; WeChat, WPS, email, whatever you use. We fit into your workflow, not the other way around.</div>
+      </li>
+      <li>
+        <div class="check-icon">&#10003;</div>
+        <div>If it doesn't save your PMs at least 60 hours per month in the pilot, we'll tell you honestly. No hard sell, no lock-in.</div>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- =============================== CTA =============================== -->
+<section class="cta">
+  <div class="cta-content">
+    <h2>Get Your PMs Back on Site</h2>
+    <p class="cta-subtitle">Book a 30-minute conversation. We'll look at one of your current projects together.</p>
+    <p class="cta-subtext">No slides. No sales pitch. Just your document flow and our screen.</p>
+    <a class="cta-btn" href="#contact">Book a Conversation</a>
+    <div class="cta-note">Most contractors see the first results within 3 weeks of starting.</div>
+  </div>
+</section>
+
+</body>
+</html>

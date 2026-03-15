@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diagnostic Report — {{ company_name }}</title>
+    <style>
+        /* TODO: Add report styles */
+    </style>
+</head>
+<body>
+    <header>
+        <h1>AI Readiness Diagnostic Report</h1>
+        <p>Engagement: {{ engagement_id }}</p>
+        <p>Company: {{ company_name }}</p>
+        <p>Generated: {{ generated_at }}</p>
+    </header>
+
+    <section id="readiness-score">
+        <h2>AI Readiness Score</h2>
+        <p>Overall: {{ readiness_score.overall }}</p>
+        <!-- TODO: Render score breakdown -->
+    </section>
+
+    <section id="waste-analysis">
+        <h2>Waste Analysis</h2>
+        <!-- TODO: Render waste estimates per pain point -->
+    </section>
+
+    <section id="department-health">
+        <h2>Department Health</h2>
+        {% for dept in department_health_cards %}
+        <div class="department-card">
+            <h3>{{ dept.department }}</h3>
+            <!-- TODO: Render department metrics -->
+        </div>
+        {% endfor %}
+    </section>
+
+    <section id="insights">
+        <h2>Key Insights &amp; Recommendations</h2>
+        <ol>
+        {% for insight in insights %}
+            <li>{{ insight }}</li>
+        {% endfor %}
+        </ol>
+    </section>
+
+    <section id="roi">
+        <h2>ROI Projection</h2>
+        <!-- TODO: Render ROI metrics -->
+    </section>
+</body>
+</html>
