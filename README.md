@@ -1,12 +1,12 @@
 # Rebase
 
-> make a billion dollars by helping SMBs decision makers change the world
+> We empower SMBs business owners to breathe and refocus on what they truly want to do - making greater products for happier customers, not managing the day-to-day mundane tasks.
 
 ---
 
 ## What We're Building
 
-An AI-powered platform that gives SMB owners an honest look at their operations — starting with an automated diagnostic product, then expanding into workflow discovery, autonomous agent execution, and multi-agent collaboration.
+An AI-powered platform that gives SMB owners an honest look at their current operations and shows them where they could deploy AI tools to fill in the gaps — starting with an automated and personalized diagnostic tool, then expanding into workflow discovery and optimization, autonomous agent execution, and multi-agent collaboration. Essentially, an easy-to-use best-in-class vibe business without any backgrounds in business ops. 
 
 **The client experience (Phase 1 — Diagnostics):**
 ```
