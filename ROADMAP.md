@@ -12,48 +12,59 @@
 |---|---|---|
 | **Role** | Product vision, strategy, go-to-market | Technical architecture, platform engineering |
 | **Owns** | What we build & why — product direction, agent design, client experience | How we build it — system architecture, core infrastructure, technical decisions |
-| **Technical spike** | Agent prototyping — 3 internal "virtual employees" that dog-food the platform | Diagnostics tool — the first product clients touch, from AI conversation to instant insights |
-| **Current focus** | FRD + 3 agent prototypes + frontend/cloud | Building the diagnostics tool as our first landing touchpoint — the AI-powered entry door for every client |
+| **Technical spike** | Virtual employee prototypes that dog-food the platform | Diagnostics tool + ERP connectors — the first product clients touch |
+| **Current focus** | Layer 2 intelligence demo + virtual employee prototypes + frontend/cloud | Building the diagnostics pipeline as our Layer 2 entry point |
 
 ---
 
 ## How the Work Splits
 
 ```
-William (CTO) builds the FRONT DOOR       Joanna builds the AGENTS
-(first thing every client touches)         (internal tools that prove the model)
+William (CTO) builds the FRONT DOOR          Joanna builds the VIRTUAL EMPLOYEES
+(Layer 2 — first thing every client touches)  (Layer 3 prototypes — prove the model)
 
-AI intake conversation ────►               Product Structure Agent
-Document analysis engine ──►               Marketing Agent (XHS)
-Instant insights dashboard ►               Image Generator
-Auto-generated report ─────►               (dog-food our own platform)
+AI intake conversation ────────►              Product Structure Agent (Layer 2 demo)
+Document analysis engine ──────►              Joanna Virtual Employee (XHS Marketing)
+ERP data connectors ───────────►              Image Generator (Marketing toolkit)
+Instant insights dashboard ────►              (dog-food our own platform)
+Auto-generated report ─────────►
 
-The diagnostics tool IS the product        Product vision through working code
-Client's first "wow" moment               Prompt engineering, output quality
-Converts prospects to believers            Proves agents work — we use them ourselves
-Owns the client-facing entry point         Owns agent design & go-to-market
+Diagnostics IS the product entry point        Product vision through working code
+Client's first "wow" moment                   Proves virtual employees work
+Converts prospects to believers               Proves intelligence layer works on ERP data
 ```
+
+---
+
+## Product Architecture: 5 Layers
+
+| Layer | Name | What It Does | Current Status |
+|-------|------|-------------|----------------|
+| 1 | **Educate** | AI readiness — playbooks, workshops, self-assessment tool | Future |
+| 2 | **Diagnose** | Turn ERP data into operational X-ray — the entry point | Active (William + Joanna) |
+| 3 | **Deploy** | Virtual employees with intent packs — automated operations layer | Prototyping (Joanna) |
+| 4 | **Optimize** | Cross-department orchestration + continuous intelligence | Future |
+| 5 | **Scale** | Self-serve platform, industry packages, marketplace | Future |
 
 ---
 
 ## Where We Are Now (as of 2026-03-15)
 
-| Stream | Owner | Status | Notes |
-|--------|-------|--------|-------|
-| Diagnostics tool (client entry point) | William | In progress | Architecting intake agent + analysis pipeline — the first thing every client experiences |
-| 3-screen visualization dashboard | Joanna | Done | Built & deployed to Vercel — department map, before/after toggle, ROI summary |
-| FRD (functional requirements) | Joanna | In progress | Defining overall product features & functions |
-| Cloud infrastructure & deployment | Joanna | In progress | Setting up so diagnostics tool can be deployed |
-| Agent prototypes ("virtual employees") | Joanna | Starting | Product structure, marketing, image gen |
-| Overall product roadmap | Both | Just created | This document |
+| Stream | Owner | Status | Layer | Notes |
+|--------|-------|--------|-------|-------|
+| Diagnostics tool (client entry point) | William | In progress | 2 | Intake agent + analysis pipeline |
+| Product Structure Agent (ERP intelligence demo) | Joanna | v0.1 Done | 2 | 3-file ERP export analysis, Streamlit UI |
+| 3-screen visualization dashboard | Joanna | Done | 2 | Department map, before/after toggle, ROI summary — on Vercel |
+| FRD (functional requirements) | Joanna | In progress | All | Defining overall product features |
+| Cloud infrastructure & deployment | Joanna | In progress | — | Alibaba Cloud HK setup |
+| Virtual employee prototypes | Joanna | Starting | 3 | Marketing (Joanna VE), Image Gen |
+| ERP connector research | William | TODO | 2-3 | Kingdee/QuickBooks API assessment |
 
 ---
 
-## Phase 1: Diagnostics — Client Entry Point (William Leads)
+## Layer 2: Diagnose — Client Entry Point
 
-The diagnostic tool is the first thing clients experience — their "wow" moment. Fully automated Day 0-1. William architects and builds this end-to-end as the platform's front door.
-
-### 1A. AI Intake Agent
+### 2A. AI Intake Agent (William)
 > Client talks to AI for 15-20 min, uploads docs, gets structured profile extracted
 
 | Task | Owner | Status | Notes |
@@ -64,35 +75,63 @@ The diagnostic tool is the first thing clients experience — their "wow" moment
 | Branded web embed page (EN/CN) | William | Done | |
 | Dify chatflow config guide | William | Done | |
 | Mock test conversation | William | Done | Export manufacturer scenario |
-| Build & deploy Dify chatflow | William | TODO | Bring existing prompt architecture to life as deployed chatflow |
-| Validate with 3-5 mock client sessions | William | TODO | Refine AI conversation quality based on results |
+| Build & deploy Dify chatflow | William | TODO | Bring prompt architecture to life |
+| Validate with 3-5 mock client sessions | William | TODO | Refine AI conversation quality |
 | Cloud deployment for intake agent | Joanna | TODO | Part of overall cloud setup |
 
-### 1B. Document Analysis Engine
+### 2B. Document Analysis Engine (William)
 > Auto-pipeline: classify docs → extract fields → calculate metrics → generate insights
 
 | Task | Owner | Status | Notes |
 |------|-------|--------|-------|
-| Architect document classification system | William | TODO | Multi-stage LLM pipeline for doc type recognition |
-| Design & build field extraction engine | William | TODO | Per-doc-type extraction (orders, invoices, quotations, complaints) |
+| Architect document classification system | William | TODO | Multi-stage LLM pipeline |
+| Design & build field extraction engine | William | TODO | Per-doc-type extraction |
 | Validation rules (rule-based checks) | William | TODO | |
-| Build metrics computation layer | William | TODO | Volume, timing, error, pattern analytics engine |
-| Design narrative insight generator | William | TODO | LLM-powered findings synthesis from raw metrics |
-| End-to-end integration testing | William | TODO | Full pipeline validation with mock data |
+| Build metrics computation layer | William | TODO | Volume, timing, error, pattern analytics |
+| Design narrative insight generator | William | TODO | LLM-powered findings synthesis |
+| End-to-end integration testing | William | TODO | Full pipeline with mock data |
 
-### 1C. Report Generator
+### 2C. ERP Data Intelligence (Joanna — Product Structure Agent)
+> Connect to ERP exports, analyze transaction patterns, surface insights the boss has never seen
+
+| Task | Owner | Status | Notes |
+|------|-------|--------|-------|
+| Define product catalog schema (Pydantic models) | Joanna | Done | `models/schemas.py` |
+| Fuzzy column mapper for 聚水潭 exports | Joanna | Done | Auto-detects file type + shifting columns |
+| 3-file merge pipeline (sales + inventory + bestseller) | Joanna | Done | Handles grain mismatch |
+| Material/bag type/price tier normalization | Joanna | Done | 43 bag types → 15 standard |
+| 4-objective analysis engine | Joanna | Done | What to make, why products fail, inventory health, purchasing recs |
+| Efficiency grading (A/B/C/D) | Joanna | Done | Configurable thresholds |
+| Formatted Excel output (2 sheets, 8 sections) | Joanna | Done | Ready for Feishu Bitable import |
+| Streamlit UI | Joanna | Done | Upload, auto-detect, analyze, download |
+| FastAPI endpoints | Joanna | Done | POST /upload, GET /result, GET /excel |
+| Add Kingdee export format support | Joanna | TODO | Sprint 2 — expand beyond 聚水潭 |
+| Add true COGS column support | Joanna | TODO | Sprint 2 — replace 40% estimate |
+| Deploy to Alibaba Cloud | Joanna | TODO | Sprint 2 — Streamlit on ECS |
+
+### 2D. ERP Connectors (William — New Track)
+> Bidirectional connections to Kingdee, Yonyou, QuickBooks — the backbone of the intelligence layer
+
+| Task | Owner | Status | Notes |
+|------|-------|--------|-------|
+| Research Kingdee KIS/K3 API capabilities | William | TODO | Sprint 1 — what data is accessible? |
+| Research QuickBooks API (US market) | William | TODO | Sprint 1 — endpoints, auth, data model |
+| ERP connector v0 — read-only Kingdee or QuickBooks | William | TODO | Sprint 2 — pull transaction data |
+| ERP connector v1 — bidirectional (read + write) | William | TODO | Sprint 3 — post journal entries, update POs |
+| Computer-use agent for legacy Kingdee (no API) | William | TODO | Future — UI automation for older versions |
+
+### 2E. Report Generator (William)
 > Auto-generated HTML findings report — client receives within 24 hrs
 
 | Task | Owner | Status | Notes |
 |------|-------|--------|-------|
-| Design report generation system | William | TODO | HTML/CSS template matching pitch page design language |
+| Design report generation system | William | TODO | HTML/CSS template |
 | Data injection layer | William | TODO | Analysis output → populates template |
-| Build chart/visualization engine | William | TODO | Inline SVG bar charts, histograms |
-| Complete ROI calculation engine | William | Partial | Extend existing `ai-workforce-calculator.jsx` with real analysis data |
+| Build chart/visualization engine | William | TODO | Inline SVG charts |
+| Complete ROI calculation engine | William | Partial | Extend existing calculator |
 | Test with mock data + polish | Both | TODO | |
 
-### 1D. Cloud & Deployment
-> Get the diagnostics tool live and accessible to clients
+### 2F. Cloud & Deployment
 
 **Cloud Strategy: Start Hong Kong → Add Guangzhou Later**
 
@@ -106,163 +145,155 @@ Phase 1 (Now):     Alibaba Cloud Hong Kong — launch fast, no ICP paperwork
 Phase 2 (Scale):   Add Alibaba Cloud Guangzhou — enterprise-ready
                     ├── Client data moves to mainland (PIPL compliance)
                     ├── Faster for all mainland users
-                    ├── ICP filing shows legitimacy to enterprise clients
-                    └── Hong Kong becomes dev/staging environment
+                    ├── ICP filing shows legitimacy
+                    └── Hong Kong becomes dev/staging
 ```
 
-**Why Hong Kong first:** No ICP filing needed (launch in days, not weeks). Still fast for Southern China clients. Same Alibaba Cloud tools — switching to Guangzhou later is just changing a config file, not rewriting code.
-
-**AI Model APIs (called from backend):**
+**AI Model APIs:**
 
 | Model | Provider | Cost | Use For |
 |-------|----------|------|---------|
-| DeepSeek V3 | DeepSeek (深度求索) | ¥0.25/M tokens | Main workhorse — intake analysis, doc classification, reports |
-| Qwen (通义千问) | Alibaba | Free tier available | Backup, Chinese language tasks |
+| DeepSeek V3 | DeepSeek (深度求索) | ¥0.25/M tokens | Main workhorse — analysis, classification, reports |
+| Qwen (通义千问) | Alibaba | Free tier | Backup, Chinese language tasks |
 | GLM-4 | Zhipu AI (智谱) | Free tier | Development/testing |
 
-**Estimated monthly cost (starting out): ~¥400-900/mo** — scales with clients.
+**Estimated monthly cost: ~¥400-900/mo starting out.**
 
 | Task | Owner | Status | Notes |
 |------|-------|--------|-------|
-| Set up Alibaba Cloud HK account | Joanna | TODO | Sign up, credit card, create project |
-| Provision ECS server (Hong Kong) | Joanna | TODO | 2 CPU, 4GB RAM starter instance |
-| Set up RDS PostgreSQL | Joanna | TODO | Managed database for client data |
-| Set up OSS bucket | Joanna | TODO | Object storage for uploaded documents |
-| Get DeepSeek API key | Joanna | TODO | Sign up at deepseek.com |
-| Domain name registration | Joanna | TODO | rebase.cn or similar |
-| Deploy backend (Docker) | William | TODO | Dockerize FastAPI app, deploy to ECS |
-| Start ICP filing (parallel) | Joanna | TODO | Begin paperwork for future mainland move, 1-3 weeks |
-| Set up `.env.example` + `CLAUDE.md` | Both | Done | Environment variable template + dev guidelines to prevent hardcoding. See `.env.example` for all config vars |
+| Set up Alibaba Cloud HK account | Joanna | TODO | |
+| Provision ECS server | Joanna | TODO | |
+| Set up RDS PostgreSQL | Joanna | TODO | |
+| Set up OSS bucket | Joanna | TODO | |
+| Get DeepSeek API key | Joanna | TODO | |
+| Domain name registration | Joanna | TODO | |
+| Deploy backend (Docker) | William | TODO | |
+| Start ICP filing (parallel) | Joanna | TODO | 1-3 weeks |
+| `.env.example` + `CLAUDE.md` | Both | Done | Environment variable guardrails |
 
-**Environment Variables Rule:** All external service URLs, API keys, and region-specific config MUST come from `.env` — never hardcoded in source code. This is enforced via `CLAUDE.md` (read by Claude Code every session) and documented in `.env.example`. When switching from HK to Guangzhou, only `.env` changes — zero code changes.
+**Environment Variables Rule:** All external service URLs, API keys, and region-specific config MUST come from `.env` — never hardcoded. See `CLAUDE.md`.
 
-### 1E. Product Definition & FRD
-> Defining what the overall product is and what it does
-
-| Task | Owner | Status | Notes |
-|------|-------|--------|-------|
-| FRD — diagnostics scope | Joanna | In progress | |
-| FRD — workflow discovery scope | Joanna | TODO | |
-| FRD — agent execution scope | Joanna | TODO | |
-| Feature prioritization (what matters for Client #1) | Joanna | TODO | |
-| Industry research — feature/function gaps | Joanna | Ongoing | |
-
-### 1F. Frontend & Visualization
-> Client-facing dashboard — already built, needs live data integration
+### 2G. Frontend & Visualization
 
 | Task | Owner | Status | Notes |
 |------|-------|--------|-------|
-| 3-screen visualization dashboard | Joanna | Done | Department map, before/after toggle, ROI summary |
+| 3-screen visualization dashboard | Joanna | Done | On Vercel |
 | Deploy to Vercel | Joanna | Done | Auto-deploys on push to main |
-| Connect dashboard to live diagnostics API | Joanna | TODO | Replace mock data with fetch() calls |
-| Agent output display in AgentMonitor page | Joanna | TODO | Show agent name, status, formatted output |
+| Connect dashboard to live diagnostics API | Joanna | TODO | Replace mock data |
+| Agent output display in dashboard | Joanna | TODO | Show virtual employee status + output |
 
 ---
 
-## Phase 1.5: Agent Prototypes — Joanna's Technical Spike
+## Layer 3: Deploy — Virtual Employee Prototypes (Joanna's Spike)
 
-> Building 3 internal "virtual employees" that Rebase uses daily. Each agent is a one-button tool that encodes our business assumptions. This is Joanna's technical spike — proving she can build agents end-to-end while creating real business value.
+> Building virtual employees that Rebase uses daily. Each agent proves a different capability. These are early prototypes of the Layer 3 product.
 
-**Why these agents matter:**
-1. **Dog-fooding** — we use our own product, proving agents work
-2. **Technical proof** — each agent demonstrates a different capability (data analysis, content generation, image generation)
+**Why these matter:**
+1. **Dog-fooding** — we use our own product
+2. **Technical proof** — each agent demonstrates a different capability
 3. **Demo artifacts** — investors and clients see "we use these ourselves"
-4. **Platform validation** — these agents will eventually run on the platform William is building
+4. **Platform validation** — these agents run on the platform William is building
 
-**Each agent follows the same pattern:**
+**Each agent follows the pattern:**
 ```
-business_context + data → prompt_template + LLM API → structured_output + action
+ERP data + business context → prompt template + LLM API → structured output + action
 ```
 
-### Agent 1: Product Structure Agent
-> Inventory tracking, reorder decisions, product catalog management
+### Virtual Employee 1: Product Intelligence (Layer 2 demo — DONE)
+> Analyzes product portfolio, inventory health, and purchasing decisions from ERP exports
 
-| Task | Owner | Status | Sprint | Notes |
-|------|-------|--------|--------|-------|
-| Define product catalog schema | Joanna | TODO | Sprint 1 | What fields do we track per product? |
-| Inventory tracking logic | Joanna | TODO | Sprint 1 | Current stock, burn rate, thresholds |
-| Reorder decision engine | Joanna | TODO | Sprint 1 | When to place orders, how much, from whom |
-| Supplier/pricing data integration | Joanna | TODO | Sprint 2 | Connect to existing order data |
-| One-button "should I reorder?" report | Joanna | TODO | Sprint 2 | Output: reorder recommendations with reasoning |
+Already built as Product Structure Agent. See Section 2C above.
 
-### Agent 2: Marketing Agent (Xiaohongshu)
-> One-button content creator for Xiaohongshu, pre-loaded with our brand voice and business assumptions
+### Virtual Employee 2: Joanna — Marketing (XHS)
+> One-button content creator for Xiaohongshu, pre-loaded with brand voice
 
 | Task | Owner | Status | Sprint | Notes |
 |------|-------|--------|--------|-------|
 | Define brand voice & tone guidelines | Joanna | TODO | Sprint 2 | What does Rebase sound like on XHS? |
-| Content templates per post type | Joanna | TODO | Sprint 2 | Educational, case study, behind-the-scenes, etc. |
+| Content templates per post type | Joanna | TODO | Sprint 2 | Educational, case study, behind-the-scenes |
 | Pre-built business assumptions | Joanna | TODO | Sprint 2 | Target audience, value props, key messages |
 | Image + copy generation pipeline | Joanna | TODO | Sprint 2 | One button → ready-to-post XHS content |
-| Post scheduling / batch generation | Joanna | TODO | Sprint 3 | Generate a week's content at once |
+| Pull revenue/product data from ERP for campaign analysis | Joanna | TODO | Sprint 3 | Connect to Product Agent data |
 
-### Agent 3: World-Class Image Generator
-> High-quality image generation for marketing, pitch materials, and client deliverables — luxury brand aesthetic
+### Virtual Employee 3: Image Generator (Marketing Toolkit)
+> High-quality image generation for marketing and client deliverables
 
 | Task | Owner | Status | Sprint | Notes |
 |------|-------|--------|--------|-------|
-| Define use cases & style guide | Joanna | TODO | Sprint 3 | What kinds of images, what luxury aesthetic |
-| Model selection & API setup | Joanna | TODO | Sprint 3 | Which image gen model(s) — Midjourney/Flux/DALL-E |
-| Prompt templates per use case | Joanna | TODO | Sprint 3 | Marketing visuals, report graphics, social media |
-| One-button generation workflow | Joanna | TODO | Sprint 3 | Input context → output polished image matching luxury brands |
+| Define use cases & style guide | Joanna | TODO | Sprint 3 | Luxury brand aesthetic |
+| Model selection & API setup | Joanna | TODO | Sprint 3 | Midjourney/Flux/DALL-E |
+| Prompt templates per use case | Joanna | TODO | Sprint 3 | Marketing visuals, report graphics |
+| One-button generation workflow | Joanna | TODO | Sprint 3 | Input context → polished image |
 
 ---
 
 ## Sprint Plan (2-week sprints)
 
-### Sprint 1 (Weeks 1-2): Foundation
+### Sprint 1 (Weeks 1-2): Foundation — CURRENT
 
 **William (CTO):**
 | Task | Status | Notes |
 |------|--------|-------|
-| Architect & wire API gateway | TODO | Design service routing, make `/api/diagnostics/*` production-ready |
-| Design & implement intake data pipeline | TODO | `POST /intake` stores Dify output with validation, `GET /intake/{id}` retrieves |
-| Build & deploy Dify chatflow | TODO | Bring existing prompt architecture to life as deployed chatflow |
-| Validate with mock client sessions | TODO | 3-5 scenarios, refine AI conversation quality |
+| Architect & wire API gateway | TODO | Service routing, `/api/diagnostics/*` |
+| Design & implement intake data pipeline | TODO | POST /intake, GET /intake/{id} |
+| Build & deploy Dify chatflow | TODO | Bring prompt architecture to life |
+| Validate with mock client sessions | TODO | 3-5 scenarios |
+| **Research Kingdee/QuickBooks APIs** | TODO | NEW — what data is accessible, auth methods, rate limits |
 
 **Joanna:**
 | Task | Status | Notes |
 |------|--------|-------|
-| **Product Structure Agent v1** | TODO | Define product catalog schema, inventory tracking logic, reorder decision engine |
-| Connect frontend dashboard to live API | TODO | Replace mock data with fetch() calls to diagnostics API |
-| Cloud provider selection + initial setup | TODO | Get diagnostics tool deployable |
+| Product Structure Agent v1 | Done | Full pipeline: 3-file merge, analysis, Excel, Streamlit, FastAPI |
+| Connect frontend dashboard to live API | TODO | Replace mock data |
+| Cloud provider selection + initial setup | TODO | Get diagnostics deployable |
 | FRD — diagnostics + workflow discovery scope | In progress | |
 
-### Sprint 2 (Weeks 3-4): Depth
+### Sprint 2 (Weeks 3-4): Depth + ERP
 
 **William (CTO):**
 | Task | Status | Notes |
 |------|--------|-------|
-| Architect document classification system | TODO | Multi-stage LLM pipeline for doc type recognition |
-| Design & build field extraction engine | TODO | Per-doc-type extraction (orders, invoices, quotations) |
-| Build metrics computation layer | TODO | Volume, timing, error, pattern analytics engine |
-| Design narrative insight generator | TODO | LLM-powered findings synthesis from raw metrics |
+| Architect document classification system | TODO | Multi-stage LLM pipeline |
+| Design & build field extraction engine | TODO | Per-doc-type extraction |
+| Build metrics computation layer | TODO | Volume, timing, error analytics |
+| **ERP connector v0 — read-only Kingdee or QuickBooks** | TODO | NEW — pull transaction data |
 
 **Joanna:**
 | Task | Status | Notes |
 |------|--------|-------|
-| **Marketing Agent (XHS) v1** | TODO | Brand voice guidelines + content templates + one-button generation pipeline |
-| Product Structure Agent v2 — supplier/pricing integration | TODO | Connect to real order data, refine reorder logic |
-| Frontend: AgentMonitor page — show agent outputs | TODO | Each agent as a card with status + output preview |
+| **Joanna Virtual Employee (XHS) v1** | TODO | Brand voice + content templates + one-button pipeline |
+| Product Structure Agent v2 — Kingdee export support | TODO | Expand beyond 聚水潭 format |
+| Frontend: dashboard show virtual employee outputs | TODO | Each agent as card with status + output |
 | FRD — agent execution + cost optimization scope | TODO | |
 
-### Sprint 3 (Weeks 5-6): Polish + Image Gen
+### Sprint 3 (Weeks 5-6): Polish + Integration
 
 **William (CTO):**
 | Task | Status | Notes |
 |------|--------|-------|
-| Design report generation system | TODO | Auto-generated HTML findings report with data injection layer |
-| Build chart/visualization engine | TODO | Inline SVG charts (bar, histogram) for reports |
-| End-to-end integration architecture | TODO | Full pipeline validation: intake → analysis → report |
-| Complete ROI calculation engine | TODO | Extend existing calculator with real analysis data |
+| Design report generation system | TODO | Auto-generated HTML findings report |
+| Build chart/visualization engine | TODO | Inline SVG charts |
+| **ERP connector v1 — bidirectional** | TODO | NEW — read + write back to ERP |
+| End-to-end integration architecture | TODO | Full pipeline: intake → analysis → report |
 
 **Joanna:**
 | Task | Status | Notes |
 |------|--------|-------|
-| **Image Generator Agent v1** | TODO | API integration, prompt templates for marketing visuals, luxury brand aesthetic |
-| Marketing Agent v2 — batch generation + post scheduling | TODO | Generate a week's content at once |
-| End-to-end demo flow (frontend) | TODO | Guided: intake → dashboard → agents → report |
-| Cloud deployment — get diagnostics live | TODO | Full deployment pipeline |
+| **Image Generator v1** | TODO | API integration, prompt templates, luxury aesthetic |
+| Marketing Agent v2 — batch generation + scheduling | TODO | Generate a week's content at once |
+| End-to-end demo flow | TODO | ERP data → intelligence → virtual employee → results |
+| Cloud deployment — get diagnostics live | TODO | Full pipeline |
+
+---
+
+## Ongoing Tracks (Across All Sprints)
+
+| Track | Owner | Description | Status |
+|-------|-------|-------------|--------|
+| **Benchmark Library** | Both | Collect industry patterns from every deployment/test. Client 51 gets 10x better diagnostic than client 5. | Starting |
+| **Intent Pack Design** | Both | Document what reusable workflow modules look like. Each deployment's success becomes a template. | Research |
+| **Self-Assessment Tool** (Layer 1) | Joanna | 15-min online questionnaire estimating "operational intelligence gap." Pipeline generator. | TODO |
+| **Product Definition / FRD** | Joanna | Overall feature requirements across all 5 layers | In progress |
 
 ---
 
@@ -270,32 +301,56 @@ business_context + data → prompt_template + LLM API → structured_output + ac
 
 | When | What | From → To | Notes |
 |------|------|-----------|-------|
-| Sprint 2 | Live intake data available | William → Joanna | Joanna's agents can use real client data instead of mocks |
-| Sprint 3 | Analysis output available | William → Joanna | Agent outputs can reference real metrics from analysis engine |
-| Future | Agent prototypes → execution framework | Joanna → William | William wraps Joanna's 3 agents in Temporal with retry/checkpoint when platform matures |
+| Sprint 1 | ERP API research complete | William → Joanna | Joanna can plan Kingdee export support for Product Agent v2 |
+| Sprint 2 | Live intake data available | William → Joanna | Dashboard can show real client data |
+| Sprint 2 | ERP connector v0 | William → Joanna | Product Agent can pull live data instead of file uploads |
+| Sprint 3 | Analysis output available | William → Joanna | Virtual employee outputs reference real metrics |
+| Future | Agent prototypes → execution framework | Joanna → William | William wraps virtual employees in Temporal with retry/checkpoint |
 
 ---
 
-## Phase 2: Workflow Discovery + Agent Execution (Future)
+## Layer 4 & 5: Future
 
-> AI discovers client workflows, decomposes goals into tasks, executes autonomously
+### Layer 4: Optimize — Cross-Department Orchestration
+> Event bus connecting departments through ERP, business goal interpreter, proactive intelligence, continuous benchmarking.
 
 | Milestone | Owner | Status | Dependencies |
 |-----------|-------|--------|-------------|
-| Workflow graph definitions | TBD | Stub | Phase 1 diagnostics live |
-| Autonomous task execution | TBD | Stub | Workflow engine |
-| Cost tracking + ROI engine | TBD | Stub | |
+| Cross-department event bus | TBD | Future | Layer 3 virtual employees operational |
+| Business goal interpreter | TBD | Future | Intelligence layer + orchestration engine |
+| Continuous benchmarking from ERP data | TBD | Future | Benchmark library + ERP connectors |
+
+### Layer 5: Scale — Self-Serve Platform
+> SMB owner connects ERP → auto-diagnostic → recommended virtual employee team → deploy in under 1 week.
+
+| Milestone | Owner | Status | Dependencies |
+|-----------|-------|--------|-------------|
+| Self-serve onboarding flow | TBD | Future | Layer 2 + 3 proven |
+| Industry knowledge packages | TBD | Future | Benchmark library mature |
+| Virtual employee marketplace | TBD | Future | Layer 3 at scale |
+| Partner/reseller channel | TBD | Future | Product proven |
 
 ---
 
-## Phase 3: Multi-Agent Orchestration (Future)
+## Five Compounding Moats
 
-> Multiple agents collaborate on complex tasks
+1. **Benchmark Library** — Every deployment enriches our understanding of what "good" looks like per industry/size/region. After 100 clients, our diagnostic is 10x more precise than a chatbot starting from zero.
+2. **ERP Integration Depth** — Deep Kingdee/Yonyou/QuickBooks connectors + computer-use agents for legacy systems. Earned through deployment experience.
+3. **Intent Packs** — Every successful workflow becomes a reusable module. Virtual employees arrive pre-loaded with operational knowledge from hundreds of similar businesses.
+4. **Education Community** — Peer roundtables, playbooks, workshops create trust and distribution.
+5. **Cross-Department Orchestration** — Coordinating virtual employees across departments with ERP as shared backbone is architecturally hard and gets harder with every edge case.
 
-| Milestone | Owner | Status | Dependencies |
-|-----------|-------|--------|-------------|
-| Multi-agent runtime | TBD | Stub | Phase 2 agent executor |
-| Agent coordination protocol | TBD | Stub | |
+---
+
+## Financial Milestones
+
+| When | Revenue | Clients | Proof |
+|------|---------|---------|-------|
+| Month 6 | $5K–$8K MRR | 1–2 | Client paying for virtual employee + ERP-derived insights |
+| Month 10 | $20K–$40K MRR | 5–8 | Renewals, intelligence layer generating proactive recs |
+| Month 12 (Seed) | $40K–$100K MRR | 10–15 | Repeatable sales, benchmark library producing instant diagnostics |
+| Month 18 | $120K–$250K MRR | 20–30 | Cross-department orchestration, expansion revenue > 30% |
+| Month 24 (Series A) | $350K–$600K MRR | 50+ | Self-serve, enterprise pilot conversations |
 
 ---
 
@@ -303,11 +358,14 @@ business_context + data → prompt_template + LLM API → structured_output + ac
 
 | Date | Decision | Who | Context |
 |------|----------|-----|---------|
-| 2026-03-15 | Created this roadmap as single source of truth | Both | Need one place to track everything |
+| 2026-03-15 | Created roadmap as single source of truth | Both | |
 | 2026-03-15 | Clarified roles: Joanna = co-founder/vision, William = co-founder/CTO | Both | |
-| 2026-03-15 | Joanna's 3 internal agents are her technical spike | Both | Product structure, XHS marketing, image gen — dog-food the platform |
-| 2026-03-15 | William's diagnostics tool is the client entry point | Both | First product clients touch, the "wow" moment |
-| 2026-03-15 | Added sprint-level work split with handoff points | Both | Clear ownership per sprint, explicit dependencies |
+| 2026-03-15 | Joanna's virtual employee prototypes are her technical spike | Both | Product intelligence, XHS marketing, image gen |
+| 2026-03-15 | William's diagnostics tool is the client entry point | Both | First product clients touch |
+| 2026-03-15 | Cloud strategy: Alibaba Cloud HK → add Guangzhou later | Both | No ICP needed for HK |
+| 2026-03-15 | Aligned to V3 product strategy — 5-layer architecture | Both | ERP-data thesis, intelligence + operations layer |
+| 2026-03-15 | Added ERP connector as parallel track for William | Both | Kingdee/QuickBooks research in Sprint 1, connector in Sprint 2 |
+| 2026-03-15 | Added ongoing tracks: benchmark library, intent packs, self-assessment | Both | Compound across all sprints |
 
 ---
 
@@ -316,6 +374,6 @@ business_context + data → prompt_template + LLM API → structured_output + ac
 1. **Every session:** Pull this up first. Check where we left off.
 2. **When completing a task:** Update status to `Done` and add date.
 3. **When priorities shift:** Move tasks, add notes, log the decision.
-4. **When adding new work:** Add it under the right phase/section.
+4. **When adding new work:** Add it under the right layer/section.
 
 Status values: `TODO` → `In progress` → `Done` | `Blocked` | `Ongoing` (recurring)
