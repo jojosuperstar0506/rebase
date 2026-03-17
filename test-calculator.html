@@ -4,17 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI Workforce Calculator - Test</title>
-<link rel="stylesheet" href="https://rsms.me/inter/inter.css">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #F8FAFC; font-family: Inter, -apple-system, 'Noto Sans SC', system-ui, sans-serif; }
+  body { background: #F8FAFC; font-family: -apple-system, 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif; }
 </style>
 </head>
 <body>
 <div id="root"></div>
-<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
 <script type="text/babel">
 const { useState, useEffect } = React;
 
@@ -375,7 +374,7 @@ function App() {
   const [re, setRe] = useState({}); const [crd, setCrd] = useState(0);
   const [exp, setExp] = useState(null);
   const [showSources, setShowSources] = useState(false);
-  const [leadName, setLeadName] = useState(""); const [leadContact, setLeadContact] = useState(""); const [leadSubmitted, setLeadSubmitted] = useState(false);
+  const [leadName, setLeadName] = useState(""); const [leadContact, setLeadContact] = useState(""); const [leadSubmitted, setLeadSubmitted] = useState(false); const [leadSubmitting, setLeadSubmitting] = useState(false);
 
   const T = getTheme(darkMode);
   const te = parseInt(cs) || 0; const rv = parseInt(rev) || 0;
@@ -1008,12 +1007,30 @@ function App() {
                 <input placeholder="您的称呼" value={leadName} onChange={e => setLeadName(e.target.value)} style={{ ...inp, flex: 1, fontSize: 12, padding: "8px 10px" }} />
                 <input placeholder="微信号 / 手机号" value={leadContact} onChange={e => setLeadContact(e.target.value)} style={{ ...inp, flex: 1.3, fontSize: 12, padding: "8px 10px" }} />
               </div>
-              <button onClick={() => { if (leadName && leadContact) setLeadSubmitted(true); }} disabled={!leadName || !leadContact} style={{
+              <button onClick={async () => {
+                if (!leadName || !leadContact || leadSubmitting) return;
+                setLeadSubmitting(true);
+                try {
+                  await fetch("/api/submit-lead", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      name: leadName, contact: leadContact, company: cn,
+                      employees: te, tier: overallTier.name, tierLevel: overallTier.level,
+                      score: avgCap, savings: Math.round(gcf / 10000),
+                      departments: ad.map(d => d.name).join("、"),
+                      cityTier: tierLabel,
+                    }),
+                  });
+                } catch (e) { /* silently continue — still show success to user */ }
+                setLeadSubmitting(false);
+                setLeadSubmitted(true);
+              }} disabled={!leadName || !leadContact || leadSubmitting} style={{
                 width: "100%", padding: "12px 40px", fontSize: 15, fontWeight: 600, borderRadius: 8,
-                border: "none", background: leadName && leadContact ? T.accent : T.border,
-                color: leadName && leadContact ? "#FFFFFF" : T.textMuted,
-                cursor: leadName && leadContact ? "pointer" : "not-allowed",
-              }}>预约1v1 AI转型咨询</button>
+                border: "none", background: leadName && leadContact && !leadSubmitting ? T.accent : T.border,
+                color: leadName && leadContact && !leadSubmitting ? "#FFFFFF" : T.textMuted,
+                cursor: leadName && leadContact && !leadSubmitting ? "pointer" : "not-allowed",
+              }}>{leadSubmitting ? "提交中..." : "预约1v1 AI转型咨询"}</button>
               <div style={{ fontSize: 10, color: T.textMuted, marginTop: 8, display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
                 <span>✓ 60分钟深度诊断</span><span>✓ 定制落地方案</span><span>✓ 工具选型清单</span><span>✓ 人才转型路线图</span>
               </div>
@@ -1030,7 +1047,7 @@ function App() {
           <button onClick={() => {
             setStep(0); setSel([]); setDhc({}); setCs(""); setRev(""); setCap({});
             setRe({}); setExp(null); setCn(""); setInd(""); setCityTier("tier1");
-            setLeadSubmitted(false); setLeadName(""); setLeadContact(""); setShowSources(false);
+            setLeadSubmitted(false); setLeadSubmitting(false); setLeadName(""); setLeadContact(""); setShowSources(false);
           }} style={{ ...bB, fontSize: 11 }}>重新诊断</button>
         </div>
         <div style={{ textAlign: "center", marginTop: 20, paddingBottom: 12, fontSize: 10, color: T.textMuted }}>
