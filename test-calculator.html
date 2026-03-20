@@ -375,6 +375,8 @@ function App() {
   const [exp, setExp] = useState(null);
   const [showSources, setShowSources] = useState(false);
   const [leadName, setLeadName] = useState(""); const [leadContact, setLeadContact] = useState(""); const [leadSubmitted, setLeadSubmitted] = useState(false); const [leadSubmitting, setLeadSubmitting] = useState(false);
+  const [sessionId] = useState(() => Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+  const [surveyAutoSaved, setSurveyAutoSaved] = useState(false);
 
   const T = getTheme(darkMode);
   const te = parseInt(cs) || 0; const rv = parseInt(rev) || 0;
@@ -781,6 +783,33 @@ function App() {
     );
   };
 
+  // ── Auto-save survey data when results page renders ──
+  useEffect(() => {
+    if (surveyAutoSaved) return;
+    setSurveyAutoSaved(true);
+    fetch("/api/save-survey", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId,
+        company: cn, industry: ind, employees: te, revenue: rv,
+        cityTier: tierLabel, cityTierRaw: cityTier,
+        tier: overallTier.name, tierLevel: overallTier.level,
+        score: avgCap, savings: Math.round(gcf / 10000),
+        departments: ad.map(d => d.name).join("、"),
+        selectedDepts: sel, deptHeadcounts: dhc,
+        capAnswers: cap, roleHeadcounts: re,
+        deptResults: results.map(r => ({
+          id: r.dept.id, name: r.dept.name,
+          totalHC: r.tc, withAI_HC: r.twAI, fullAI_HC: r.tfAI,
+          savingsWithAI: Math.round(r.tcwAI / 10000),
+          savingsFullAI: Math.round(r.tcfAI / 10000),
+          maturityScore: r.capP, maturityTier: getTier(r.capP).name,
+        })),
+      }),
+    }).catch(() => {});
+  }, [surveyAutoSaved]);
+
   return (
     <div style={ct}><ThemeToggle />
       <div style={{ maxWidth: 820, margin: "0 auto", padding: "36px 20px" }}>
@@ -1015,6 +1044,7 @@ function App() {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
+                      sessionId,
                       name: leadName, contact: leadContact, company: cn,
                       employees: te, tier: overallTier.name, tierLevel: overallTier.level,
                       score: avgCap, savings: Math.round(gcf / 10000),
