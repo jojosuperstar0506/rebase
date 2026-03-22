@@ -35,6 +35,9 @@ export default function App() {
         <Link to="/costs" style={linkStyle}>
           Costs
         </Link>
+        <a href="/calculator.html" style={linkStyle}>
+          AI诊断工具
+        </a>
       </nav>
       <Routes>
         <Route path="/" element={<DiagnosticDashboard />} />
