@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 // ─── Agent Data Types ───
 
@@ -12,6 +13,7 @@ interface Agent {
   description: string;
   descriptionCn: string;
   capabilities: string[];
+  route?: string;
   metrics?: {
     label: string;
     value: string;
@@ -28,6 +30,7 @@ const AGENTS: Agent[] = [
     icon: "✍️",
     category: "content",
     status: "active",
+    route: "/agents/xhs-content",
     description:
       "AI-powered Xiaohongshu content creation pipeline — from competitor analysis to publishable viral notes.",
     descriptionCn:
@@ -203,8 +206,10 @@ type FilterCategory = "all" | "content" | "operations" | "finance" | "analytics"
 
 function AgentCard({ agent }: { agent: Agent }) {
   const [expanded, setExpanded] = useState(false);
+  const navigate = useNavigate();
   const status = STATUS_CONFIG[agent.status];
   const category = CATEGORY_CONFIG[agent.category];
+  const hasRoute = !!agent.route;
 
   return (
     <div
@@ -220,7 +225,13 @@ function AgentCard({ agent }: { agent: Agent }) {
           : "0 1px 4px rgba(0,0,0,0.04)",
         opacity: agent.status === "coming-soon" ? 0.75 : 1,
       }}
-      onClick={() => setExpanded(!expanded)}
+      onClick={() => {
+        if (hasRoute) {
+          navigate(agent.route!);
+        } else {
+          setExpanded(!expanded);
+        }
+      }}
       onMouseEnter={(e) => {
         (e.currentTarget as HTMLDivElement).style.transform = "translateY(-2px)";
         (e.currentTarget as HTMLDivElement).style.boxShadow = "0 6px 20px rgba(0,0,0,0.08)";
@@ -293,6 +304,24 @@ function AgentCard({ agent }: { agent: Agent }) {
       <p style={{ fontSize: 12, color: "#999", lineHeight: 1.5, margin: 0 }}>
         {agent.descriptionCn}
       </p>
+
+      {/* Launch button for agents with routes */}
+      {hasRoute && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: "8px 16px",
+            background: "linear-gradient(135deg, #8b5cf6, #6d28d9)",
+            borderRadius: 8,
+            color: "#fff",
+            fontSize: 13,
+            fontWeight: 600,
+            textAlign: "center",
+          }}
+        >
+          Launch Agent →
+        </div>
+      )}
 
       {/* Metrics */}
       {agent.metrics && agent.metrics.length > 0 && (
