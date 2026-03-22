@@ -12,7 +12,7 @@ const T3 = "#5c5c6c";
 
 async function askAI(prompt: string): Promise<string> {
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("/api/ai", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -22,7 +22,7 @@ async function askAI(prompt: string): Promise<string> {
       }),
     });
     const data = await res.json();
-    if (data.error) return "Error: " + data.error.message;
+    if (data.error) return "Error: " + (data.error.message || data.error);
     if (data.content && data.content.length > 0) {
       return data.content.map(function (b: { text?: string }) { return b.text || ""; }).join("");
     }
