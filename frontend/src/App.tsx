@@ -24,9 +24,9 @@ export default function App() {
   return (
     <div>
       <nav style={navStyle}>
-        <Link to="/" style={linkStyle}>
+        <a href="/calculator.html" style={linkStyle}>
           Diagnostics
-        </Link>
+        </a>
         <Link to="/workflows" style={linkStyle}>
           Workflows
         </Link>
@@ -36,12 +36,13 @@ export default function App() {
         <Link to="/costs" style={linkStyle}>
           Costs
         </Link>
-        <a href="/calculator.html" style={linkStyle}>
-          AI诊断工具
-        </a>
+        <Link to="/demo" style={linkStyle}>
+          Demo Dashboard
+        </Link>
       </nav>
       <Routes>
         <Route path="/" element={<DiagnosticDashboard />} />
+        <Route path="/demo" element={<DiagnosticDashboard />} />
         <Route path="/workflows" element={<WorkflowViewer />} />
         <Route path="/agents" element={<AgentMonitor />} />
         <Route path="/agents/xhs-content" element={<XhsWarroom />} />
