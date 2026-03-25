@@ -2,8 +2,36 @@ require('dotenv').config();
 const express = require('express');
 const Anthropic = require('@anthropic-ai/sdk');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
+
+// ── Fix 1: Rate Limiting ─────────────────────────────────────────────────────
+// Each IP can make max 20 requests per minute to any API route.
+// If exceeded, they get a 429 error. Bots get blocked automatically.
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,       // 1 minute window
+  max: 20,                   // max 20 requests per IP per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please wait a moment and try again.' },
+});
+
+// ── Fix 2: Secret Token Middleware ───────────────────────────────────────────
+// Every request to /api/* must include the header: x-rebase-secret: <your secret>
+// Vercel frontend sends this automatically. Random bots don't know it.
+function requireSecret(req, res, next) {
+  const secret = process.env.API_SECRET;
+
+  // If no secret is configured, skip this check (dev mode)
+  if (!secret) return next();
+
+  const provided = req.headers['x-rebase-secret'];
+  if (!provided || provided !== secret) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
 
 // ── Middleware ──────────────────────────────────────────────────────────────
 app.use(cors({
@@ -12,6 +40,10 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Apply rate limiting + secret check to all /api routes
+app.use('/api', apiLimiter);
+app.use('/api', requireSecret);
+
 // ── Anthropic client ────────────────────────────────────────────────────────
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -19,7 +51,7 @@ const client = new Anthropic({
 
 // ── Routes ──────────────────────────────────────────────────────────────────
 
-// Health check — verify server is alive and API key is configured
+// Health check — public, no secret required, rate limit not applied
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -54,7 +86,7 @@ app.post('/api/chat', async (req, res) => {
 });
 
 // GTM Agent — runs a go-to-market analysis task
-// Used by: GTM agent feature (placeholder for now)
+// Used by: GTM agent feature
 app.post('/api/gtm-agent', async (req, res) => {
   try {
     const { companyInfo, targetMarket } = req.body;
@@ -122,4 +154,5 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Rebase backend running on port ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
+  console.log(`Security: rate limiting active, secret token ${process.env.API_SECRET ? 'enabled' : 'disabled (set API_SECRET to enable)'}`);
 });
