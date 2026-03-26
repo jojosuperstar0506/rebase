@@ -3,6 +3,7 @@ const express = require('express');
 const Anthropic = require('@anthropic-ai/sdk');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
+const { startScheduler, runDailyReport } = require("./scheduler");
 
 const app = express();
 
@@ -149,6 +150,17 @@ app.post('/api/scheduled-agent', async (req, res) => {
   }
 });
 
+// Manual trigger for competitor report (for testing)
+app.post("/api/competitor-report/run", async (req, res) => {
+  try {
+    const { runCompetitorIntelAgent } = require("./agents/competitor-intel");
+    const result = await runCompetitorIntelAgent();
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── Start server ────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
@@ -156,3 +168,4 @@ app.listen(PORT, () => {
   console.log(`Health check: http://localhost:${PORT}/health`);
   console.log(`Security: rate limiting active, secret token ${process.env.API_SECRET ? 'enabled' : 'disabled (set API_SECRET to enable)'}`);
 });
+startScheduler();
