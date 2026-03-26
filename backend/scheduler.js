@@ -123,7 +123,7 @@ async function runDailyReport() {
       return;
     }
 
-    const subject = `🔍 Rebase竞品情报日报 — ${result.date}`;
+    const subject = `📡 市场情报日报 — ${result.date} | ${result.profile.industry}`;
 
     // Send email
     await sendEmail(subject, reportToHtml(result.report));

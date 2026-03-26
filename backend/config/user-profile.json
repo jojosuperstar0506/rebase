@@ -1,0 +1,9 @@
+{
+  "name": "Rebase Team",
+  "role": "AI SaaS Founder",
+  "industry": "AI software for SMBs",
+  "productCategories": ["AI agents", "ERP integration", "business intelligence", "SMB operations"],
+  "competitors": ["北森", "钉钉", "飞书", "金蝶云", "用友"],
+  "geographyFocus": "both",
+  "redditCommunities": ["r/artificial", "r/SaaS", "r/smallbusiness"]
+}
