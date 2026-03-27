@@ -9,26 +9,50 @@ const cron = require("node-cron");
 const https = require("https");
 const http = require("http");
 const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
 const { runCompetitorIntelAgent } = require("./agents/competitor-intel");
 const { runPlaybookOptimizer } = require("./agents/playbook-optimizer");
 require("dotenv").config();
 
+// ─── User Loader ────────────────────────────────────────────
+
+function loadAllActiveUsers() {
+  const usersDir = path.join(__dirname, "config/users");
+  if (!fs.existsSync(usersDir)) return [];
+  const folders = fs.readdirSync(usersDir, { withFileTypes: true })
+    .filter(d => d.isDirectory())
+    .map(d => d.name);
+  const users = [];
+  for (const folder of folders) {
+    const profilePath = path.join(usersDir, folder, "profile.json");
+    if (!fs.existsSync(profilePath)) continue;
+    try {
+      const profile = JSON.parse(fs.readFileSync(profilePath, "utf8"));
+      if (profile.active) users.push(profile);
+    } catch (e) {
+      console.warn(`[Scheduler] Could not load profile for user folder "${folder}":`, e.message);
+    }
+  }
+  return users;
+}
+
 // ─── Feedback Token ────────────────────────────────────────
 // Used to authenticate feedback clicks from email links
-// Token = HMAC(reportId:section:rating) using API_SECRET
+// Token = HMAC(userId:reportId:section:rating) using API_SECRET
 
-function generateFeedbackToken(reportId, section, rating) {
+function generateFeedbackToken(userId, reportId, section, rating) {
   const secret = process.env.API_SECRET || "rebase-fallback";
   return crypto
     .createHmac("sha256", secret)
-    .update(`${reportId}:${section}:${rating}`)
+    .update(`${userId}:${reportId}:${section}:${rating}`)
     .digest("hex")
     .slice(0, 16);
 }
 
 // ─── Email HTML Builder ────────────────────────────────────
 
-function buildEmailHtml(result) {
+function buildEmailHtml(result, userId) {
   const { report, date, sourcesUsed, profile } = result;
   const reportId = date.replace(/\s/g, "-");
   const serverUrl = process.env.SERVER_URL || `http://8.217.242.191`;
@@ -74,10 +98,10 @@ function buildEmailHtml(result) {
   function feedbackBar(heading, anchor) {
     // Find section key
     const key = Object.keys(sectionKeyMap).find(k => heading.includes(k)) || anchor;
-    const upToken = generateFeedbackToken(reportId, key, "up");
-    const downToken = generateFeedbackToken(reportId, key, "down");
-    const upUrl = `${serverUrl}/intelligence/feedback?reportId=${reportId}&section=${key}&rating=up&token=${upToken}`;
-    const downUrl = `${serverUrl}/intelligence/feedback?reportId=${reportId}&section=${key}&rating=down&token=${downToken}`;
+    const upToken = generateFeedbackToken(userId, reportId, key, "up");
+    const downToken = generateFeedbackToken(userId, reportId, key, "down");
+    const upUrl = `${serverUrl}/intelligence/feedback?userId=${userId}&reportId=${reportId}&section=${key}&rating=up&token=${upToken}`;
+    const downUrl = `${serverUrl}/intelligence/feedback?userId=${userId}&reportId=${reportId}&section=${key}&rating=down&token=${downToken}`;
     return `
       <div style="margin-top:14px;padding-top:12px;border-top:1px dashed #e5e7eb;display:flex;align-items:center;gap:10px">
         <span style="font-size:12px;color:#9ca3af">这个板块有帮助吗？</span>
@@ -139,13 +163,14 @@ function buildEmailHtml(result) {
 
 // ─── Delivery ──────────────────────────────────────────────
 
-async function sendEmail(subject, htmlBody) {
+async function sendEmail(to, subject, htmlBody) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) { console.warn("[Scheduler] RESEND_API_KEY not set"); return; }
-  const to = (process.env.REPORT_EMAIL || "").split(",").map(e => e.trim()).filter(Boolean);
-  if (to.length === 0) { console.warn("[Scheduler] REPORT_EMAIL not set"); return; }
+  const recipients = Array.isArray(to) ? to : [to];
+  const validRecipients = recipients.map(e => e.trim()).filter(Boolean);
+  if (validRecipients.length === 0) { console.warn("[Scheduler] No valid email recipients"); return; }
 
-  const payload = JSON.stringify({ from: "Rebase Intelligence <reports@rebase.ai>", to, subject, html: htmlBody });
+  const payload = JSON.stringify({ from: "Rebase Intelligence <reports@rebase.ai>", to: validRecipients, subject, html: htmlBody });
   return new Promise((resolve, reject) => {
     const req = https.request({
       hostname: "api.resend.com", path: "/emails", method: "POST",
@@ -186,41 +211,73 @@ async function sendWechatWork(text) {
 
 async function runDailyReport() {
   console.log("[Scheduler] Starting daily market intelligence report...");
-  try {
-    const result = await runCompetitorIntelAgent();
-    if (!result) { console.warn("[Scheduler] No report generated"); return; }
-
-    const subject = `📡 市场情报日报 — ${result.date} | ${result.profile.industry}`;
-    const htmlBody = buildEmailHtml(result);
-
-    await sendEmail(subject, htmlBody);
-
-    // WeChat Work gets plain text summary
-    const wechatText = `${subject}\n\n${result.report.slice(0, 1500)}${result.report.length > 1500 ? "\n\n...（完整报告含反馈按钮已发送至邮箱）" : ""}`;
-    await sendWechatWork(wechatText);
-
-    console.log("[Scheduler] Daily report delivered successfully");
-  } catch (err) {
-    console.error("[Scheduler] Error running daily report:", err);
+  const users = loadAllActiveUsers();
+  if (users.length === 0) {
+    console.warn("[Scheduler] No active users found — skipping daily report");
+    return;
   }
+
+  for (const user of users) {
+    const userId = user.userId;
+    console.log(`[Scheduler] Running daily report for userId="${userId}" (${user.name})...`);
+    try {
+      const result = await runCompetitorIntelAgent(userId);
+      if (!result) {
+        console.warn(`[Scheduler] No report generated for userId="${userId}"`);
+        continue;
+      }
+
+      const subject = `📡 市场情报日报 — ${result.date} | ${result.profile.industry}`;
+      const htmlBody = buildEmailHtml(result, userId);
+
+      // Send to user's email (skip if empty)
+      if (user.email) {
+        await sendEmail(user.email, subject, htmlBody);
+      } else {
+        console.log(`[Scheduler] Skipping email for userId="${userId}" — no email configured`);
+      }
+
+      // WeChat Work gets plain text summary
+      const wechatText = `${subject}\n\n${result.report.slice(0, 1500)}${result.report.length > 1500 ? "\n\n...（完整报告含反馈按钮已发送至邮箱）" : ""}`;
+      await sendWechatWork(wechatText);
+
+      console.log(`[Scheduler] Daily report delivered for userId="${userId}"`);
+    } catch (err) {
+      console.error(`[Scheduler] Error running daily report for userId="${userId}":`, err);
+    }
+  }
+
+  console.log("[Scheduler] Daily report run complete for all active users");
 }
 
 // ─── Weekly Optimizer Job ──────────────────────────────────
 
 async function runWeeklyOptimizer() {
   console.log("[Scheduler] Starting weekly playbook optimization...");
-  try {
-    const result = await runPlaybookOptimizer();
-    if (result) {
-      console.log(`[Scheduler] Playbook updated to v${result.version}: ${result.summary}`);
-      // Notify via WeChat Work
-      await sendWechatWork(
-        `🧠 Rebase Intelligence — 周度Playbook优化完成\n\n版本：v${result.version}\n\n${result.summary}\n\n本周重点：${result.changes?.currentWeekFocus || "未指定"}`
-      );
-    }
-  } catch (err) {
-    console.error("[Scheduler] Error running playbook optimizer:", err);
+  const users = loadAllActiveUsers();
+  if (users.length === 0) {
+    console.warn("[Scheduler] No active users found — skipping weekly optimizer");
+    return;
   }
+
+  for (const user of users) {
+    const userId = user.userId;
+    console.log(`[Scheduler] Running playbook optimizer for userId="${userId}" (${user.name})...`);
+    try {
+      const result = await runPlaybookOptimizer(userId);
+      if (result) {
+        console.log(`[Scheduler] Playbook updated to v${result.version} for userId="${userId}": ${result.summary}`);
+        // Notify via WeChat Work
+        await sendWechatWork(
+          `🧠 Rebase Intelligence — 周度Playbook优化完成\n\n用户：${user.name}\n版本：v${result.version}\n\n${result.summary}\n\n本周重点：${result.changes?.currentWeekFocus || "未指定"}`
+        );
+      }
+    } catch (err) {
+      console.error(`[Scheduler] Error running playbook optimizer for userId="${userId}":`, err);
+    }
+  }
+
+  console.log("[Scheduler] Weekly optimizer run complete for all active users");
 }
 
 // ─── Cron Schedules ────────────────────────────────────────

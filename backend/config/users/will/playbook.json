@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "lastOptimized": null,
+  "searchStrategy": {
+    "queryTemplates": [
+      "{industry} market trends {year}",
+      "{competitor} product launch OR funding OR strategy",
+      "{productCategory} industry news China",
+      "{productCategory} global market {year}"
+    ],
+    "preferredSources": [],
+    "deprioritizedSources": [],
+    "depthRules": "If any competitor appears in 3+ articles, flag as high-priority and note in report"
+  },
+  "focusAreas": {
+    "alwaysPrioritize": [
+      "pricing changes",
+      "product launches",
+      "funding rounds",
+      "executive changes",
+      "regulatory changes",
+      "market share shifts"
+    ],
+    "currentWeekFocus": "",
+    "ignoreTopics": [
+      "general macroeconomic news unrelated to the user's industry"
+    ]
+  },
+  "sourcePerformance": {},
+  "feedbackLog": [],
+  "optimizerNotes": []
+}

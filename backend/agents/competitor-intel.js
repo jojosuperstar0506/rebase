@@ -19,23 +19,31 @@ const fs = require("fs");
 const path = require("path");
 require("dotenv").config();
 
-const PLAYBOOK_PATH = path.join(__dirname, "../config/agent-playbook.json");
-const REPORTS_DIR = path.join(__dirname, "../config/reports");
+// ─── Path Helpers ──────────────────────────────────────────
+
+function playbookPath(userId) {
+  return path.join(__dirname, "../config/users", userId, "playbook.json");
+}
+
+function reportsDir(userId) {
+  return path.join(__dirname, "../config/users", userId, "reports");
+}
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ─── Playbook ──────────────────────────────────────────────
 
-function loadPlaybook() {
-  if (!fs.existsSync(PLAYBOOK_PATH)) return {};
+function loadPlaybook(userId) {
+  const filePath = playbookPath(userId);
+  if (!fs.existsSync(filePath)) return {};
   try {
-    return JSON.parse(fs.readFileSync(PLAYBOOK_PATH, "utf8"));
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
   } catch {
     return {};
   }
 }
 
-function updateSourcePerformance(playbook, sourceResults) {
+function updateSourcePerformance(playbook, sourceResults, userId) {
   const perf = playbook.sourcePerformance || {};
   sourceResults.forEach(r => {
     if (!perf[r.source]) perf[r.source] = { useCount: 0, totalArticles: 0 };
@@ -46,30 +54,30 @@ function updateSourcePerformance(playbook, sourceResults) {
   });
   playbook.sourcePerformance = perf;
   try {
-    fs.writeFileSync(PLAYBOOK_PATH, JSON.stringify(playbook, null, 2), "utf8");
+    fs.writeFileSync(playbookPath(userId), JSON.stringify(playbook, null, 2), "utf8");
   } catch (e) {
     console.warn("[Intel] Could not update playbook source stats:", e.message);
   }
 }
 
-function saveReport(result) {
+function saveReport(result, userId) {
   try {
-    if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });
+    const dir = reportsDir(userId);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     const fileName = `${new Date().toISOString().slice(0, 10)}.json`;
-    fs.writeFileSync(path.join(REPORTS_DIR, fileName), JSON.stringify(result, null, 2), "utf8");
+    fs.writeFileSync(path.join(dir, fileName), JSON.stringify(result, null, 2), "utf8");
   } catch (e) {
     console.warn("[Intel] Could not save report:", e.message);
   }
 }
 
 // ─── User Profile ──────────────────────────────────────────
-// Loaded from backend/config/user-profile.json
-// Can be updated via POST /api/intelligence/profile
+// Loaded from backend/config/users/{userId}/profile.json
 
-function loadUserProfile() {
-  const profilePath = path.join(__dirname, "../config/user-profile.json");
+function loadUserProfile(userId) {
+  const profilePath = path.join(__dirname, "../config/users", userId, "profile.json");
   if (!fs.existsSync(profilePath)) {
-    console.warn("[Intel] No user profile found at config/user-profile.json — using .env fallback");
+    console.warn(`[Intel] No user profile found for userId="${userId}" — using .env fallback`);
     return {
       name: process.env.USER_NAME || "User",
       role: process.env.USER_ROLE || "Business Owner",
@@ -343,16 +351,16 @@ ${competitors.length > 0
 
 // ─── Main Agent ────────────────────────────────────────────
 
-async function runCompetitorIntelAgent() {
-  const profile = loadUserProfile();
-  const playbook = loadPlaybook();
+async function runCompetitorIntelAgent(userId) {
+  const profile = loadUserProfile(userId);
+  const playbook = loadPlaybook(userId);
 
   // Inject playbook focus into profile for this run
   if (playbook.focusAreas && playbook.focusAreas.currentWeekFocus) {
     console.log(`[Intel] This week's focus: ${playbook.focusAreas.currentWeekFocus}`);
   }
 
-  console.log(`[Intel] Running for: ${profile.name} | ${profile.role} | ${profile.industry}`);
+  console.log(`[Intel] Running for userId="${userId}": ${profile.name} | ${profile.role} | ${profile.industry}`);
 
   const today = new Date().toLocaleDateString("zh-CN", {
     timeZone: "Asia/Hong_Kong",
@@ -387,8 +395,8 @@ async function runCompetitorIntelAgent() {
   };
 
   // Step 3: Update playbook source performance + save report
-  updateSourcePerformance(playbook, sourceResults);
-  saveReport(result);
+  updateSourcePerformance(playbook, sourceResults, userId);
+  saveReport(result, userId);
 
   return result;
 }

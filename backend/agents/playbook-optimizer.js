@@ -13,35 +13,35 @@ require("dotenv").config();
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const PLAYBOOK_PATH = path.join(__dirname, "../config/agent-playbook.json");
-const REPORTS_DIR = path.join(__dirname, "../config/reports");
-const PROFILE_PATH = path.join(__dirname, "../config/user-profile.json");
-
 // ─── Helpers ───────────────────────────────────────────────
 
-function loadPlaybook() {
-  if (!fs.existsSync(PLAYBOOK_PATH)) return {};
-  return JSON.parse(fs.readFileSync(PLAYBOOK_PATH, "utf8"));
+function loadPlaybook(userId) {
+  const filePath = path.join(__dirname, "../config/users", userId, "playbook.json");
+  if (!fs.existsSync(filePath)) return {};
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
 
-function savePlaybook(data) {
-  fs.writeFileSync(PLAYBOOK_PATH, JSON.stringify(data, null, 2), "utf8");
+function savePlaybook(data, userId) {
+  const filePath = path.join(__dirname, "../config/users", userId, "playbook.json");
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
 }
 
-function loadProfile() {
-  if (!fs.existsSync(PROFILE_PATH)) return { name: "User", industry: "General" };
-  return JSON.parse(fs.readFileSync(PROFILE_PATH, "utf8"));
+function loadProfile(userId) {
+  const filePath = path.join(__dirname, "../config/users", userId, "profile.json");
+  if (!fs.existsSync(filePath)) return { name: "User", industry: "General" };
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
 
-function loadRecentReports(days = 7) {
-  if (!fs.existsSync(REPORTS_DIR)) return [];
-  const files = fs.readdirSync(REPORTS_DIR)
+function loadRecentReports(userId, days = 7) {
+  const reportsDir = path.join(__dirname, "../config/users", userId, "reports");
+  if (!fs.existsSync(reportsDir)) return [];
+  const files = fs.readdirSync(reportsDir)
     .filter(f => f.endsWith(".json"))
     .sort()
     .slice(-days);
   return files.map(f => {
     try {
-      return JSON.parse(fs.readFileSync(path.join(REPORTS_DIR, f), "utf8"));
+      return JSON.parse(fs.readFileSync(path.join(reportsDir, f), "utf8"));
     } catch {
       return null;
     }
@@ -50,12 +50,12 @@ function loadRecentReports(days = 7) {
 
 // ─── Main Optimizer ────────────────────────────────────────
 
-async function runPlaybookOptimizer() {
-  console.log("[Optimizer] Starting weekly playbook optimization...");
+async function runPlaybookOptimizer(userId) {
+  console.log(`[Optimizer] Starting weekly playbook optimization for userId="${userId}"...`);
 
-  const playbook = loadPlaybook();
-  const profile = loadProfile();
-  const recentReports = loadRecentReports(7);
+  const playbook = loadPlaybook(userId);
+  const profile = loadProfile(userId);
+  const recentReports = loadRecentReports(userId, 7);
 
   if (recentReports.length === 0) {
     console.warn("[Optimizer] No recent reports found — skipping optimization");
@@ -158,7 +158,7 @@ Based on the above, generate an IMPROVED playbook. Return ONLY valid JSON with t
     ],
   };
 
-  savePlaybook(updatedPlaybook);
+  savePlaybook(updatedPlaybook, userId);
   console.log(`[Optimizer] Playbook updated to v${updatedPlaybook.version}: ${improved.optimizerSummary}`);
 
   return {
