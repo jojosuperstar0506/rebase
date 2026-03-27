@@ -19,7 +19,48 @@ const fs = require("fs");
 const path = require("path");
 require("dotenv").config();
 
+const PLAYBOOK_PATH = path.join(__dirname, "../config/agent-playbook.json");
+const REPORTS_DIR = path.join(__dirname, "../config/reports");
+
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// ─── Playbook ──────────────────────────────────────────────
+
+function loadPlaybook() {
+  if (!fs.existsSync(PLAYBOOK_PATH)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(PLAYBOOK_PATH, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function updateSourcePerformance(playbook, sourceResults) {
+  const perf = playbook.sourcePerformance || {};
+  sourceResults.forEach(r => {
+    if (!perf[r.source]) perf[r.source] = { useCount: 0, totalArticles: 0 };
+    perf[r.source].useCount += 1;
+    perf[r.source].totalArticles += r.items.length;
+    perf[r.source].avgRelevance = (perf[r.source].totalArticles / perf[r.source].useCount).toFixed(1);
+    if (r.error) perf[r.source].lastError = r.error;
+  });
+  playbook.sourcePerformance = perf;
+  try {
+    fs.writeFileSync(PLAYBOOK_PATH, JSON.stringify(playbook, null, 2), "utf8");
+  } catch (e) {
+    console.warn("[Intel] Could not update playbook source stats:", e.message);
+  }
+}
+
+function saveReport(result) {
+  try {
+    if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });
+    const fileName = `${new Date().toISOString().slice(0, 10)}.json`;
+    fs.writeFileSync(path.join(REPORTS_DIR, fileName), JSON.stringify(result, null, 2), "utf8");
+  } catch (e) {
+    console.warn("[Intel] Could not save report:", e.message);
+  }
+}
 
 // ─── User Profile ──────────────────────────────────────────
 // Loaded from backend/config/user-profile.json
@@ -220,8 +261,12 @@ function buildNewsContext(sourceResults) {
 
 // ─── Claude 3-Lens Analysis ────────────────────────────────
 
-async function runThreeLensAnalysis(profile, newsContext, today) {
+async function runThreeLensAnalysis(profile, newsContext, today, playbook = {}) {
   const { name, role, industry, productCategories, competitors, geographyFocus } = profile;
+  const focusAreas = playbook.focusAreas || {};
+  const weekFocus = focusAreas.currentWeekFocus ? `\n**本周特别关注：** ${focusAreas.currentWeekFocus}` : "";
+  const alwaysPrioritize = (focusAreas.alwaysPrioritize || []).join("、");
+  const ignore = (focusAreas.ignoreTopics || []).join("、");
 
   const geoLabel = geographyFocus === "china" ? "中国市场" :
                    geographyFocus === "global" ? "全球市场" : "中国及全球市场";
@@ -234,7 +279,9 @@ async function runThreeLensAnalysis(profile, newsContext, today) {
 - 所在行业：${industry}
 - 关注品类/产品/服务：${productCategories.join("、") || "未指定"}
 - 关注竞争对手：${competitors.join("、") || "未指定"}
-- 地区关注：${geoLabel}
+- 地区关注：${geoLabel}${weekFocus}
+- 重点关注信号：${alwaysPrioritize || "定价变动、产品发布、融资、人事变动"}
+- 忽略话题：${ignore || "与用户行业无关的宏观经济新闻"}
 
 **今日（${today}）多渠道新闻摘要：**
 
@@ -298,6 +345,12 @@ ${competitors.length > 0
 
 async function runCompetitorIntelAgent() {
   const profile = loadUserProfile();
+  const playbook = loadPlaybook();
+
+  // Inject playbook focus into profile for this run
+  if (playbook.focusAreas && playbook.focusAreas.currentWeekFocus) {
+    console.log(`[Intel] This week's focus: ${playbook.focusAreas.currentWeekFocus}`);
+  }
 
   console.log(`[Intel] Running for: ${profile.name} | ${profile.role} | ${profile.industry}`);
 
@@ -318,20 +371,26 @@ async function runCompetitorIntelAgent() {
     return null;
   }
 
-  // Step 2: Run 3-lens Claude analysis
+  // Step 2: Run 3-lens Claude analysis (inject playbook focus areas)
   const newsContext = buildNewsContext(sourceResults);
   console.log("[Intel] Running 3-lens analysis with Claude...");
-  const report = await runThreeLensAnalysis(profile, newsContext, today);
+  const report = await runThreeLensAnalysis(profile, newsContext, today, playbook);
 
   console.log("[Intel] Report generated successfully");
 
-  return {
+  const result = {
     date: today,
     profile: { name: profile.name, role: profile.role, industry: profile.industry },
     sourcesUsed: sourceResults.map(r => ({ source: r.source, articleCount: r.items.length })),
     report,
     rawNews: sourceResults,
   };
+
+  // Step 3: Update playbook source performance + save report
+  updateSourcePerformance(playbook, sourceResults);
+  saveReport(result);
+
+  return result;
 }
 
 module.exports = { runCompetitorIntelAgent };
