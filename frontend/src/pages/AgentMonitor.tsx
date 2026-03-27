@@ -183,6 +183,31 @@ const AGENTS: Agent[] = [
       "Upsell opportunity detection",
     ],
   },
+  {
+    id: "market-intelligence",
+    name: "Market Intelligence Agent",
+    nameCn: "市场情报助手",
+    icon: "📡",
+    category: "analytics",
+    status: "active",
+    route: "/agents/market-intelligence",
+    description:
+      "Daily personalized market & competitor intelligence report — 6 sources, 3-lens Claude analysis, self-improving weekly playbook.",
+    descriptionCn:
+      "每日个性化市场与竞品情报报告——6大来源、Claude三视角分析、每周自动优化。",
+    capabilities: [
+      "Multi-source aggregation: Google News (EN+CN), Reddit, 36Kr, 虎嗅, Reuters",
+      "3-lens Claude analysis: Trend Radar, Competitive Dynamics, Opportunity Signals",
+      "Email delivery at 7am HK with 👍/👎 feedback buttons",
+      "Self-improving playbook — optimized every Sunday based on your feedback",
+      "Fully configurable: set your industry, competitors, and geography focus",
+    ],
+    metrics: [
+      { label: "News Sources", value: "6" },
+      { label: "Analysis Lenses", value: "3" },
+      { label: "Status", value: "v0.1 Live" },
+    ],
+  },
 ];
 
 // ─── Styling constants ───
