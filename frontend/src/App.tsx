@@ -3,6 +3,8 @@ import DiagnosticDashboard from "./pages/DiagnosticDashboard";
 import WorkflowViewer from "./pages/WorkflowViewer";
 import AgentMonitor from "./pages/AgentMonitor";
 import CostDashboard from "./pages/CostDashboard";
+import XhsWarroom from "./pages/XhsWarroom";
+import MarketIntelligence from "./pages/MarketIntelligence";
 
 const navStyle: React.CSSProperties = {
   display: "flex",
@@ -23,9 +25,9 @@ export default function App() {
   return (
     <div>
       <nav style={navStyle}>
-        <Link to="/" style={linkStyle}>
+        <a href="/calculator.html" style={linkStyle}>
           Diagnostics
-        </Link>
+        </a>
         <Link to="/workflows" style={linkStyle}>
           Workflows
         </Link>
@@ -35,11 +37,17 @@ export default function App() {
         <Link to="/costs" style={linkStyle}>
           Costs
         </Link>
+        <Link to="/demo" style={linkStyle}>
+          Demo Dashboard
+        </Link>
       </nav>
       <Routes>
         <Route path="/" element={<DiagnosticDashboard />} />
+        <Route path="/demo" element={<DiagnosticDashboard />} />
         <Route path="/workflows" element={<WorkflowViewer />} />
         <Route path="/agents" element={<AgentMonitor />} />
+        <Route path="/agents/xhs-content" element={<XhsWarroom />} />
+        <Route path="/agents/market-intelligence" element={<MarketIntelligence />} />
         <Route path="/costs" element={<CostDashboard />} />
       </Routes>
     </div>
