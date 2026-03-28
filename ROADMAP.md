@@ -56,7 +56,7 @@ Converts prospects to believers               Proves intelligence layer works on
 | Product Structure Agent (ERP intelligence demo) | Joanna | v0.1 Done | 2 | 3-file ERP export analysis, Streamlit UI |
 | 3-screen visualization dashboard | Joanna | Done | 2 | Department map, before/after toggle, ROI summary — on Vercel |
 | FRD (functional requirements) | Joanna | In progress | All | Defining overall product features |
-| Cloud infrastructure & deployment | Joanna | In progress | — | Alibaba Cloud HK setup |
+| Cloud infrastructure & deployment | William | ✅ Done | — | ✅ Done (William) — HK ECS live at 8.217.242.191 |
 | Virtual employee prototypes | Joanna | Starting | 3 | Marketing (Joanna VE), Image Gen |
 | ERP connector research | William | TODO | 2-3 | Kingdee/QuickBooks API assessment |
 
@@ -136,7 +136,8 @@ Converts prospects to believers               Proves intelligence layer works on
 **Cloud Strategy: Start Hong Kong → Add Guangzhou Later**
 
 ```
-Phase 1 (Now):     Alibaba Cloud Hong Kong — launch fast, no ICP paperwork
+Phase 1 (Now):     ✅ Phase 1 complete — ECS live, Node.js + PM2 + Nginx configured, backend API running
+                    Alibaba Cloud Hong Kong — launch fast, no ICP paperwork
                     ├── Backend server (ECS — 2 CPU, 4GB RAM, ~¥300/mo)
                     ├── Database (RDS PostgreSQL, ~¥150/mo)
                     ├── File storage (OSS — uploaded docs, ~¥20/mo)

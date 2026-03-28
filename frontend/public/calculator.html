@@ -1,4 +1,22 @@
-import { useState, useEffect } from "react";
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI人力诊断计算器 — Rebase</title>
+<meta name="description" content="免费AI成熟度诊断：了解你的企业AI应用处于什么阶段，以及如何用AI提升团队效率、释放人力资源。">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #F8FAFC; font-family: -apple-system, 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useEffect } = React;
 
 // ─── DATA ───────────────────────────────────────────────────────────────────
 const SALARY_TABLE = {
@@ -345,7 +363,7 @@ function TierBar({ score, theme }) {
 }
 
 // ─── MAIN ───────────────────────────────────────────────────────────────────
-export default function App() {
+function App() {
   const [step, setStep] = useState(0);
   const [darkMode, setDarkMode] = useState(false);
   const [cn, setCn] = useState(""); const [cs, setCs] = useState(""); const [rev, setRev] = useState(""); const [ind, setInd] = useState("");
@@ -358,6 +376,60 @@ export default function App() {
   const [exp, setExp] = useState(null);
   const [showSources, setShowSources] = useState(false);
   const [leadName, setLeadName] = useState(""); const [leadContact, setLeadContact] = useState(""); const [leadSubmitted, setLeadSubmitted] = useState(false); const [leadSubmitting, setLeadSubmitting] = useState(false);
+  const [sessionId] = useState(() => Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+  const [surveyAutoSaved, setSurveyAutoSaved] = useState(false);
+
+  // ── Auto-save survey data when user reaches results page (step 5) ──
+  useEffect(() => {
+    if (surveyAutoSaved || step < 5) return;
+    setSurveyAutoSaved(true);
+    // Compute results inside the effect to avoid hook ordering issues
+    const ad_ = DEPARTMENTS.filter(d => sel.includes(d.id));
+    const te_ = parseInt(cs) || 0; const rv_ = parseInt(rev) || 0;
+    const tierLabel_ = CITY_TIERS.find(t => t.id === cityTier)?.label || "一线城市";
+    const getQScore_ = (deptId, cq) => { const idx = cap[`${deptId}_${cq.key}`]; if (idx === undefined) return 0; return USAGE_OPTIONS[idx].score; };
+    const results_ = ad_.map(dept => {
+      const rr = dept.roles.map((role, i) => {
+        const cc = re[`${dept.id}_${i}`] ?? 0;
+        const salary = getSalary(role.key, cityTier);
+        const wa = Math.max(cc > 0 ? 1 : 0, Math.round(cc * role.withAI.ratio));
+        const fa = Math.max(cc > 0 ? 1 : 0, Math.round(cc * role.fullAI.ratio));
+        return { role, cc, wa, fa, salary, cwAI: (cc - wa) * salary * 14, cfAI: (cc - fa) * salary * 14 };
+      });
+      const tc = rr.reduce((s, r) => s + r.cc, 0), twAI = rr.reduce((s, r) => s + r.wa, 0), tfAI = rr.reduce((s, r) => s + r.fa, 0);
+      const tcwAI = rr.reduce((s, r) => s + r.cwAI, 0), tcfAI = rr.reduce((s, r) => s + r.cfAI, 0);
+      const totalQScore = dept.capQuestions.reduce((s, cq) => s + getQScore_(dept.id, cq), 0);
+      const maxQScore = dept.capQuestions.length * 3;
+      const capP = maxQScore > 0 ? Math.round((totalQScore / maxQScore) * 100) : 0;
+      return { dept, rr, tc, twAI, tfAI, tcwAI, tcfAI, capP };
+    });
+    const gtc_ = results_.reduce((s, r) => s + r.tc, 0);
+    const gcf_ = results_.reduce((s, r) => s + r.tcfAI, 0);
+    const totalWeightedScore_ = results_.reduce((s, r) => s + r.capP * r.tc, 0);
+    const avgCap_ = gtc_ > 0 ? Math.round(totalWeightedScore_ / gtc_) : (results_.length > 0 ? Math.round(results_.reduce((s, r) => s + r.capP, 0) / results_.length) : 0);
+    const overallTier_ = getTier(avgCap_);
+    fetch("/api/save-survey", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId,
+        company: cn, industry: ind, employees: te_, revenue: rv_,
+        cityTier: tierLabel_, cityTierRaw: cityTier,
+        tier: overallTier_.name, tierLevel: overallTier_.level,
+        score: avgCap_, savings: Math.round(gcf_ / 10000),
+        departments: ad_.map(d => d.name).join("、"),
+        selectedDepts: sel, deptHeadcounts: dhc,
+        capAnswers: cap, roleHeadcounts: re,
+        deptResults: results_.map(r => ({
+          id: r.dept.id, name: r.dept.name,
+          totalHC: r.tc, withAI_HC: r.twAI, fullAI_HC: r.tfAI,
+          savingsWithAI: Math.round(r.tcwAI / 10000),
+          savingsFullAI: Math.round(r.tcfAI / 10000),
+          maturityScore: r.capP, maturityTier: getTier(r.capP).name,
+        })),
+      }),
+    }).catch(() => {});
+  }, [step]);
 
   const T = getTheme(darkMode);
   const te = parseInt(cs) || 0; const rv = parseInt(rev) || 0;
@@ -998,6 +1070,7 @@ export default function App() {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
+                      sessionId,
                       name: leadName, contact: leadContact, company: cn,
                       employees: te, tier: overallTier.name, tierLevel: overallTier.level,
                       score: avgCap, savings: Math.round(gcf / 10000),
@@ -1040,3 +1113,8 @@ export default function App() {
     </div>
   );
 }
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
