@@ -1,6 +1,6 @@
 {
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/((?!calculator\\.html).*)", "destination": "/index.html" }
+    { "source": "/((?!calculator\\.html|competitor-intel\\.html).*)", "destination": "/index.html" }
   ]
 }

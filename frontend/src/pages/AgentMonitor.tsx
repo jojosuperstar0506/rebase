@@ -14,6 +14,7 @@ interface Agent {
   descriptionCn: string;
   capabilities: string[];
   route?: string;
+  externalUrl?: string;
   metrics?: {
     label: string;
     value: string;
@@ -23,6 +24,31 @@ interface Agent {
 // ─── Agent Registry ───
 
 const AGENTS: Agent[] = [
+  {
+    id: "jo-competitive-intel",
+    name: "Jo Competitive Intel",
+    nameCn: "竞品情报",
+    icon: "🎯",
+    category: "analytics",
+    status: "active",
+    externalUrl: "/competitor-intel.html",
+    description:
+      "7-dimension brand equity tracker across 20 competitor handbag brands. Scrapes XHS, Douyin, and 生意参谋 every 3 days with Claude AI analysis.",
+    descriptionCn:
+      "7维品牌资产追踪系统，覆盖20个竞品箱包品牌。每3天自动采集小红书、抖音、生意参谋数据，Claude AI深度分析。",
+    capabilities: [
+      "20 competitor brands across 3 strategic groups (D/C/B)",
+      "7-dimension analysis: Search Index, Voice Volume, Content Strategy, KOL Ecosystem, Social Commerce, Consumer Mindshare, Channel Authority",
+      "Tmall & Douyin hot product rankings with material tagging",
+      "Brand positioning matrix (材质 × 声量)",
+      "Automated scraping every 3 days with AI-powered strategic insights",
+    ],
+    metrics: [
+      { label: "Brands Tracked", value: "20" },
+      { label: "Dimensions", value: "7" },
+      { label: "Schedule", value: "Every 3d" },
+    ],
+  },
   {
     id: "xhs-content",
     name: "XHS Content Warroom",
@@ -234,7 +260,7 @@ function AgentCard({ agent }: { agent: Agent }) {
   const navigate = useNavigate();
   const status = STATUS_CONFIG[agent.status];
   const category = CATEGORY_CONFIG[agent.category];
-  const hasRoute = !!agent.route;
+  const hasRoute = !!agent.route || !!agent.externalUrl;
 
   return (
     <div
@@ -251,8 +277,10 @@ function AgentCard({ agent }: { agent: Agent }) {
         opacity: agent.status === "coming-soon" ? 0.75 : 1,
       }}
       onClick={() => {
-        if (hasRoute) {
-          navigate(agent.route!);
+        if (agent.externalUrl) {
+          window.location.href = agent.externalUrl;
+        } else if (agent.route) {
+          navigate(agent.route);
         } else {
           setExpanded(!expanded);
         }

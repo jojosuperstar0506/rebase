@@ -1,0 +1,12 @@
+{
+  "scrape_date": "2026-03-28",
+  "scrape_version": "7dim-v1",
+  "dashboard_html": "/competitor-intel.html",
+  "brands_count": 20,
+  "groups": {
+    "D": {"name": "快时尚/International", "subtitle": "The Ceiling Above You", "brands": ["小CK", "COACH", "MK", "Kipling"]},
+    "C": {"name": "价值挑战者", "subtitle": "Your Actual Fight", "brands": ["La Festin", "Cnolés蔻一", "ECODAY", "VINEY", "FOXER", "NUCELLE", "OMTO", "muva"]},
+    "B": {"name": "新兴国货", "subtitle": "Where You Want to Be", "brands": ["Songmont", "古良吉吉", "裘真", "DISSONA", "Amazing Song", "CASSILE", "西木汀", "红谷"]}
+  },
+  "note": "Full 7-dimension data will be populated by Cowork scheduled scraping task every 3 days. For now, analysis is embedded in the HTML dashboard."
+}
