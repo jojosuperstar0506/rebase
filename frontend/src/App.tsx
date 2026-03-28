@@ -35,9 +35,6 @@ export default function App() {
         <Link to="/costs" style={linkStyle}>
           Costs
         </Link>
-        <a href="/competitor-intel.html" style={{...linkStyle, color: "#667eea", fontWeight: 700}}>
-          竞品情报
-        </a>
       </nav>
       <Routes>
         <Route path="/" element={<DiagnosticDashboard />} />
