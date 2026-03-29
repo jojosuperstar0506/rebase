@@ -1,6 +1,6 @@
 require('dotenv').config();
 const express = require('express');
-const Anthropic = require('@anthropic-ai/sdk');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const { startScheduler, runDailyReport, generateFeedbackToken } = require("./scheduler");
@@ -48,9 +48,7 @@ app.use('/api', apiLimiter);
 app.use('/api', requireSecret);
 
 // ── Anthropic client ────────────────────────────────────────────────────────
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // ── Routes ──────────────────────────────────────────────────────────────────
 
@@ -74,14 +72,10 @@ app.post('/api/chat', async (req, res) => {
       return res.status(400).json({ error: 'message is required' });
     }
 
-    const response = await client.messages.create({
-      model: 'claude-opus-4-5',
-      max_tokens: 1024,
-      system: systemPrompt || 'You are a helpful AI assistant for Rebase, a company that helps Chinese SMBs adopt AI into their operations.',
-      messages: [{ role: 'user', content: message }],
-    });
-
-    res.json({ reply: response.content[0].text });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const fullPrompt = `${systemPrompt || 'You are a helpful AI assistant for Rebase, a company that helps Chinese SMBs adopt AI into their operations.'}\n\n${message}`;
+    const result = await model.generateContent(fullPrompt);
+    res.json({ reply: result.response.text() });
   } catch (err) {
     console.error('Chat error:', err.message);
     res.status(500).json({ error: 'Failed to get response from Claude' });
@@ -109,13 +103,9 @@ Provide a concise GTM analysis with:
 3. Recommended outreach channels
 4. First 30-day action plan`;
 
-    const response = await client.messages.create({
-      model: 'claude-opus-4-5',
-      max_tokens: 2048,
-      messages: [{ role: 'user', content: prompt }],
-    });
-
-    res.json({ analysis: response.content[0].text });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const result = await model.generateContent(prompt);
+    res.json({ analysis: result.response.text() });
   } catch (err) {
     console.error('GTM agent error:', err.message);
     res.status(500).json({ error: 'GTM agent failed' });
@@ -132,18 +122,11 @@ app.post('/api/scheduled-agent', async (req, res) => {
       return res.status(400).json({ error: 'task is required' });
     }
 
-    const response = await client.messages.create({
-      model: 'claude-opus-4-5',
-      max_tokens: 2048,
-      messages: [{
-        role: 'user',
-        content: `Run the following scheduled task: ${task}\n\nData: ${JSON.stringify(data || {})}`,
-      }],
-    });
-
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const result = await model.generateContent(`Run the following scheduled task: ${task}\n\nData: ${JSON.stringify(data || {})}`);
     res.json({
       task,
-      result: response.content[0].text,
+      result: result.response.text(),
       completedAt: new Date().toISOString(),
     });
   } catch (err) {
