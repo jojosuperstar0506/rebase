@@ -1,6 +1,6 @@
 require('dotenv').config();
 const express = require('express');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const axios = require('axios');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const { startScheduler, runDailyReport, generateFeedbackToken } = require("./scheduler");
@@ -48,7 +48,14 @@ app.use('/api', apiLimiter);
 app.use('/api', requireSecret);
 
 // ── Anthropic client ────────────────────────────────────────────────────────
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+async function callGemini(prompt) {
+  const key = process.env.GEMINI_API_KEY;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`;
+  const response = await axios.post(url, {
+    contents: [{ parts: [{ text: prompt }] }]
+  });
+  return response.data.candidates[0].content.parts[0].text;
+}
 
 // ── Routes ──────────────────────────────────────────────────────────────────
 
@@ -72,10 +79,9 @@ app.post('/api/chat', async (req, res) => {
       return res.status(400).json({ error: 'message is required' });
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     const fullPrompt = `${systemPrompt || 'You are a helpful AI assistant for Rebase, a company that helps Chinese SMBs adopt AI into their operations.'}\n\n${message}`;
-    const result = await model.generateContent(fullPrompt);
-    res.json({ reply: result.response.text() });
+    const reply = await callGemini(fullPrompt);
+    res.json({ reply });
   } catch (err) {
     console.error('Chat error:', err.message);
     res.status(500).json({ error: 'Failed to get response from Claude' });
@@ -103,9 +109,8 @@ Provide a concise GTM analysis with:
 3. Recommended outreach channels
 4. First 30-day action plan`;
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const result = await model.generateContent(prompt);
-    res.json({ analysis: result.response.text() });
+    const analysis = await callGemini(prompt);
+    res.json({ analysis });
   } catch (err) {
     console.error('GTM agent error:', err.message);
     res.status(500).json({ error: 'GTM agent failed' });
@@ -122,11 +127,10 @@ app.post('/api/scheduled-agent', async (req, res) => {
       return res.status(400).json({ error: 'task is required' });
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const result = await model.generateContent(`Run the following scheduled task: ${task}\n\nData: ${JSON.stringify(data || {})}`);
+    const taskResult = await callGemini(`Run the following scheduled task: ${task}\n\nData: ${JSON.stringify(data || {})}`);
     res.json({
       task,
-      result: result.response.text(),
+      result: taskResult,
       completedAt: new Date().toISOString(),
     });
   } catch (err) {
