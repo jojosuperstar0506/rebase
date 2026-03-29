@@ -263,6 +263,204 @@ def validate_extract(data: List[dict]) -> List[str]:
     return errors
 
 
+# ─── Ranking Schema Validation ────────────────────────────────────────────────
+
+
+def validate_sycm_ranking(data: dict) -> List[str]:
+    """
+    Validate a SYCM (生意参谋) product ranking extract.
+
+    Checks:
+        - Required top-level fields: source, extract_date, category_path, products
+        - source must be 'sycm'
+        - Each product has: rank, product_name, brand, price
+        - Ranks are sequential integers (1, 2, 3...) — flags gaps
+        - total_extracted matches len(products)
+
+    Args:
+        data: Parsed ranking dict from Chrome output.
+
+    Returns:
+        List of error messages. Empty list means validation passed.
+    """
+    errors: List[str] = []
+
+    if not isinstance(data, dict):
+        return [f"Expected dict, got {type(data).__name__}"]
+
+    # Required top-level fields
+    for field in ("source", "extract_date", "category_path", "products"):
+        if field not in data or not data[field]:
+            errors.append(f"Missing required field '{field}'")
+
+    if data.get("source") != "sycm":
+        errors.append(f"source must be 'sycm', got '{data.get('source')}'")
+
+    # Validate date
+    extract_date = data.get("extract_date", "")
+    if extract_date and not re.match(r"^\d{4}-\d{2}-\d{2}$", extract_date):
+        errors.append(f"extract_date must be YYYY-MM-DD, got '{extract_date}'")
+
+    products = data.get("products", [])
+    if not isinstance(products, list):
+        errors.append("'products' must be a list")
+        return errors
+
+    # Validate total_extracted matches actual count
+    total_claimed = data.get("total_extracted")
+    if total_claimed is not None and total_claimed != len(products):
+        errors.append(
+            f"total_extracted ({total_claimed}) does not match "
+            f"actual product count ({len(products)})"
+        )
+
+    # Validate each product
+    prev_rank = 0
+    for i, prod in enumerate(products):
+        if not isinstance(prod, dict):
+            errors.append(f"Product {i}: expected dict")
+            continue
+
+        # Required product fields
+        for field in ("rank", "product_name", "brand", "price"):
+            if field not in prod:
+                errors.append(f"Product {i} (rank {prod.get('rank', '?')}): missing '{field}'")
+
+        # Check rank sequencing
+        rank = prod.get("rank")
+        if isinstance(rank, int):
+            if rank != prev_rank + 1:
+                errors.append(
+                    f"Rank gap: expected {prev_rank + 1}, got {rank} "
+                    f"at product '{prod.get('product_name', '?')[:30]}'"
+                )
+            prev_rank = rank
+
+    return errors
+
+
+def validate_douyin_ranking(data: dict) -> List[str]:
+    """
+    Validate a Douyin Shop (抖店) product ranking extract.
+
+    Checks:
+        - Required top-level fields: source, extract_date, category_path, products
+        - source must be 'douyin_shop'
+        - Each product has: rank, product_name, price
+        - Brand is optional (may be empty string)
+        - total_extracted matches len(products)
+
+    Args:
+        data: Parsed ranking dict from Chrome output.
+
+    Returns:
+        List of error messages. Empty list means validation passed.
+    """
+    errors: List[str] = []
+
+    if not isinstance(data, dict):
+        return [f"Expected dict, got {type(data).__name__}"]
+
+    # Required top-level fields
+    for field in ("source", "extract_date", "category_path", "products"):
+        if field not in data or not data[field]:
+            errors.append(f"Missing required field '{field}'")
+
+    if data.get("source") != "douyin_shop":
+        errors.append(f"source must be 'douyin_shop', got '{data.get('source')}'")
+
+    # Validate date
+    extract_date = data.get("extract_date", "")
+    if extract_date and not re.match(r"^\d{4}-\d{2}-\d{2}$", extract_date):
+        errors.append(f"extract_date must be YYYY-MM-DD, got '{extract_date}'")
+
+    products = data.get("products", [])
+    if not isinstance(products, list):
+        errors.append("'products' must be a list")
+        return errors
+
+    # Validate total_extracted matches actual count
+    total_claimed = data.get("total_extracted")
+    if total_claimed is not None and total_claimed != len(products):
+        errors.append(
+            f"total_extracted ({total_claimed}) does not match "
+            f"actual product count ({len(products)})"
+        )
+
+    # Validate each product
+    prev_rank = 0
+    for i, prod in enumerate(products):
+        if not isinstance(prod, dict):
+            errors.append(f"Product {i}: expected dict")
+            continue
+
+        # Required product fields (brand is OPTIONAL for Douyin)
+        for field in ("rank", "product_name", "price"):
+            if field not in prod:
+                errors.append(f"Product {i} (rank {prod.get('rank', '?')}): missing '{field}'")
+
+        # Check rank sequencing
+        rank = prod.get("rank")
+        if isinstance(rank, int):
+            if rank != prev_rank + 1:
+                errors.append(
+                    f"Rank gap: expected {prev_rank + 1}, got {rank} "
+                    f"at product '{prod.get('product_name', '?')[:30]}'"
+                )
+            prev_rank = rank
+
+    return errors
+
+
+def validate_ranking(data: dict) -> Tuple[str, List[str]]:
+    """
+    Route ranking data to the appropriate validator based on source field.
+
+    Args:
+        data: Parsed ranking dict.
+
+    Returns:
+        Tuple of (source, errors). source is 'sycm' or 'douyin_shop'.
+    """
+    source = data.get("source", "")
+    if source == "sycm":
+        return source, validate_sycm_ranking(data)
+    elif source == "douyin_shop":
+        return source, validate_douyin_ranking(data)
+    else:
+        return source, [f"Unknown ranking source: '{source}'. Expected 'sycm' or 'douyin_shop'."]
+
+
+def validate_and_normalize_ranking(text: str) -> Tuple[Optional[dict], List[str]]:
+    """
+    Parse, validate, and normalize ranking data from Chrome output.
+
+    Args:
+        text: Raw text from Claude for Chrome.
+
+    Returns:
+        Tuple of (normalized_data, errors).
+        If errors is non-empty, data should NOT be imported.
+    """
+    cleaned = clean_json_text(text)
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError as e:
+        return None, [f"Invalid JSON after cleanup: {e}"]
+
+    if not isinstance(data, dict):
+        return None, [f"Expected JSON object, got {type(data).__name__}"]
+
+    source, errors = validate_ranking(data)
+    if errors:
+        return data, errors
+
+    # Normalize Chinese numbers in product fields
+    normalized = normalize_numbers_recursive(data)
+
+    return normalized, []
+
+
 def validate_and_normalize(text: str) -> Tuple[List[dict], List[str]]:
     """
     Parse, validate, and normalize Chrome extraction output in one step.

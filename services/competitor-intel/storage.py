@@ -154,6 +154,32 @@ def init_db(db_path: Optional[str] = None) -> sqlite3.Connection:
 
         CREATE INDEX IF NOT EXISTS idx_deltas_brand_date
             ON deltas(brand_name, date DESC);
+
+        CREATE TABLE IF NOT EXISTS product_rankings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT NOT NULL,
+            extract_date TEXT NOT NULL,
+            category_path TEXT,
+            time_range TEXT,
+            ranking_type TEXT,
+            rank INTEGER NOT NULL,
+            product_name TEXT NOT NULL,
+            brand TEXT DEFAULT '',
+            price TEXT,
+            sales_metric_name TEXT,
+            sales_metric_value REAL,
+            store_name TEXT,
+            product_id TEXT,
+            sales_channel TEXT,
+            raw_data TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_rankings_source_date
+            ON product_rankings(source, extract_date DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_rankings_brand
+            ON product_rankings(brand, extract_date DESC);
     """)
 
     # Populate brands from config (upsert)
@@ -429,3 +455,177 @@ def export_latest_json(conn: sqlite3.Connection, output_path: str) -> None:
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
+
+
+# ─── Product Rankings ─────────────────────────────────────────────────────────
+
+
+def save_product_rankings(
+    conn: sqlite3.Connection,
+    source: str,
+    extract_date: str,
+    category_path: str,
+    ranking_type: str,
+    products: List[dict],
+    time_range: str = "",
+) -> int:
+    """
+    Bulk insert product ranking data into the product_rankings table.
+
+    Args:
+        conn: Database connection.
+        source: 'sycm' or 'douyin_shop'.
+        extract_date: ISO date string (YYYY-MM-DD).
+        category_path: Category path string (e.g., '箱包皮具 > 女士包').
+        ranking_type: Ranking metric (e.g., '交易指数', '销售额').
+        products: List of product dicts from Chrome extraction.
+        time_range: Time range string (e.g., '最近7天').
+
+    Returns:
+        Number of products inserted.
+    """
+    inserted = 0
+    for prod in products:
+        # Determine the primary sales metric based on source
+        if source == "sycm":
+            metric_name = "transaction_index"
+            metric_value = prod.get("transaction_index")
+        else:  # douyin_shop
+            # Prefer sales_revenue, fall back to sales_volume
+            if prod.get("sales_revenue") is not None:
+                metric_name = "sales_revenue"
+                metric_value = prod.get("sales_revenue")
+            else:
+                metric_name = "sales_volume"
+                metric_value = prod.get("sales_volume")
+
+        # Convert metric_value to float if possible
+        if isinstance(metric_value, str):
+            try:
+                metric_value = float(metric_value)
+            except (ValueError, TypeError):
+                metric_value = None
+        elif isinstance(metric_value, (int, float)):
+            metric_value = float(metric_value)
+        else:
+            metric_value = None
+
+        # Map sales_channel to normalized values
+        raw_channel = prod.get("sales_channel", "")
+        if isinstance(raw_channel, str):
+            channel_map = {"直播": "livestream", "直播间": "livestream",
+                           "短视频": "short_video", "商城": "shelf",
+                           "品牌自播": "livestream", "达人带货": "livestream",
+                           "品牌自播+达人": "livestream", "达人带货+自播": "livestream"}
+            sales_channel = channel_map.get(raw_channel, raw_channel) or None
+        else:
+            sales_channel = None
+
+        conn.execute(
+            """INSERT INTO product_rankings
+               (source, extract_date, category_path, time_range, ranking_type,
+                rank, product_name, brand, price,
+                sales_metric_name, sales_metric_value,
+                store_name, product_id, sales_channel, raw_data)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                source,
+                extract_date,
+                category_path,
+                time_range,
+                ranking_type,
+                prod.get("rank", 0),
+                prod.get("product_name", ""),
+                prod.get("brand", ""),
+                prod.get("price", ""),
+                metric_name,
+                metric_value,
+                prod.get("store_name", ""),
+                prod.get("product_id", ""),
+                sales_channel,
+                json.dumps(prod, ensure_ascii=False),
+            ),
+        )
+        inserted += 1
+
+    conn.commit()
+    return inserted
+
+
+def get_product_rankings(
+    conn: sqlite3.Connection,
+    source: str,
+    extract_date: Optional[str] = None,
+    limit: int = 100,
+) -> List[dict]:
+    """
+    Get product rankings for a given source and date.
+
+    Args:
+        conn: Database connection.
+        source: 'sycm' or 'douyin_shop'.
+        extract_date: ISO date string. If None, returns the most recent.
+        limit: Maximum number of products to return (default 100).
+
+    Returns:
+        List of product ranking dicts, ordered by rank.
+    """
+    if extract_date is None:
+        # Find the most recent extract_date for this source
+        row = conn.execute(
+            "SELECT MAX(extract_date) as d FROM product_rankings WHERE source = ?",
+            (source,),
+        ).fetchone()
+        if row is None or row["d"] is None:
+            return []
+        extract_date = row["d"]
+
+    rows = conn.execute(
+        """SELECT rank, product_name, brand, price,
+                  sales_metric_name, sales_metric_value,
+                  store_name, product_id, sales_channel,
+                  category_path, time_range, ranking_type, extract_date
+           FROM product_rankings
+           WHERE source = ? AND extract_date = ?
+           ORDER BY rank ASC
+           LIMIT ?""",
+        (source, extract_date, limit),
+    ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def get_ranking_history(
+    conn: sqlite3.Connection,
+    brand_name: str,
+    source: str,
+    days: int = 30,
+) -> List[Tuple[str, int, str, Optional[float]]]:
+    """
+    Get ranking history for a specific brand over time.
+
+    Useful for tracking a brand's position changes in the category rankings.
+
+    Args:
+        conn: Database connection.
+        brand_name: Brand name to filter by.
+        source: 'sycm' or 'douyin_shop'.
+        days: Number of days of history to return (default 30).
+
+    Returns:
+        List of (extract_date, rank, product_name, sales_metric_value) tuples,
+        ordered by date ascending then rank ascending.
+    """
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    rows = conn.execute(
+        """SELECT extract_date, rank, product_name, sales_metric_value
+           FROM product_rankings
+           WHERE brand = ? AND source = ? AND extract_date >= ?
+           ORDER BY extract_date ASC, rank ASC""",
+        (brand_name, source, cutoff),
+    ).fetchall()
+
+    return [
+        (row["extract_date"], row["rank"], row["product_name"], row["sales_metric_value"])
+        for row in rows
+    ]

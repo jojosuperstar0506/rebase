@@ -863,7 +863,7 @@
                 </div>
             </div>
 
-            <!-- TAB 2: 热卖商品 -->
+            <!-- TAB 2: 热卖商品 (data-driven with hardcoded fallback) -->
             <div class="section" id="products">
                 <!-- Channel selector -->
                 <div class="product-tabs" id="channelTabs" style="margin-bottom: 0; border-bottom: 2px solid #667eea; padding-bottom: 0;">
@@ -873,6 +873,10 @@
 
                 <!-- TMALL CHANNEL -->
                 <div class="channel-content" data-channel="tmall">
+                    <!-- Dynamic ranking content (populated by JS) -->
+                    <div id="tmallRankingDynamic" style="display:none;"></div>
+                    <!-- Hardcoded fallback -->
+                    <div id="tmallRankingFallback">
                     <div class="subsection">
                         <div class="section-title">Tmall - 女士包袋热卖排行</div>
                         <div class="data-source">ℹ️ 数据来源: 生意参谋 · 女士包袋新 · 全品类7日交易 · 2026-03-21~2026-03-27</div>
@@ -1297,10 +1301,15 @@
                         </table>
                     </div>
                 </div>
+                    </div><!-- end #tmallRankingFallback -->
                 </div><!-- end .channel-content[tmall] -->
 
                 <!-- DOUYIN CHANNEL -->
                 <div class="channel-content hidden" data-channel="douyin">
+                    <!-- Dynamic ranking content (populated by JS) -->
+                    <div id="douyinRankingDynamic" style="display:none;"></div>
+                    <!-- Hardcoded fallback -->
+                    <div id="douyinRankingFallback">
                     <div class="subsection">
                         <div class="section-title">抖音 - 女包畅销品 Top 30</div>
                         <div class="data-source">ℹ️ 数据来源: 抖音电商罗盘 · 女包类目 · 近7日销量 · 2026-03-21~2026-03-27</div>
@@ -1407,6 +1416,7 @@
                             </div>
                         </div>
                     </div>
+                    </div><!-- end #douyinRankingFallback -->
                 </div><!-- end .channel-content[douyin] -->
             </div>
 
@@ -1501,7 +1511,8 @@
             });
         });
 
-        // CHANNEL TAB SWITCHING (Tmall vs Douyin)
+        // CHANNEL TAB SWITCHING (Tmall vs Douyin) — also triggers lazy-load
+        let rankingLoaded = { tmall: false, douyin: false };
         document.querySelectorAll('#channelTabs .product-tab').forEach(tab => {
             tab.addEventListener('click', function() {
                 const channel = this.dataset.channel;
@@ -1509,6 +1520,11 @@
                 document.querySelector(`.channel-content[data-channel="${channel}"]`).classList.remove('hidden');
                 document.querySelectorAll('#channelTabs .product-tab').forEach(t => t.classList.remove('active'));
                 this.classList.add('active');
+                // Lazy-load ranking data on first click
+                if (!rankingLoaded[channel]) {
+                    rankingLoaded[channel] = true;
+                    loadRankingData(channel);
+                }
             });
         });
 
@@ -1522,6 +1538,128 @@
                 this.classList.add('active');
             });
         });
+
+        // ═══════════════════════════════════════════════════════════
+        // DATA-DRIVEN RANKINGS (热卖商品 tab)
+        // ═══════════════════════════════════════════════════════════
+
+        // Known competitor brands for highlighting
+        const TRACKED_BRANDS = new Set([
+            '小CK', 'Charles & Keith', 'CHARLES&KEITH', 'charleskeith',
+            'COACH', '蔻驰', 'MK', 'Michael Kors', 'MICHAEL KORS', 'Kipling',
+            'La Festin', '拉菲斯汀', 'Cnolés蔻一', '蔻一', 'Cnoles',
+            'ECODAY', 'Ecoday', 'VINEY', 'Viney', 'FOXER', '金狐狸',
+            'NUCELLE', '纽芝兰', 'OMTO', 'muva',
+            'Songmont', '山下有松', '古良吉吉', '裘真', 'DISSONA', '迪桑娜',
+            'Amazing Song', '歌蒂诗', 'CASSILE', '卡思乐', '西木汀', '红谷', 'HONGGU',
+            'GROTTO', '个乐', 'BAMPO', '半坡饰族', 'BAGTREE', '包包树'
+        ]);
+
+        function isTrackedBrand(brand, storeName) {
+            if (!brand && !storeName) return false;
+            for (const tracked of TRACKED_BRANDS) {
+                if (brand && (brand.includes(tracked) || tracked.includes(brand))) return true;
+                if (storeName && storeName.includes(tracked)) return true;
+            }
+            return false;
+        }
+
+        async function loadRankingData(channel) {
+            const source = channel === 'tmall' ? 'sycm' : 'douyin_shop';
+            const dynamicEl = document.getElementById(channel === 'tmall' ? 'tmallRankingDynamic' : 'douyinRankingDynamic');
+            const fallbackEl = document.getElementById(channel === 'tmall' ? 'tmallRankingFallback' : 'douyinRankingFallback');
+
+            try {
+                const apiBase = window.location.port === '8080' ? '' : 'http://localhost:8080';
+                const resp = await fetch(apiBase + '/api/rankings?source=' + source + '&limit=100');
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const data = await resp.json();
+                if (!data.products || data.products.length === 0) throw new Error('No ranking data');
+
+                // Render dynamic ranking table
+                dynamicEl.innerHTML = renderRankingSection(data, channel);
+                dynamicEl.style.display = 'block';
+                fallbackEl.style.display = 'none';
+                console.log(`Ranking data source (${channel}): API — ${data.total} products`);
+            } catch (err) {
+                // Keep hardcoded fallback visible
+                console.log(`Ranking data source (${channel}): hardcoded fallback (${err.message})`);
+            }
+        }
+
+        function renderRankingSection(data, channel) {
+            const sourceLabel = channel === 'tmall' ? '生意参谋' : '抖音电商罗盘';
+            const title = channel === 'tmall'
+                ? 'Tmall - 女士包袋热卖排行 Top ' + data.total
+                : '抖音 - 女包畅销品 Top ' + data.total;
+            const metricLabel = channel === 'tmall' ? '交易指数' : '销量/销售额';
+
+            let html = '<div class="subsection">';
+            html += '<div class="section-title">' + title + '</div>';
+            html += '<div class="data-source">ℹ️ 数据来源: ' + sourceLabel + ' · '
+                + (data.category_path || '') + ' · ' + (data.time_range || '')
+                + ' · ' + (data.extract_date || '')
+                + ' <span style="margin-left:8px;"><span style="color:#2ed573;">●</span> API 实时数据</span></div>';
+
+            html += '<table class="product-table"><thead><tr>';
+            html += '<th>排名</th><th>商品名称</th><th>品牌</th><th>店铺</th><th>价格</th>';
+            html += '<th>' + metricLabel + '</th>';
+            if (channel === 'douyin') html += '<th>带货方式</th>';
+            html += '</tr></thead><tbody>';
+
+            for (const p of data.products) {
+                const tracked = isTrackedBrand(p.brand, p.store_name);
+                const rowStyle = tracked ? ' style="background:rgba(102,126,234,0.08); border-left:2px solid #667eea;"' : '';
+                const brandBadge = tracked ? '<span style="color:#667eea; font-size:10px; margin-left:4px;">● 竞品</span>' : '';
+
+                html += '<tr' + rowStyle + '>';
+                html += '<td class="rank-col">' + p.rank + '</td>';
+                html += '<td>' + (p.product_name || '') + '</td>';
+                html += '<td>' + (p.brand || '') + brandBadge + '</td>';
+                html += '<td>' + (p.store_name || '') + '</td>';
+                html += '<td>' + (p.price || '') + '</td>';
+
+                // Sales metric
+                let metricVal = '';
+                if (p.sales_metric_value != null) {
+                    const v = Number(p.sales_metric_value);
+                    if (v >= 10000) metricVal = (v / 10000).toFixed(1) + '万';
+                    else metricVal = v.toLocaleString();
+                }
+                html += '<td>' + metricVal + '</td>';
+
+                if (channel === 'douyin') {
+                    const channelMap = { livestream: '直播', short_video: '短视频', shelf: '商城' };
+                    html += '<td>' + (channelMap[p.sales_channel] || p.sales_channel || '') + '</td>';
+                }
+                html += '</tr>';
+            }
+
+            html += '</tbody></table>';
+
+            // Brand frequency summary
+            const brandFreq = {};
+            for (const p of data.products) {
+                const b = (p.brand || '').trim();
+                if (b) brandFreq[b] = (brandFreq[b] || 0) + 1;
+            }
+            const sortedBrands = Object.entries(brandFreq).sort((a, b) => b[1] - a[1]).slice(0, 10);
+            if (sortedBrands.length > 0) {
+                html += '<div style="margin-top:16px; padding:12px; background:#1a1a24; border:1px solid #2a2a35; border-radius:4px; border-left:3px solid #667eea;">';
+                html += '<div style="font-size:12px; color:#667eea; font-weight:600; margin-bottom:8px;">品牌占榜分析 (Top ' + data.total + ')</div>';
+                html += '<div style="display:flex; flex-wrap:wrap; gap:8px;">';
+                for (const [brand, count] of sortedBrands) {
+                    const tracked = isTrackedBrand(brand, '');
+                    const color = tracked ? '#667eea' : '#8090a0';
+                    html += '<span style="padding:3px 10px; background:#0d0d14; border:1px solid ' + color + '; border-radius:12px; font-size:11px; color:' + color + ';">'
+                        + brand + ' × ' + count + '</span>';
+                }
+                html += '</div></div>';
+            }
+
+            html += '</div>'; // end .subsection
+            return html;
+        }
 
         // ═══════════════════════════════════════════════════════════
         // DATA-DRIVEN COMPETITORS TAB

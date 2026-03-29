@@ -23,11 +23,16 @@ import sys
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
-from .chrome_schema import validate_and_normalize
+from .chrome_schema import (
+    clean_json_text,
+    validate_and_normalize,
+    validate_and_normalize_ranking,
+)
 from .storage import (
     DEFAULT_DB_PATH,
     init_db,
     record_scrape_run,
+    save_product_rankings,
     save_snapshot,
     update_scrape_run,
 )
@@ -329,6 +334,130 @@ def import_extracts(
     return succeeded > 0, summary
 
 
+def _compute_brand_frequency(products: list) -> Dict[str, int]:
+    """Count how many products each brand has in the ranking."""
+    freq: Dict[str, int] = {}
+    for prod in products:
+        brand = prod.get("brand", "").strip()
+        if brand:
+            freq[brand] = freq.get(brand, 0) + 1
+    return dict(sorted(freq.items(), key=lambda x: -x[1]))
+
+
+def _detect_data_type(text: str) -> str:
+    """
+    Detect whether incoming JSON is a brand extract or a ranking extract.
+
+    Returns:
+        'ranking' if the JSON has a 'source' field with ranking values,
+        'brand_extract' otherwise.
+    """
+    cleaned = clean_json_text(text)
+    try:
+        data = json.loads(cleaned)
+    except (json.JSONDecodeError, ValueError):
+        return "brand_extract"  # Let the normal validator handle the error
+
+    if isinstance(data, dict) and data.get("source") in ("sycm", "douyin_shop"):
+        return "ranking"
+    return "brand_extract"
+
+
+def import_rankings(
+    files: List[str],
+    stdin_text: Optional[str] = None,
+    stdin_source: Optional[str] = None,
+    db_path: Optional[str] = None,
+    dry_run: bool = False,
+) -> Tuple[bool, str]:
+    """
+    Import ranking data (SYCM or Douyin Shop) from files and/or stdin.
+
+    Args:
+        files: List of JSON file paths to import.
+        stdin_text: Text from stdin (if --stdin was used).
+        stdin_source: Source override for stdin ('sycm' or 'douyin_shop').
+        db_path: Path to SQLite database. None for default.
+        dry_run: If True, validate only — don't import.
+
+    Returns:
+        Tuple of (success: bool, message: str).
+    """
+    all_rankings: List[dict] = []
+    all_errors: List[str] = []
+
+    # Process files
+    for fpath in files:
+        if not os.path.exists(fpath):
+            all_errors.append(f"File not found: {fpath}")
+            continue
+        text = _read_file(fpath)
+        data, errors = validate_and_normalize_ranking(text)
+        if errors:
+            all_errors.extend(f"[{fpath}] {e}" for e in errors)
+        elif data:
+            all_rankings.append(data)
+
+    # Process stdin
+    if stdin_text is not None:
+        data, errors = validate_and_normalize_ranking(stdin_text)
+        if errors:
+            all_errors.extend(f"[stdin] {e}" for e in errors)
+        elif data:
+            all_rankings.append(data)
+
+    if all_errors:
+        return False, "Validation failed — no data imported:\n" + "\n".join(
+            f"  - {e}" for e in all_errors
+        )
+
+    if not all_rankings:
+        return False, "No ranking data to import."
+
+    summaries = []
+    for ranking in all_rankings:
+        source = ranking["source"]
+        extract_date = ranking["extract_date"]
+        category_path = ranking.get("category_path", "")
+        time_range = ranking.get("time_range", "")
+        ranking_type = ranking.get("ranking_type", "")
+        products = ranking.get("products", [])
+
+        # Brand frequency analysis
+        brand_freq = _compute_brand_frequency(products)
+        top_brand = next(iter(brand_freq), None)
+        top_count = brand_freq.get(top_brand, 0) if top_brand else 0
+
+        if dry_run:
+            summary = (
+                f"Dry run — would import {len(products)} products from "
+                f"{source} ({category_path}, {time_range})."
+            )
+            if top_brand:
+                summary += f" Top brand: {top_brand} ({top_count} products in top {len(products)})."
+            summaries.append(summary)
+            continue
+
+        # Import
+        db_path_resolved = db_path or DEFAULT_DB_PATH
+        conn = init_db(db_path_resolved)
+        inserted = save_product_rankings(
+            conn, source, extract_date, category_path,
+            ranking_type, products, time_range,
+        )
+        conn.close()
+
+        summary = (
+            f"Imported {inserted} products from {source} "
+            f"({category_path}, {time_range})."
+        )
+        if top_brand:
+            summary += f" Top brand: {top_brand} ({top_count} products in top {len(products)})."
+        summaries.append(summary)
+
+    return True, "\n".join(summaries)
+
+
 def main():
     """CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -350,6 +479,13 @@ def main():
         default=None,
         choices=["xhs", "douyin"],
         help="Platform for stdin input (required with --stdin if not in JSON)",
+    )
+    parser.add_argument(
+        "--source",
+        type=str,
+        default=None,
+        choices=["sycm", "douyin_shop"],
+        help="Source for ranking data (auto-detected from JSON if not specified)",
     )
     parser.add_argument(
         "--db-path",
@@ -374,13 +510,39 @@ def main():
             print("Error: stdin is empty")
             sys.exit(1)
 
-    success, message = import_extracts(
-        files=args.files or [],
-        stdin_text=stdin_text,
-        stdin_platform=args.platform,
-        db_path=args.db_path,
-        dry_run=args.dry_run,
-    )
+    # Auto-detect data type: ranking vs brand extract
+    # Check if --source was explicitly provided (ranking mode)
+    is_ranking = args.source is not None
+
+    # Also auto-detect from file content if not explicitly ranking
+    if not is_ranking:
+        # Check stdin first
+        if stdin_text and _detect_data_type(stdin_text) == "ranking":
+            is_ranking = True
+        # Check files
+        for fpath in (args.files or []):
+            if os.path.exists(fpath):
+                text = _read_file(fpath)
+                if _detect_data_type(text) == "ranking":
+                    is_ranking = True
+                    break
+
+    if is_ranking:
+        success, message = import_rankings(
+            files=args.files or [],
+            stdin_text=stdin_text,
+            stdin_source=args.source,
+            db_path=args.db_path,
+            dry_run=args.dry_run,
+        )
+    else:
+        success, message = import_extracts(
+            files=args.files or [],
+            stdin_text=stdin_text,
+            stdin_platform=args.platform,
+            db_path=args.db_path,
+            dry_run=args.dry_run,
+        )
 
     print(message)
     sys.exit(0 if success else 1)

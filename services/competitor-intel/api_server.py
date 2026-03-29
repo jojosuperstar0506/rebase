@@ -33,6 +33,7 @@ from .storage import (
     get_all_brands,
     get_latest_snapshot,
     get_metric_history,
+    get_product_rankings,
 )
 
 
@@ -74,6 +75,12 @@ class DashboardAPIHandler(SimpleHTTPRequestHandler):
         elif path.startswith("/api/brands/") and path.endswith("/latest"):
             brand_name = self._extract_brand_name(path, "/latest")
             self._handle_brand_latest(brand_name)
+        elif path == "/api/rankings":
+            query_params = parse_qs(parsed.query)
+            source = query_params.get("source", ["sycm"])[0]
+            limit = int(query_params.get("limit", ["100"])[0])
+            date = query_params.get("date", [None])[0]
+            self._handle_rankings(source, limit, date)
         elif path.startswith("/api/brands/") and path.endswith("/metrics"):
             brand_name = self._extract_brand_name(path, "/metrics")
             query_params = parse_qs(parsed.query)
@@ -174,6 +181,31 @@ class DashboardAPIHandler(SimpleHTTPRequestHandler):
                 "brand_name": brand_name,
                 "days": days,
                 "metrics": metrics,
+            })
+        except Exception as e:
+            self._send_error_json(500, str(e))
+
+    def _handle_rankings(self, source: str, limit: int = 100, date: str = None):
+        """GET /api/rankings?source=sycm&limit=100&date=2026-03-28 — product rankings."""
+        try:
+            conn = self._get_conn()
+            products = get_product_rankings(conn, source, extract_date=date, limit=limit)
+
+            # Get metadata from the first row
+            meta = {}
+            if products:
+                meta = {
+                    "category_path": products[0].get("category_path", ""),
+                    "time_range": products[0].get("time_range", ""),
+                    "ranking_type": products[0].get("ranking_type", ""),
+                    "extract_date": products[0].get("extract_date", ""),
+                }
+
+            self._send_json({
+                "source": source,
+                "total": len(products),
+                **meta,
+                "products": products,
             })
         except Exception as e:
             self._send_error_json(500, str(e))
