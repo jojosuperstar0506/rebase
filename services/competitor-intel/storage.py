@@ -180,6 +180,40 @@ def init_db(db_path: Optional[str] = None) -> sqlite3.Connection:
 
         CREATE INDEX IF NOT EXISTS idx_rankings_brand
             ON product_rankings(brand, extract_date DESC);
+
+        CREATE TABLE IF NOT EXISTS scores (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            brand_name TEXT NOT NULL,
+            date TEXT NOT NULL,
+            momentum_score REAL,
+            threat_index REAL,
+            gtm_signals TEXT,
+            score_breakdown TEXT,
+            threat_breakdown TEXT,
+            data_completeness REAL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(brand_name, date)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_scores_brand_date
+            ON scores(brand_name, date DESC);
+
+        CREATE TABLE IF NOT EXISTS narratives (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL,
+            narrative_type TEXT NOT NULL,
+            brand_name TEXT,
+            content TEXT NOT NULL,
+            model_used TEXT,
+            input_tokens INTEGER,
+            output_tokens INTEGER,
+            cost_estimate REAL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(date, narrative_type, brand_name)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_narratives_date_type
+            ON narratives(date DESC, narrative_type);
     """)
 
     # Populate brands from config (upsert)
@@ -457,6 +491,88 @@ def export_latest_json(conn: sqlite3.Connection, output_path: str) -> None:
         json.dump(output, f, ensure_ascii=False, indent=2)
 
 
+# ─── Enriched Dashboard Export ─────────────────────────────────────────────────
+
+
+def export_dashboard_json(conn: sqlite3.Connection, output_path: str) -> None:
+    """
+    Export an enriched JSON file that includes brand snapshots, scores, signals,
+    and narratives. This powers the Vercel static fallback with full intelligence.
+
+    Args:
+        conn: Database connection.
+        output_path: File path to write the JSON output.
+    """
+    # Start with the base export structure
+    brands_data = {}
+    brand_rows = conn.execute("SELECT name FROM brands").fetchall()
+    for row in brand_rows:
+        brand_name = row["name"]
+        snapshot = get_latest_snapshot(conn, brand_name)
+        if snapshot:
+            brands_data[brand_name] = snapshot
+
+    # Scores
+    scores_list = get_latest_scores(conn)
+    scores_by_brand = {}
+    scores_date = None
+    for s in scores_list:
+        scores_date = s.get("date", scores_date)
+        scores_by_brand[s["brand_name"]] = {
+            "momentum_score": s.get("momentum_score"),
+            "threat_index": s.get("threat_index"),
+            "gtm_signals": s.get("gtm_signals", []),
+            "score_breakdown": s.get("score_breakdown", {}),
+            "threat_breakdown": s.get("threat_breakdown", {}),
+            "data_completeness": s.get("data_completeness", 0),
+        }
+
+    # Narratives
+    all_narratives = get_latest_narratives(conn)
+    brand_narratives = {}
+    strategic_summary = None
+    action_items = None
+    narratives_date = None
+    for n in all_narratives:
+        narratives_date = n.get("date", narratives_date)
+        if n["narrative_type"] == "brand" and n.get("brand_name"):
+            brand_narratives[n["brand_name"]] = n["content"]
+        elif n["narrative_type"] == "strategic_summary":
+            strategic_summary = n["content"]
+        elif n["narrative_type"] == "action_items":
+            action_items = n["content"]
+
+    output = {
+        "scrape_date": datetime.now().strftime("%Y-%m-%d"),
+        "scrape_version": "7dim-v1",
+        "dashboard_html": "/competitor-intel.html",
+        "brands_count": len(brands_data),
+        "groups": {},
+        "brands": brands_data,
+        "scores": {
+            "date": scores_date,
+            "brands": scores_by_brand,
+        },
+        "narratives": {
+            "date": narratives_date,
+            "brand_narratives": brand_narratives,
+            "strategic_summary": strategic_summary,
+            "action_items": action_items,
+        },
+    }
+
+    for group_key, group in BRAND_GROUPS.items():
+        output["groups"][group_key] = {
+            "name": group["name"],
+            "subtitle": group["subtitle"],
+            "brands": [b["name"] for b in group["brands"]],
+        }
+
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(output, f, ensure_ascii=False, indent=2)
+
+
 # ─── Product Rankings ─────────────────────────────────────────────────────────
 
 
@@ -629,3 +745,389 @@ def get_ranking_history(
         (row["extract_date"], row["rank"], row["product_name"], row["sales_metric_value"])
         for row in rows
     ]
+
+
+# ─── Deltas ───────────────────────────────────────────────────────────────────
+
+
+def save_deltas(
+    conn: sqlite3.Connection,
+    brand_name: str,
+    date: str,
+    deltas_dict: Dict[str, dict],
+) -> None:
+    """
+    Save computed deltas for a brand. Upsert behavior: overwrites existing
+    entries for the same brand+date+metric.
+
+    Args:
+        conn: Database connection.
+        brand_name: The brand these deltas belong to.
+        date: ISO date string (YYYY-MM-DD).
+        deltas_dict: Maps metric_name → {previous_value, current_value,
+                     absolute_change, pct_change}.
+    """
+    for metric_name, delta in deltas_dict.items():
+        # Delete any existing entry for this brand+date+metric
+        conn.execute(
+            "DELETE FROM deltas WHERE brand_name = ? AND date = ? AND metric_name = ?",
+            (brand_name, date, metric_name),
+        )
+        conn.execute(
+            """INSERT INTO deltas
+               (brand_name, date, metric_name, previous_value, current_value,
+                absolute_change, pct_change)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                brand_name,
+                date,
+                metric_name,
+                str(delta.get("previous_value", "")),
+                str(delta.get("current_value", "")),
+                delta.get("absolute_change"),
+                delta.get("pct_change"),
+            ),
+        )
+    conn.commit()
+
+
+def get_latest_deltas(
+    conn: sqlite3.Connection,
+    brand_name: Optional[str] = None,
+) -> List[dict]:
+    """
+    Get the most recent deltas. If brand_name is None, returns all brands.
+
+    Args:
+        conn: Database connection.
+        brand_name: Optional brand filter.
+
+    Returns:
+        List of delta dicts with brand_name, date, metric_name, etc.
+    """
+    if brand_name:
+        # Find the latest date for this brand
+        row = conn.execute(
+            "SELECT MAX(date) as d FROM deltas WHERE brand_name = ?",
+            (brand_name,),
+        ).fetchone()
+        if row is None or row["d"] is None:
+            return []
+        latest_date = row["d"]
+        rows = conn.execute(
+            """SELECT brand_name, date, metric_name, previous_value,
+                      current_value, absolute_change, pct_change
+               FROM deltas
+               WHERE brand_name = ? AND date = ?
+               ORDER BY metric_name""",
+            (brand_name, latest_date),
+        ).fetchall()
+    else:
+        # Find the global latest date
+        row = conn.execute("SELECT MAX(date) as d FROM deltas").fetchone()
+        if row is None or row["d"] is None:
+            return []
+        latest_date = row["d"]
+        rows = conn.execute(
+            """SELECT brand_name, date, metric_name, previous_value,
+                      current_value, absolute_change, pct_change
+               FROM deltas
+               WHERE date = ?
+               ORDER BY brand_name, metric_name""",
+            (latest_date,),
+        ).fetchall()
+
+    return [dict(r) for r in rows]
+
+
+def get_delta_history(
+    conn: sqlite3.Connection,
+    brand_name: str,
+    metric_name: str,
+    days: int = 30,
+) -> List[Tuple[str, Optional[float], Optional[float]]]:
+    """
+    Get the history of deltas for a brand+metric over time.
+
+    Useful for trending the rate of change itself.
+
+    Args:
+        conn: Database connection.
+        brand_name: The brand to query.
+        metric_name: The metric to retrieve.
+        days: Number of days of history (default 30).
+
+    Returns:
+        List of (date, absolute_change, pct_change) tuples, ordered by date ASC.
+    """
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    rows = conn.execute(
+        """SELECT date, absolute_change, pct_change
+           FROM deltas
+           WHERE brand_name = ? AND metric_name = ? AND date >= ?
+           ORDER BY date ASC""",
+        (brand_name, metric_name, cutoff),
+    ).fetchall()
+
+    return [(row["date"], row["absolute_change"], row["pct_change"]) for row in rows]
+
+
+# ─── Scores ──────────────────────────────────────────────────────────────────
+
+
+def save_scores(
+    conn: sqlite3.Connection,
+    brand_name: str,
+    date: str,
+    momentum_score: Optional[float],
+    threat_index: Optional[float],
+    gtm_signals: List[dict],
+    score_breakdown: dict,
+    threat_breakdown: dict,
+    data_completeness: float,
+) -> None:
+    """
+    Save computed scores for a brand. Upsert: replaces on brand_name+date conflict.
+
+    Args:
+        conn: Database connection.
+        brand_name: The brand these scores belong to.
+        date: ISO date string (YYYY-MM-DD).
+        momentum_score: Brand momentum score (0-100).
+        threat_index: Threat to OMI score (0-100).
+        gtm_signals: List of active GTM signal dicts.
+        score_breakdown: Full momentum score breakdown dict.
+        threat_breakdown: Full threat index breakdown dict.
+        data_completeness: Fraction of signals with data (0-1).
+    """
+    conn.execute(
+        """INSERT OR REPLACE INTO scores
+           (brand_name, date, momentum_score, threat_index, gtm_signals,
+            score_breakdown, threat_breakdown, data_completeness)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            brand_name,
+            date,
+            momentum_score,
+            threat_index,
+            json.dumps(gtm_signals, ensure_ascii=False),
+            json.dumps(score_breakdown, ensure_ascii=False),
+            json.dumps(threat_breakdown, ensure_ascii=False),
+            data_completeness,
+        ),
+    )
+    conn.commit()
+
+
+def get_latest_scores(
+    conn: sqlite3.Connection,
+    brand_name: Optional[str] = None,
+) -> List[dict]:
+    """
+    Get the most recent scores. If brand_name is None, returns all brands.
+
+    Args:
+        conn: Database connection.
+        brand_name: Optional brand filter.
+
+    Returns:
+        List of score dicts with all fields including parsed JSON.
+    """
+    if brand_name:
+        row = conn.execute(
+            "SELECT MAX(date) as d FROM scores WHERE brand_name = ?",
+            (brand_name,),
+        ).fetchone()
+        if row is None or row["d"] is None:
+            return []
+        latest_date = row["d"]
+        rows = conn.execute(
+            """SELECT brand_name, date, momentum_score, threat_index,
+                      gtm_signals, score_breakdown, threat_breakdown,
+                      data_completeness
+               FROM scores
+               WHERE brand_name = ? AND date = ?""",
+            (brand_name, latest_date),
+        ).fetchall()
+    else:
+        row = conn.execute("SELECT MAX(date) as d FROM scores").fetchone()
+        if row is None or row["d"] is None:
+            return []
+        latest_date = row["d"]
+        rows = conn.execute(
+            """SELECT brand_name, date, momentum_score, threat_index,
+                      gtm_signals, score_breakdown, threat_breakdown,
+                      data_completeness
+               FROM scores
+               WHERE date = ?
+               ORDER BY brand_name""",
+            (latest_date,),
+        ).fetchall()
+
+    results = []
+    for r in rows:
+        d = dict(r)
+        # Parse JSON fields
+        d["gtm_signals"] = json.loads(d["gtm_signals"]) if d["gtm_signals"] else []
+        d["score_breakdown"] = json.loads(d["score_breakdown"]) if d["score_breakdown"] else {}
+        d["threat_breakdown"] = json.loads(d["threat_breakdown"]) if d["threat_breakdown"] else {}
+        results.append(d)
+    return results
+
+
+def get_score_history(
+    conn: sqlite3.Connection,
+    brand_name: str,
+    days: int = 30,
+) -> List[Tuple[str, Optional[float], Optional[float]]]:
+    """
+    Get score history for a brand over time.
+
+    Args:
+        conn: Database connection.
+        brand_name: The brand to query.
+        days: Number of days of history (default 30).
+
+    Returns:
+        List of (date, momentum_score, threat_index) tuples, ordered by date ASC.
+    """
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    rows = conn.execute(
+        """SELECT date, momentum_score, threat_index
+           FROM scores
+           WHERE brand_name = ? AND date >= ?
+           ORDER BY date ASC""",
+        (brand_name, cutoff),
+    ).fetchall()
+
+    return [(row["date"], row["momentum_score"], row["threat_index"]) for row in rows]
+
+
+# ─── Narratives ──────────────────────────────────────────────────────────────
+
+
+def save_narrative(
+    conn: sqlite3.Connection,
+    date: str,
+    narrative_type: str,
+    content: str,
+    brand_name: Optional[str] = None,
+    model_used: Optional[str] = None,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    cost_estimate: float = 0.0,
+) -> None:
+    """
+    Save a narrative to the database. Upsert on (date, narrative_type, brand_name).
+
+    Args:
+        conn: Database connection.
+        date: ISO date string (YYYY-MM-DD).
+        narrative_type: 'brand', 'strategic_summary', or 'action_items'.
+        content: The narrative text or JSON string.
+        brand_name: Brand name for 'brand' type narratives, None otherwise.
+        model_used: Claude model identifier used.
+        input_tokens: Number of input tokens used.
+        output_tokens: Number of output tokens used.
+        cost_estimate: Estimated USD cost of the API call.
+    """
+    conn.execute(
+        """INSERT OR REPLACE INTO narratives
+           (date, narrative_type, brand_name, content, model_used,
+            input_tokens, output_tokens, cost_estimate)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (date, narrative_type, brand_name, content, model_used,
+         input_tokens, output_tokens, cost_estimate),
+    )
+    conn.commit()
+
+
+def get_latest_narratives(
+    conn: sqlite3.Connection,
+    narrative_type: Optional[str] = None,
+) -> List[dict]:
+    """
+    Get the most recent narratives. If narrative_type is None, returns all types.
+
+    Args:
+        conn: Database connection.
+        narrative_type: Optional filter ('brand', 'strategic_summary', 'action_items').
+
+    Returns:
+        List of narrative dicts.
+    """
+    # Find the latest date
+    if narrative_type:
+        row = conn.execute(
+            "SELECT MAX(date) as d FROM narratives WHERE narrative_type = ?",
+            (narrative_type,),
+        ).fetchone()
+    else:
+        row = conn.execute("SELECT MAX(date) as d FROM narratives").fetchone()
+
+    if row is None or row["d"] is None:
+        return []
+    latest_date = row["d"]
+
+    if narrative_type:
+        rows = conn.execute(
+            """SELECT date, narrative_type, brand_name, content, model_used,
+                      input_tokens, output_tokens, cost_estimate
+               FROM narratives
+               WHERE date = ? AND narrative_type = ?
+               ORDER BY brand_name""",
+            (latest_date, narrative_type),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """SELECT date, narrative_type, brand_name, content, model_used,
+                      input_tokens, output_tokens, cost_estimate
+               FROM narratives
+               WHERE date = ?
+               ORDER BY narrative_type, brand_name""",
+            (latest_date,),
+        ).fetchall()
+
+    return [dict(r) for r in rows]
+
+
+def get_narrative_history(
+    conn: sqlite3.Connection,
+    brand_name: Optional[str] = None,
+    narrative_type: Optional[str] = None,
+    days: int = 30,
+) -> List[dict]:
+    """
+    Get narrative history over time.
+
+    Args:
+        conn: Database connection.
+        brand_name: Optional brand filter.
+        narrative_type: Optional type filter.
+        days: Number of days of history (default 30).
+
+    Returns:
+        List of narrative dicts ordered by date ascending.
+    """
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    conditions = ["date >= ?"]
+    params: list = [cutoff]
+
+    if brand_name:
+        conditions.append("brand_name = ?")
+        params.append(brand_name)
+    if narrative_type:
+        conditions.append("narrative_type = ?")
+        params.append(narrative_type)
+
+    where = " AND ".join(conditions)
+    rows = conn.execute(
+        f"""SELECT date, narrative_type, brand_name, content, model_used,
+                   input_tokens, output_tokens, cost_estimate
+            FROM narratives
+            WHERE {where}
+            ORDER BY date ASC, narrative_type, brand_name""",
+        params,
+    ).fetchall()
+
+    return [dict(r) for r in rows]

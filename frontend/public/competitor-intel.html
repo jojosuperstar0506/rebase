@@ -706,6 +706,173 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #4a4a55;
         }
+
+        /* SCORE BADGES */
+        .score-badge-inline {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 1px 5px;
+            border-radius: 3px;
+            margin-left: 4px;
+            line-height: 1.4;
+        }
+        .score-badge-hot { background: rgba(255, 71, 87, 0.2); color: #ff4757; }
+        .score-badge-warm { background: rgba(255, 165, 2, 0.2); color: #ffa502; }
+        .score-badge-cool { background: rgba(46, 213, 115, 0.2); color: #2ed573; }
+
+        .gtm-icon {
+            font-size: 10px;
+            margin-left: 2px;
+            color: #ffa502;
+        }
+
+        /* NARRATIVE PANEL */
+        .narrative-panel {
+            padding: 12px 16px;
+            background: rgba(102, 126, 234, 0.05);
+            border-left: 3px solid #667eea;
+            border-radius: 2px;
+            margin-bottom: 16px;
+        }
+
+        /* MOMENTUM LEADERBOARD TABLE */
+        .leaderboard-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #1a1a24;
+            border: 1px solid #2a2a35;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 12px;
+        }
+        .leaderboard-table thead { background: #242430; }
+        .leaderboard-table th {
+            padding: 8px 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #667eea;
+            font-size: 11px;
+            border-bottom: 1px solid #2a2a35;
+        }
+        .leaderboard-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #2a2a35;
+            font-size: 12px;
+        }
+        .leaderboard-table tr:last-child td { border-bottom: none; }
+
+        /* SIGNAL BADGE */
+        .signal-badge {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 600;
+            margin: 1px 2px;
+            background: rgba(255, 165, 2, 0.15);
+            color: #ffa502;
+        }
+
+        /* DEPARTMENT & URGENCY BADGES */
+        .dept-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 600;
+            margin-right: 4px;
+        }
+        .dept-产品部 { background: rgba(102, 126, 234, 0.2); color: #667eea; }
+        .dept-市场部 { background: rgba(157, 78, 221, 0.2); color: #9d4edd; }
+        .dept-电商部 { background: rgba(46, 213, 115, 0.2); color: #2ed573; }
+        .dept-内容部 { background: rgba(255, 165, 2, 0.2); color: #ffa502; }
+        .dept-品牌部 { background: rgba(255, 71, 87, 0.2); color: #ff4757; }
+
+        .urgency-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 600;
+            margin-right: 4px;
+        }
+        .urgency-本周 { background: rgba(255, 71, 87, 0.2); color: #ff4757; }
+        .urgency-本月 { background: rgba(255, 165, 2, 0.2); color: #ffa502; }
+        .urgency-本季度 { background: rgba(128, 144, 160, 0.2); color: #8090a0; }
+
+        /* SYSTEM STATUS OVERLAY */
+        .system-status-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 1000;
+            display: flex;
+            justify-content: flex-end;
+        }
+        .system-status-panel {
+            width: 380px;
+            max-width: 90vw;
+            background: #1a1a24;
+            border-left: 1px solid #2a2a35;
+            padding: 20px;
+            overflow-y: auto;
+            animation: slideIn 0.2s ease;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(100%); }
+            to { transform: translateX(0); }
+        }
+        .status-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 10px 0;
+            border-bottom: 1px solid #2a2a35;
+        }
+        .status-row:last-child { border-bottom: none; }
+        .status-dot {
+            font-size: 12px;
+            margin-top: 2px;
+            flex-shrink: 0;
+        }
+        .status-info { flex: 1; }
+        .status-name {
+            font-size: 12px;
+            font-weight: 600;
+            color: #e8e8ed;
+        }
+        .status-detail {
+            font-size: 11px;
+            color: #8090a0;
+            margin-top: 2px;
+        }
+        .status-time {
+            font-size: 10px;
+            color: #6a6a78;
+            margin-top: 2px;
+        }
+
+        /* NAV SYSTEM STATUS BUTTON */
+        .nav-status-btn {
+            margin-left: auto;
+            padding: 6px 12px;
+            background: none;
+            border: 1px solid #2a2a35;
+            border-radius: 4px;
+            color: #8090a0;
+            cursor: pointer;
+            font-size: 11px;
+            white-space: nowrap;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .nav-status-btn:hover {
+            border-color: #667eea;
+            color: #667eea;
+        }
     </style>
 </head>
 <body>
@@ -726,6 +893,9 @@
         <button class="nav-tab" data-tab="competitors">竞品情报</button>
         <button class="nav-tab" data-tab="matrix">材质定价矩阵</button>
         <button class="nav-tab" data-tab="positioning">品牌定位图</button>
+        <button class="nav-status-btn" id="systemStatusBtn" onclick="toggleSystemStatus()">
+            <span id="statusDot">⚪</span> 系统状态
+        </button>
     </div>
 
     <!-- MAIN CONTAINER -->
@@ -737,6 +907,29 @@
         <div class="content-area">
             <!-- TAB 1: OMI记分卡 -->
             <div class="section active" id="scorecard">
+                <!-- 竞争态势 section (data-driven) -->
+                <div class="subsection" id="competitiveLandscapeSection">
+                    <div class="section-title">竞争态势 Competitive Landscape</div>
+                    <div class="data-source" id="landscapeDataSource">ℹ️ 基于品牌动量分数和威胁指数</div>
+
+                    <!-- Key Metrics Cards -->
+                    <div id="landscapeMetricCards" class="scorecard" style="margin-bottom:16px;"></div>
+
+                    <!-- Momentum Leaderboard -->
+                    <div id="landscapeLeaderboard"></div>
+
+                    <!-- Strategic Summary -->
+                    <div id="landscapeStrategicSummary"></div>
+
+                    <!-- Action Items -->
+                    <div id="landscapeActionItems"></div>
+
+                    <!-- Loading / No Data -->
+                    <div id="landscapeLoading" style="text-align:center; padding:20px; color:#6a6a78;">
+                        ⏳ 加载评分数据中...
+                    </div>
+                </div>
+
                 <div class="subsection">
                     <div class="section-title">OMI诊断</div>
                     <div class="data-source">ℹ️ 实时数据更新</div>
@@ -1463,12 +1656,25 @@
         </div>
     </div>
 
+    <!-- SYSTEM STATUS OVERLAY -->
+    <div id="systemStatusOverlay" class="system-status-overlay" style="display:none;" onclick="toggleSystemStatus()">
+        <div class="system-status-panel" onclick="event.stopPropagation()">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <div style="font-size:14px; font-weight:600; color:#667eea;">📊 系统状态</div>
+                <button onclick="toggleSystemStatus()" style="background:none; border:none; color:#8090a0; cursor:pointer; font-size:16px;">✕</button>
+            </div>
+            <div id="systemStatusContent" style="color:#8090a0;">加载中...</div>
+        </div>
+    </div>
+
     <script>
         // ═══════════════════════════════════════════════════════════
         // GLOBAL STATE
         // ═══════════════════════════════════════════════════════════
         let dashboardData = null;    // Loaded from API
         let activeBrand = null;      // Currently selected brand name
+        let scoresData = null;       // Scores from /api/scores/latest
+        let narrativesData = null;   // Narratives from /api/narratives/latest
 
         // Group descriptions (fallback if API doesn't provide them)
         const GROUP_DESCRIPTIONS = {
@@ -1715,6 +1921,9 @@
 
             // Show data source indicator
             renderDataSourceBadge();
+
+            // Also fetch scores + narratives for competitive landscape
+            loadScoresAndNarratives();
         }
 
         // ── Data source status badge ────────────────────────────
@@ -1777,7 +1986,19 @@
                     const item = document.createElement('div');
                     item.className = 'competitor-item';
                     item.dataset.competitor = brandName;
-                    item.textContent = brandName;
+
+                    // Build label with optional score badges
+                    let label = esc(brandName);
+                    if (scoresData && scoresData.brands && scoresData.brands[brandName]) {
+                        const sc = scoresData.brands[brandName];
+                        const m = Math.round(sc.momentum_score || 0);
+                        const mClass = m > 70 ? 'score-badge-hot' : m > 40 ? 'score-badge-warm' : 'score-badge-cool';
+                        label += ` <span class="score-badge-inline ${mClass}">${m}</span>`;
+                        if (sc.gtm_signals && sc.gtm_signals.length > 0) {
+                            label += '<span class="gtm-icon">⚡</span>';
+                        }
+                    }
+                    item.innerHTML = label;
 
                     // Grey out brands with no data
                     const hasData = dashboardData.brands && dashboardData.brands[brandName];
@@ -1852,8 +2073,11 @@
                 <div class="brief-title">
                     ${esc(b.brand_name)} (${esc(b.brand_name_en)})
                     <span class="brand-badge">${esc(b.badge)}</span>
+                    ${renderScoreBadges(b.brand_name)}
                     <span style="font-size:11px; color:#6a6a78; margin-left:auto;">数据更新: ${esc(b.scrape_date)}</span>
                 </div>
+
+                ${renderBrandNarrative(b.brand_name)}
 
                 <!-- D1: 品牌搜索指数 -->
                 ${renderDimension('D1', '品牌搜索指数 Brand Search Index', '', `
@@ -2080,6 +2304,264 @@
                 html += `<li><span class="dim-tag ${sc}">${esc(s.sentiment || '中性')}</span> "${esc(s.title)}" — ${esc(s.author || '')}${s.date ? ' · ' + esc(s.date) : ''}${s.likes ? ' · ' + s.likes + '赞' : ''}</li>`;
             });
             html += '</ul>';
+            return html;
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // SCORES, NARRATIVES & COMPETITIVE LANDSCAPE
+        // ═══════════════════════════════════════════════════════════
+
+        async function loadScoresAndNarratives() {
+            try {
+                const [scoresResp, narrativesResp] = await Promise.all([
+                    fetch(API_BASE + '/api/scores/latest').catch(() => null),
+                    fetch(API_BASE + '/api/narratives/latest').catch(() => null),
+                ]);
+                if (scoresResp && scoresResp.ok) scoresData = await scoresResp.json();
+                if (narrativesResp && narrativesResp.ok) narrativesData = await narrativesResp.json();
+            } catch (e) {
+                console.warn('Scores/narratives not available:', e.message);
+            }
+
+            // Also try static fallback if API scores not available
+            if (!scoresData && dashboardData && dashboardData.scores && dashboardData.scores.brands) {
+                scoresData = dashboardData.scores;
+            }
+            if (!narrativesData && dashboardData && dashboardData.narratives) {
+                narrativesData = dashboardData.narratives;
+            }
+
+            // Re-render sidebar with score badges
+            if (scoresData) renderSidebar();
+
+            // Render competitive landscape
+            renderCompetitiveLandscape();
+        }
+
+        function renderCompetitiveLandscape() {
+            const loadingEl = document.getElementById('landscapeLoading');
+            const cardsEl = document.getElementById('landscapeMetricCards');
+            const boardEl = document.getElementById('landscapeLeaderboard');
+            const summaryEl = document.getElementById('landscapeStrategicSummary');
+            const actionsEl = document.getElementById('landscapeActionItems');
+            const sourceEl = document.getElementById('landscapeDataSource');
+
+            if (!scoresData || !scoresData.brands || Object.keys(scoresData.brands).length === 0) {
+                if (loadingEl) loadingEl.innerHTML = '暂无评分数据。请先运行 <code style="background:#1a1a24; padding:2px 8px; border-radius:3px;">python scoring.py</code> 和 <code style="background:#1a1a24; padding:2px 8px; border-radius:3px;">python narrative.py</code>。';
+                return;
+            }
+
+            if (loadingEl) loadingEl.style.display = 'none';
+            if (sourceEl) sourceEl.innerHTML = (dataSource === 'api' ? '<span style="color:#2ed573;">●</span>' : '<span style="color:#ffa502;">●</span>') + ' 基于品牌动量分数和威胁指数' + (scoresData.date ? ' · ' + scoresData.date : '');
+
+            // Convert brands dict to sorted array
+            const brandsArr = Object.entries(scoresData.brands).map(([name, s]) => ({
+                brand_name: name,
+                momentum_score: s.momentum_score || 0,
+                threat_index: s.threat_index || 0,
+                gtm_signals: s.gtm_signals || [],
+                data_completeness: s.data_completeness || 0,
+            }));
+
+            // Row 1: Key Metric Cards
+            const topMomentum = [...brandsArr].sort((a, b) => b.momentum_score - a.momentum_score)[0];
+            const topThreat = [...brandsArr].sort((a, b) => b.threat_index - a.threat_index)[0];
+            const totalSignals = brandsArr.reduce((sum, b) => sum + (b.gtm_signals ? b.gtm_signals.length : 0), 0);
+
+            if (cardsEl) {
+                const mColor = topMomentum && topMomentum.momentum_score > 70 ? '#ff4757' : '#ffa502';
+                const tColor = topThreat && topThreat.threat_index > 70 ? '#ff4757' : '#ffa502';
+                cardsEl.innerHTML = `
+                    <div class="kpi-card">
+                        <div class="kpi-header"><div class="kpi-name">品牌动量 #1</div></div>
+                        <div class="kpi-values">
+                            <div class="kpi-value"><div class="kpi-label">品牌</div><div class="kpi-number" style="color:${mColor}">${topMomentum ? esc(topMomentum.brand_name) : 'N/A'}</div></div>
+                            <div class="kpi-value"><div class="kpi-label">动量分</div><div class="kpi-number" style="color:${mColor}">${topMomentum ? Math.round(topMomentum.momentum_score) : 0}</div></div>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-header"><div class="kpi-name">最大威胁</div></div>
+                        <div class="kpi-values">
+                            <div class="kpi-value"><div class="kpi-label">品牌</div><div class="kpi-number" style="color:${tColor}">${topThreat ? esc(topThreat.brand_name) : 'N/A'}</div></div>
+                            <div class="kpi-value"><div class="kpi-label">威胁指数</div><div class="kpi-number" style="color:${tColor}">${topThreat ? Math.round(topThreat.threat_index) : 0}</div></div>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-header"><div class="kpi-name">活跃信号</div></div>
+                        <div class="kpi-values">
+                            <div class="kpi-value"><div class="kpi-label">GTM信号总数</div><div class="kpi-number" style="color:#ffa502">${totalSignals}</div></div>
+                            <div class="kpi-value"><div class="kpi-label">有信号品牌</div><div class="kpi-number">${brandsArr.filter(b => b.gtm_signals.length > 0).length}</div></div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Row 2: Momentum Leaderboard
+            const sorted = [...brandsArr].sort((a, b) => b.momentum_score - a.momentum_score);
+            if (boardEl) {
+                let html = '<table class="leaderboard-table"><thead><tr>';
+                html += '<th>排名</th><th>品牌</th><th>动量分</th><th>威胁指数</th><th>GTM信号</th>';
+                html += '</tr></thead><tbody>';
+                sorted.forEach((b, i) => {
+                    const mColor = b.momentum_score > 70 ? '#ff4757' : b.momentum_score > 40 ? '#ffa502' : '#2ed573';
+                    const tColor = b.threat_index > 70 ? '#ff4757' : b.threat_index > 40 ? '#ffa502' : '#2ed573';
+                    const isOmi = b.brand_name === 'OMI' || b.brand_name === '欧米';
+                    const rowStyle = isOmi ? ' style="background:rgba(157,78,221,0.1); border-left:2px solid #9d4edd;"' : '';
+                    const signals = (b.gtm_signals || []).map(g => `<span class="signal-badge">⚡ ${esc(g.signal || '')}</span>`).join('');
+                    html += `<tr${rowStyle}>
+                        <td style="text-align:center; color:#a0a0a8; font-weight:600;">${i + 1}</td>
+                        <td style="font-weight:600;">${esc(b.brand_name)}</td>
+                        <td style="color:${mColor}; font-weight:600;">${Math.round(b.momentum_score)}</td>
+                        <td style="color:${tColor};">${Math.round(b.threat_index)}</td>
+                        <td>${signals || '<span style="color:#6a6a78;">—</span>'}</td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+                boardEl.innerHTML = html;
+            }
+
+            // Row 3: Strategic Summary
+            if (summaryEl && narrativesData && narrativesData.strategic_summary) {
+                summaryEl.innerHTML = `
+                    <div style="margin-top:16px;" class="narrative-panel">
+                        <div style="font-size:12px; font-weight:600; color:#667eea; margin-bottom:8px;">📋 本周竞争态势概览</div>
+                        <div style="font-size:12px; color:#c0c0c8; line-height:1.8; white-space:pre-wrap;">${esc(narrativesData.strategic_summary)}</div>
+                        ${narrativesData.date ? '<div style="font-size:10px; color:#6a6a78; margin-top:8px;">生成日期: ' + esc(narrativesData.date) + '</div>' : ''}
+                    </div>
+                `;
+            }
+
+            // Row 4: Action Items
+            if (actionsEl && narrativesData && narrativesData.action_items) {
+                const items = Array.isArray(narrativesData.action_items) ? narrativesData.action_items : [];
+                if (items.length > 0) {
+                    let html = '<div style="margin-top:16px;"><div style="font-size:13px; font-weight:600; color:#a0a0a8; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid #2a2a35;">🎯 OMI本周行动项</div>';
+                    items.forEach((item, i) => {
+                        const dept = item.department || '未指定';
+                        const urgency = item.urgency || '未指定';
+                        const deptClass = 'dept-' + dept;
+                        const urgencyClass = 'urgency-' + urgency;
+                        html += `<div class="action-item">
+                            <div style="margin-bottom:4px;">
+                                <span style="color:#667eea; font-weight:600; margin-right:6px;">${i + 1}.</span>
+                                <span class="dept-badge ${deptClass}">${esc(dept)}</span>
+                                <span class="urgency-badge ${urgencyClass}">${esc(urgency)}</span>
+                            </div>
+                            <div style="font-size:12px; color:#e8e8ed; margin-bottom:2px;">${esc(item.action || '')}</div>
+                            <div style="font-size:11px; color:#8090a0;">${esc(item.rationale || '')}</div>
+                        </div>`;
+                    });
+                    html += '</div>';
+                    actionsEl.innerHTML = html;
+                }
+            }
+        }
+
+        // Render score badges inline with brand title
+        function renderScoreBadges(brandName) {
+            if (!scoresData || !scoresData.brands || !scoresData.brands[brandName]) return '';
+            const sc = scoresData.brands[brandName];
+            const m = Math.round(sc.momentum_score || 0);
+            const t = Math.round(sc.threat_index || 0);
+            const mClass = m > 70 ? 'score-badge-hot' : m > 40 ? 'score-badge-warm' : 'score-badge-cool';
+            const tClass = t > 70 ? 'score-badge-hot' : t > 40 ? 'score-badge-warm' : 'score-badge-cool';
+            let html = `<span class="score-badge-inline ${mClass}">动量 ${m}</span>`;
+            html += `<span class="score-badge-inline ${tClass}">威胁 ${t}</span>`;
+            if (sc.gtm_signals && sc.gtm_signals.length > 0) {
+                sc.gtm_signals.forEach(g => {
+                    html += `<span class="signal-badge">⚡ ${esc(g.signal || '')}</span>`;
+                });
+            }
+            return html;
+        }
+
+        // Render per-brand narrative insight card
+        function renderBrandNarrative(brandName) {
+            if (!narrativesData) return '';
+            // Check dict format (from API) or fallback
+            const bn = narrativesData.brand_narratives;
+            if (!bn || !bn[brandName]) return '';
+            return `<div class="narrative-panel">
+                <div style="font-size:11px; font-weight:600; color:#667eea; margin-bottom:6px;">🤖 AI 竞争分析</div>
+                <div style="font-size:12px; color:#c0c0c8; line-height:1.6;">${esc(bn[brandName])}</div>
+                ${narrativesData.date ? '<div style="font-size:10px; color:#6a6a78; margin-top:6px;">' + esc(narrativesData.date) + '</div>' : ''}
+            </div>`;
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // SYSTEM STATUS PANEL
+        // ═══════════════════════════════════════════════════════════
+
+        let systemStatusInterval = null;
+        const STATUS_COMPONENT_NAMES = {
+            storage: '数据存储',
+            xhs_data: '小红书数据',
+            douyin_data: '抖音数据',
+            sycm_rankings: '天猫排行榜',
+            douyin_rankings: '抖音排行榜',
+            scoring_engine: '评分引擎',
+            narrative_engine: '叙事引擎',
+            weekly_brief: '周报推送',
+            price_tracking: '价格追踪',
+        };
+
+        function toggleSystemStatus() {
+            const overlay = document.getElementById('systemStatusOverlay');
+            if (overlay.style.display === 'none') {
+                overlay.style.display = 'flex';
+                loadSystemStatus();
+                systemStatusInterval = setInterval(loadSystemStatus, 60000);
+            } else {
+                overlay.style.display = 'none';
+                if (systemStatusInterval) {
+                    clearInterval(systemStatusInterval);
+                    systemStatusInterval = null;
+                }
+            }
+        }
+
+        async function loadSystemStatus() {
+            const contentEl = document.getElementById('systemStatusContent');
+            const dotEl = document.getElementById('statusDot');
+            try {
+                const resp = await fetch(API_BASE + '/api/system-status');
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const data = await resp.json();
+
+                // Update nav dot
+                if (data.overall === 'operational') dotEl.textContent = '🟢';
+                else if (data.overall === 'partial') dotEl.textContent = '🟡';
+                else dotEl.textContent = '🔴';
+
+                contentEl.innerHTML = renderSystemStatusContent(data);
+            } catch (e) {
+                dotEl.textContent = '🔴';
+                contentEl.innerHTML = '<div style="text-align:center; padding:20px; color:#ff4757;">⚠️ 无法连接 API 服务器<div style="font-size:11px; color:#8090a0; margin-top:8px;">请确保已启动: python -m services.competitor-intel.api_server</div></div>';
+            }
+        }
+
+        function renderSystemStatusContent(data) {
+            const statusIcons = { ok: '🟢', stale: '🟡', error: '🔴', none: '🔴', not_built: '⚪' };
+            let html = '';
+            if (data.components) {
+                for (const [key, comp] of Object.entries(data.components)) {
+                    const name = STATUS_COMPONENT_NAMES[key] || key;
+                    const icon = statusIcons[comp.status] || '⚪';
+                    html += `<div class="status-row">
+                        <span class="status-dot">${icon}</span>
+                        <div class="status-info">
+                            <div class="status-name">${esc(name)}</div>
+                            <div class="status-detail">${esc(comp.detail || '')}</div>
+                            ${comp.last_updated ? '<div class="status-time">更新: ' + esc(comp.last_updated) + (comp.freshness ? ' (' + esc(comp.freshness) + ')' : '') + '</div>' : ''}
+                            ${comp.last_cost ? '<div class="status-time">成本: ' + esc(comp.last_cost) + '</div>' : ''}
+                        </div>
+                    </div>`;
+                }
+            }
+            html += `<div style="margin-top:12px; padding-top:12px; border-top:1px solid #2a2a35;">
+                <div style="font-size:11px; color:#8090a0;">${esc(data.data_freshness_summary || '')}</div>
+                <div style="font-size:11px; color:#6a6a78; margin-top:4px;">整体状态: ${data.overall === 'operational' ? '🟢 正常运行' : data.overall === 'partial' ? '🟡 部分可用' : '🔴 异常'}</div>
+            </div>`;
             return html;
         }
 
