@@ -2,7 +2,7 @@
 
 > Single source of truth for product progress. Pull this up every session.
 
-**Last updated:** 2026-03-15
+**Last updated:** 2026-03-28
 
 ---
 
@@ -48,16 +48,17 @@ Converts prospects to believers               Proves intelligence layer works on
 
 ---
 
-## Where We Are Now (as of 2026-03-15)
+## Where We Are Now (as of 2026-03-28)
 
 | Stream | Owner | Status | Layer | Notes |
 |--------|-------|--------|-------|-------|
 | Diagnostics tool (client entry point) | William | In progress | 2 | Intake agent + analysis pipeline |
 | Product Structure Agent (ERP intelligence demo) | Joanna | v0.1 Done | 2 | 3-file ERP export analysis, Streamlit UI |
 | 3-screen visualization dashboard | Joanna | Done | 2 | Department map, before/after toggle, ROI summary — on Vercel |
+| **OMI Competitive Intelligence** | **Joanna** | **v2 Done** | **3** | **Full pipeline: scrape → temporal → scoring → narrative → dashboard → WeChat delivery** |
 | FRD (functional requirements) | Joanna | In progress | All | Defining overall product features |
 | Cloud infrastructure & deployment | William | ✅ Done | — | ✅ Done (William) — HK ECS live at 8.217.242.191 |
-| Virtual employee prototypes | Joanna | Starting | 3 | Marketing (Joanna VE), Image Gen |
+| Virtual employee prototypes | Joanna | In progress | 3 | Competitive Intel (done), Marketing (Joanna VE), Image Gen |
 | ERP connector research | William | TODO | 2-3 | Kingdee/QuickBooks API assessment |
 
 ---
@@ -205,7 +206,37 @@ ERP data + business context → prompt template + LLM API → structured output 
 
 Already built as Product Structure Agent. See Section 2C above.
 
-### Virtual Employee 2: Joanna — Marketing (XHS)
+### Virtual Employee 2: OMI Competitive Intelligence Agent (DONE — v2)
+> Automated competitive intelligence for OMI Bags. Tracks 20 brands across 7 dimensions (pricing, social voice, content strategy, KOL ecosystem, social commerce, product rankings, channel authority). Generates weekly briefs with scores, signals, and action items.
+
+**Architecture:** SQLite storage → Chrome extraction → temporal analysis → scoring engine → Claude narrative layer → dashboard + WeChat Work delivery
+
+| Task | Owner | Status | Sprint | Notes |
+|------|-------|--------|--------|-------|
+| TASK-01: SQLite storage layer + brand registry | Joanna | ✅ Done | — | `storage.py` — 20 brands, 7-dimension schema, metrics extraction |
+| TASK-02: Chrome-based data extraction pipeline | Joanna | ✅ Done | — | XHS, Douyin, SYCM scraper configs |
+| TASK-02B: Top-100 product ranking extraction | Joanna | ✅ Done | — | Tmall + Douyin rankings with brand matching |
+| TASK-03: Connect dashboard to live data | Joanna | ✅ Done | — | API → static JSON → fallback data cascade |
+| TASK-04: Temporal analysis engine | Joanna | ✅ Done | — | `temporal.py` — rolling stats, z-scores, anomaly detection, trend summaries |
+| TASK-05: Brand scoring model | Joanna | ✅ Done | — | `scoring.py` — momentum score (0-100), threat index, 6 GTM signal types |
+| TASK-06: Claude narrative layer | Joanna | ✅ Done | — | `narrative.py` — per-brand narratives, strategic summary, action items via Claude API |
+| TASK-07: Wire scores/narratives to dashboard | Joanna | ✅ Done | — | 4 new API endpoints, competitive landscape section, system status panel |
+| TASK-08: WeChat Work weekly brief | Joanna | ✅ Done | — | `delivery.py` — markdown brief, webhook delivery, cron scheduling |
+| TASK-09: End-to-end orchestrator | Joanna | TODO | — | Single command: scrape → analyze → score → narrate → deliver |
+| TASK-10: Production hardening | Joanna | TODO | — | Error handling, retry logic, monitoring, Vercel cron |
+
+**Test coverage:** 258 tests across 7 test files, all passing.
+
+**Key files:**
+- `services/competitor-intel/storage.py` — SQLite data layer (1134 lines)
+- `services/competitor-intel/temporal.py` — rolling stats + anomaly detection
+- `services/competitor-intel/scoring.py` — momentum + threat scoring
+- `services/competitor-intel/narrative.py` — Claude-powered narrative generation
+- `services/competitor-intel/delivery.py` — WeChat Work weekly brief
+- `services/competitor-intel/api_server.py` — HTTP API (8 endpoints)
+- `frontend/public/competitor-intel.html` — single-file dashboard (dark theme, 5 tabs)
+
+### Virtual Employee 3: Joanna — Marketing (XHS) (TODO)
 > One-button content creator for Xiaohongshu, pre-loaded with brand voice
 
 | Task | Owner | Status | Sprint | Notes |
@@ -216,7 +247,7 @@ Already built as Product Structure Agent. See Section 2C above.
 | Image + copy generation pipeline | Joanna | TODO | Sprint 2 | One button → ready-to-post XHS content |
 | Pull revenue/product data from ERP for campaign analysis | Joanna | TODO | Sprint 3 | Connect to Product Agent data |
 
-### Virtual Employee 3: Image Generator (Marketing Toolkit)
+### Virtual Employee 4: Image Generator (Marketing Toolkit)
 > High-quality image generation for marketing and client deliverables
 
 | Task | Owner | Status | Sprint | Notes |
@@ -367,6 +398,9 @@ Already built as Product Structure Agent. See Section 2C above.
 | 2026-03-15 | Aligned to V3 product strategy — 5-layer architecture | Both | ERP-data thesis, intelligence + operations layer |
 | 2026-03-15 | Added ERP connector as parallel track for William | Both | Kingdee/QuickBooks research in Sprint 1, connector in Sprint 2 |
 | 2026-03-15 | Added ongoing tracks: benchmark library, intent packs, self-assessment | Both | Compound across all sprints |
+| 2026-03-28 | OMI Competitive Intelligence v2 complete (TASK-01 through TASK-08) | Joanna | Full pipeline: SQLite → Chrome extraction → temporal → scoring → narrative → dashboard → WeChat delivery. 258 tests. |
+| 2026-03-28 | Merged Jo-competitive-intelligence branch to main | Joanna | PR #10 — all changes now on Vercel production |
+| 2026-03-28 | WeChat Work delivery module added | Joanna | Dry-run by default, `--send` for real delivery, `--cron-hint` for Monday 9am scheduling |
 
 ---
 
