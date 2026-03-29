@@ -1,0 +1,37 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Frontend (Vite)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5173,
+      "cwd": "frontend"
+    },
+    {
+      "name": "Backend (Express)",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--watch", "server.js"],
+      "port": 3000,
+      "cwd": "backend"
+    },
+    {
+      "name": "Gateway (FastAPI)",
+      "runtimeExecutable": "uvicorn",
+      "runtimeArgs": ["gateway.main:app", "--reload", "--port", "8000"],
+      "port": 8000
+    },
+    {
+      "name": "Product Agent (Streamlit)",
+      "runtimeExecutable": "streamlit",
+      "runtimeArgs": ["run", "services/product-agent/app.py", "--server.port", "8501"],
+      "port": 8501
+    },
+    {
+      "name": "Competitor Intel API",
+      "runtimeExecutable": "/opt/homebrew/bin/python3.12",
+      "runtimeArgs": ["-m", "services.competitor-intel.api_server", "--port", "8080"],
+      "port": 8080
+    }
+  ]
+}
