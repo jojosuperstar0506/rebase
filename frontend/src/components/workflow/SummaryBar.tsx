@@ -56,9 +56,8 @@ interface MetricCardProps {
 function MetricCard({ icon, label, value, accentColor }: MetricCardProps) {
   return (
     <div
+      className="sb-card"
       style={{
-        flex: "1 1 140px",
-        minWidth: 130,
         padding: "12px 16px",
         borderLeft: `3px solid ${accentColor}`,
         display: "flex",
@@ -66,10 +65,11 @@ function MetricCard({ icon, label, value, accentColor }: MetricCardProps) {
         gap: 4,
       }}
     >
-      <div style={{ fontSize: 13, color: T2 }}>
+      <div className="sb-label" style={{ fontSize: 13, color: T2 }}>
         {icon} {label}
       </div>
       <div
+        className="sb-value"
         style={{
           fontSize: 22,
           fontWeight: 700,
@@ -114,13 +114,20 @@ export default function SummaryBar({ analysis }: SummaryBarProps) {
         padding: "16px 24px",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 8,
-        }}
-      >
+      <style>{`
+        .sb-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+        .sb-card { flex: 1 1 140px; min-width: 130px; }
+        @media (max-width: 768px) {
+          .sb-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+          .sb-card { flex: unset; min-width: unset; padding: 10px 12px !important; }
+          .sb-card .sb-label { font-size: 11px !important; }
+          .sb-card .sb-value { font-size: 18px !important; }
+        }
+        @media (max-width: 480px) {
+          .sb-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+      `}</style>
+      <div className="sb-grid">
         <MetricCard
           icon={"\u{1F534}"}
           label="手动步骤"

@@ -185,6 +185,15 @@ function NodeShape({
       onClick={onClick}
       style={{ cursor: "pointer" }}
     >
+      {/* Invisible touch hit-area (min 44×44px for mobile tapping) */}
+      <rect
+        x={Math.min(-NODE_W / 2, -22)}
+        y={Math.min(-NODE_H / 2, -22)}
+        width={Math.max(NODE_W, 44)}
+        height={Math.max(NODE_H, 44)}
+        fill="transparent"
+        style={{ pointerEvents: "all" }}
+      />
       {/* Selection glow — drop shadow filter applied to outer glow rect */}
       {isSelected && (
         <rect

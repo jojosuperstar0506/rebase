@@ -264,21 +264,40 @@ export default function WorkflowScout() {
       {state.status === "loading" && <LoadingView />}
       {state.status === "ready" && state.result && (
         <div>
+          <style>{`
+            .ws-title { padding: 16px 24px 0; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+            .ws-results { display: flex; gap: 0; min-height: calc(100vh - 240px); }
+            .ws-graph { flex: 0 0 60%; border-right: 1px solid #2a2a3a; padding: 24px; overflow: hidden; }
+            .ws-insights { flex: 0 0 40%; padding: 24px; overflow-y: auto; }
+            .ws-bottom { padding: 16px 24px; border-top: 1px solid #2a2a3a; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+            @media (max-width: 1024px) {
+              .ws-graph { flex: 0 0 50%; padding: 16px; }
+              .ws-insights { flex: 0 0 50%; padding: 16px; }
+            }
+            @media (max-width: 768px) {
+              .ws-title { padding: 12px 16px 0; }
+              .ws-results { flex-direction: column; min-height: unset; }
+              .ws-graph { flex: none; max-height: 50vh; overflow: auto; border-right: none; border-bottom: 1px solid #2a2a3a; padding: 12px; }
+              .ws-insights { flex: none; max-height: 50vh; overflow-y: auto; padding: 12px; }
+              .ws-bottom { padding: 12px 16px; }
+            }
+          `}</style>
+
           {/* Title bar */}
-          <div style={{ padding: "16px 24px 0", display: "flex", alignItems: "baseline", gap: 10 }}>
+          <div className="ws-title">
             <span style={{ fontSize: 18, fontWeight: 700, color: "#e4e4ec" }}>流程扫描结果</span>
             <span style={{ fontSize: 18, fontWeight: 400, color: T2 }}>
               — {state.result.graph.workflow_name}
             </span>
             {state.result.graph.workflow_name_en && (
-              <span style={{ fontSize: 13, color: T2, marginLeft: 4 }}>
+              <span style={{ fontSize: 13, color: T2 }}>
                 ({state.result.graph.workflow_name_en})
               </span>
             )}
           </div>
           <SummaryBar analysis={state.result.analysis} />
-          <div style={{ display: "flex", gap: 0, minHeight: "calc(100vh - 200px)" }}>
-            <div style={{ flex: "0 0 60%", borderRight: `1px solid ${BD}`, padding: 24 }}>
+          <div className="ws-results">
+            <div className="ws-graph">
               <GraphView
                 graph={state.result.graph}
                 bottlenecks={state.result.analysis.bottlenecks}
@@ -292,7 +311,7 @@ export default function WorkflowScout() {
                 onDeselect={() => setState((s) => ({ ...s, selectedNodeId: null }))}
               />
             </div>
-            <div style={{ flex: "0 0 40%", padding: 24 }}>
+            <div className="ws-insights">
               <InsightsPanel
                 analysis={state.result.analysis}
                 graph={state.result.graph}
@@ -307,15 +326,15 @@ export default function WorkflowScout() {
             </div>
           </div>
           {/* Bottom bar */}
-          <div style={{ padding: "16px 24px", borderTop: `1px solid ${BD}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div className="ws-bottom">
             <button
               onClick={() => setState((s) => ({ ...s, status: "idle", result: null, error: null, description: "", files: [], selectedNodeId: null }))}
-              style={{ padding: "8px 20px", background: "transparent", border: `1px solid ${BD}`, borderRadius: 6, color: T2, cursor: "pointer", fontSize: 14 }}
+              style={{ minHeight: 44, padding: "8px 20px", background: "transparent", border: `1px solid ${BD}`, borderRadius: 6, color: T2, cursor: "pointer", fontSize: 14 }}
             >
               ← 重新扫描
             </button>
             <button
-              style={{ padding: "10px 24px", background: AC, border: "none", borderRadius: 6, color: "#000", fontWeight: 700, fontSize: 14, cursor: "pointer" }}
+              style={{ minHeight: 44, padding: "10px 24px", background: AC, border: "none", borderRadius: 6, color: "#000", fontWeight: 700, fontSize: 14, cursor: "pointer" }}
             >
               联系我们获取实施方案 →
             </button>
