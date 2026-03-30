@@ -4,6 +4,7 @@ import IntakePanel from "../components/workflow/IntakePanel";
 import LoadingView from "../components/workflow/LoadingView";
 import SummaryBar from "../components/workflow/SummaryBar";
 import GraphView from "../components/workflow/GraphView";
+import InsightsPanel from "../components/workflow/InsightsPanel";
 
 // Design tokens
 const BG = "#0c0c14";
@@ -273,11 +274,13 @@ export default function WorkflowScout() {
                 onNodeClick={(id) => setState((s) => ({ ...s, selectedNodeId: id }))}
               />
             </div>
-            <div style={{ flex: "0 0 40%", padding: 24, overflowY: "auto" }}>
-              {/* InsightsPanel placeholder — TASK-10 */}
-              <div style={{ color: T2, padding: 40, textAlign: "center" }}>
-                分析结果加载中... (TASK-10)
-              </div>
+            <div style={{ flex: "0 0 40%", padding: 24 }}>
+              <InsightsPanel
+                analysis={state.result.analysis}
+                graph={state.result.graph}
+                selectedNodeId={state.selectedNodeId}
+                onNodeSelect={(id) => setState((s) => ({ ...s, selectedNodeId: id }))}
+              />
             </div>
           </div>
           {/* Bottom bar */}
