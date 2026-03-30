@@ -183,6 +183,9 @@ export default function FileUpload({
           支持 PDF, Word, Excel, CSV, 图片 · 最大 {maxSizeMB}MB，最多{" "}
           {maxFiles} 个文件
         </div>
+        <div style={{ fontSize: 11, color: "#f59e0b", marginTop: 6 }}>
+          文件解析功能即将上线 · File analysis coming soon
+        </div>
       </div>
 
       {/* File list */}
