@@ -52,6 +52,7 @@ RULES:
 - workflow_name: concise Chinese process name (e.g., "订单履约流程")
 - workflow_name_en: English equivalent (e.g., "Order Fulfillment Process")
 - Produce 6-15 nodes typically. Fewer only if the process is genuinely simple (3-5 steps described).
+- Keep output concise. Use short node names (max 8 Chinese characters). Omit null fields. Target 6-10 nodes.
 - tenant_id: always "demo"
 - version: always 1
 
@@ -198,7 +199,7 @@ export default function WorkflowScout() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "claude-haiku-4-5-20251001",
-          max_tokens: 4096,
+          max_tokens: 8192,
           system: DECOMPOSE_SYSTEM_PROMPT,
           messages: [{ role: "user", content: description }],
         }),
@@ -219,7 +220,7 @@ export default function WorkflowScout() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "claude-haiku-4-5-20251001",
-          max_tokens: 4096,
+          max_tokens: 8192,
           system: GAP_ANALYSIS_SYSTEM_PROMPT,
           messages: [{ role: "user", content: "请分析以下业务流程图并提供优化建议：\n\n" + JSON.stringify(graph) }],
         }),
