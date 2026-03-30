@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { GapAnalysis, WorkflowGraph, Difficulty, Severity } from "../../types/workflow";
 
 // Design tokens
@@ -46,6 +47,17 @@ export default function InsightsPanel({
 }: InsightsPanelProps) {
   const nodeMap = Object.fromEntries(graph.nodes.map((n) => [n.id, n]));
 
+  // Auto-scroll to selected card when selectedNodeId changes
+  useEffect(() => {
+    if (!selectedNodeId) return;
+    const el = document.querySelector<HTMLElement>(
+      `[data-node-id="${selectedNodeId}"]`
+    );
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [selectedNodeId]);
+
   return (
     <div
       style={{
@@ -88,16 +100,17 @@ export default function InsightsPanel({
           return (
             <div
               key={b.node_id}
+              data-node-id={b.node_id}
               onClick={() => onNodeSelect(b.node_id)}
               style={{
-                background: S2,
+                background: isSelected ? `${AC}08` : S2,
                 borderLeft: `3px solid ${isSelected ? AC : sColor}`,
                 borderRadius: 8,
                 padding: 16,
                 marginBottom: 12,
                 cursor: "pointer",
-                outline: isSelected ? `1px solid ${AC}40` : "none",
-                transition: "outline 0.15s, border-color 0.15s",
+                outline: isSelected ? `1px solid ${AC}50` : "1px solid transparent",
+                transition: "background 0.2s, outline 0.2s, border-color 0.2s",
               }}
             >
               {/* Header row */}
@@ -149,15 +162,16 @@ export default function InsightsPanel({
           return (
             <div
               key={opp.node_id}
+              data-node-id={opp.node_id}
               onClick={() => onNodeSelect(opp.node_id)}
               style={{
-                background: S2,
+                background: isSelected ? `${AC}08` : S2,
                 borderRadius: 8,
                 padding: "16px 20px",
                 marginBottom: 12,
                 cursor: "pointer",
                 border: isSelected ? `1px solid ${AC}60` : "1px solid transparent",
-                transition: "border-color 0.15s",
+                transition: "background 0.2s, border-color 0.2s",
               }}
             >
               {/* Node name */}

@@ -264,6 +264,18 @@ export default function WorkflowScout() {
       {state.status === "loading" && <LoadingView />}
       {state.status === "ready" && state.result && (
         <div>
+          {/* Title bar */}
+          <div style={{ padding: "16px 24px 0", display: "flex", alignItems: "baseline", gap: 10 }}>
+            <span style={{ fontSize: 18, fontWeight: 700, color: "#e4e4ec" }}>流程扫描结果</span>
+            <span style={{ fontSize: 18, fontWeight: 400, color: T2 }}>
+              — {state.result.graph.workflow_name}
+            </span>
+            {state.result.graph.workflow_name_en && (
+              <span style={{ fontSize: 13, color: T2, marginLeft: 4 }}>
+                ({state.result.graph.workflow_name_en})
+              </span>
+            )}
+          </div>
           <SummaryBar analysis={state.result.analysis} />
           <div style={{ display: "flex", gap: 0, minHeight: "calc(100vh - 200px)" }}>
             <div style={{ flex: "0 0 60%", borderRight: `1px solid ${BD}`, padding: 24 }}>
@@ -271,7 +283,13 @@ export default function WorkflowScout() {
                 graph={state.result.graph}
                 bottlenecks={state.result.analysis.bottlenecks}
                 selectedNodeId={state.selectedNodeId}
-                onNodeClick={(id) => setState((s) => ({ ...s, selectedNodeId: id }))}
+                onNodeClick={(id) =>
+                  setState((s) => ({
+                    ...s,
+                    selectedNodeId: s.selectedNodeId === id ? null : id,
+                  }))
+                }
+                onDeselect={() => setState((s) => ({ ...s, selectedNodeId: null }))}
               />
             </div>
             <div style={{ flex: "0 0 40%", padding: 24 }}>
@@ -279,7 +297,12 @@ export default function WorkflowScout() {
                 analysis={state.result.analysis}
                 graph={state.result.graph}
                 selectedNodeId={state.selectedNodeId}
-                onNodeSelect={(id) => setState((s) => ({ ...s, selectedNodeId: id }))}
+                onNodeSelect={(id) =>
+                  setState((s) => ({
+                    ...s,
+                    selectedNodeId: s.selectedNodeId === id ? null : id,
+                  }))
+                }
               />
             </div>
           </div>
