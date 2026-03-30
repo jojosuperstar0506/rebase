@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useEffect, useRef } from "react";
 import type { WorkflowGraph, WorkflowNode, WorkflowEdge, Bottleneck } from "../../types/workflow";
 
 // Design tokens
@@ -30,6 +30,7 @@ interface GraphViewProps {
   bottlenecks: Bottleneck[];
   selectedNodeId: string | null;
   onNodeClick: (nodeId: string) => void;
+  onDeselect?: () => void;
 }
 
 interface LayoutNode {
@@ -67,17 +68,12 @@ function computeLayout(
     }
   }
 
-  // Step 1: Layer assignment via BFS (longest path from roots)
+  // Layer assignment via iterative relaxation (handles diamonds)
   const layers = new Map<string, number>();
   const roots = nodes.filter((n) => incoming.get(n.id)!.length === 0);
-
-  // If no roots (cycle edge case), just use first node
   if (roots.length === 0) roots.push(nodes[0]);
-
-  // Initialize all to 0
   for (const n of nodes) layers.set(n.id, 0);
 
-  // Use iterative relaxation for diamond handling
   let changed = true;
   let iterations = 0;
   while (changed && iterations < 20) {
@@ -94,14 +90,13 @@ function computeLayout(
     }
   }
 
-  // Step 2: Group by layer and position
+  // Group by layer and compute positions
   const layerGroups = new Map<number, string[]>();
   for (const [id, layer] of layers) {
     if (!layerGroups.has(layer)) layerGroups.set(layer, []);
     layerGroups.get(layer)!.push(id);
   }
 
-  // Step 3: Compute positions
   const layoutNodes: LayoutNode[] = [];
   for (const [layer, ids] of layerGroups) {
     const count = ids.length;
@@ -120,7 +115,7 @@ function computeLayout(
     });
   }
 
-  // Normalize positions so min x = PADDING, min y = PADDING
+  // Normalize to PADDING
   const minX = Math.min(...layoutNodes.map((n) => n.x));
   const minY = Math.min(...layoutNodes.map((n) => n.y));
   for (const ln of layoutNodes) {
@@ -176,12 +171,10 @@ function NodeShape({
   const selectedStroke = isSelected ? AC : stroke;
   const selectedWidth = isSelected ? 3 : 1.5;
 
-  // Text content
-  const nameText = truncate(node.name, 10);
+  const nameText = truncate(node.name, 12);
   const toolText = node.tool_used ? `${node.tool_used}` : null;
   const timeText = node.avg_time_minutes ? `${node.avg_time_minutes}分钟` : null;
 
-  // Compute text y offsets based on number of lines
   const lines = [nameText, toolText, timeText].filter(Boolean);
   const lineHeight = 14;
   const textStartY = -(((lines.length - 1) * lineHeight) / 2);
@@ -192,18 +185,28 @@ function NodeShape({
       onClick={onClick}
       style={{ cursor: "pointer" }}
     >
-      {/* Selection glow */}
+      {/* Invisible touch hit-area (min 44×44px for mobile tapping) */}
+      <rect
+        x={Math.min(-NODE_W / 2, -22)}
+        y={Math.min(-NODE_H / 2, -22)}
+        width={Math.max(NODE_W, 44)}
+        height={Math.max(NODE_H, 44)}
+        fill="transparent"
+        style={{ pointerEvents: "all" }}
+      />
+      {/* Selection glow — drop shadow filter applied to outer glow rect */}
       {isSelected && (
         <rect
-          x={-NODE_W / 2 - 4}
-          y={-NODE_H / 2 - 4}
-          width={NODE_W + 8}
-          height={NODE_H + 8}
-          rx={12}
+          x={-NODE_W / 2 - 5}
+          y={-NODE_H / 2 - 5}
+          width={NODE_W + 10}
+          height={NODE_H + 10}
+          rx={13}
           fill="none"
           stroke={AC}
-          strokeWidth={2}
-          opacity={0.5}
+          strokeWidth={2.5}
+          opacity={0.7}
+          filter="url(#nodeGlow)"
         />
       )}
 
@@ -328,7 +331,6 @@ function NodeShape({
 }
 
 function hexPoints(hw: number, hh: number): string {
-  // 6-point hexagon
   return [
     `${-hw},0`,
     `${-hw * 0.5},${-hh}`,
@@ -358,7 +360,6 @@ function EdgePath({
   const cp = Math.max(Math.abs(ty - sy) * 0.35, 30);
   const d = `M ${sx} ${sy} C ${sx} ${sy + cp}, ${tx} ${ty - cp}, ${tx} ${ty}`;
 
-  // Midpoint for condition label
   const mx = (sx + tx) / 2;
   const my = (sy + ty) / 2;
 
@@ -453,7 +454,10 @@ export default function GraphView({
   bottlenecks,
   selectedNodeId,
   onNodeClick,
+  onDeselect,
 }: GraphViewProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const bottleneckIds = useMemo(
     () => new Set(bottlenecks.map((b) => b.node_id)),
     [bottlenecks]
@@ -472,9 +476,42 @@ export default function GraphView({
     return m;
   }, [layoutNodes]);
 
+  // Auto-scroll SVG container to keep selected node visible
+  useEffect(() => {
+    if (!selectedNodeId || !containerRef.current) return;
+    const ln = layoutNodes.find((n) => n.node.id === selectedNodeId);
+    if (!ln) return;
+    const container = containerRef.current;
+    const scrollLeft = ln.x - container.clientWidth / 2;
+    const scrollTop = ln.y - container.clientHeight / 2;
+    container.scrollTo({
+      left: Math.max(0, scrollLeft),
+      top: Math.max(0, scrollTop),
+      behavior: "smooth",
+    });
+  }, [selectedNodeId, layoutNodes]);
+
+  if (graph.nodes.length === 0) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          height: 200,
+          color: T2,
+          fontSize: 14,
+        }}
+      >
+        没有识别到流程节点
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div
+        ref={containerRef}
         style={{
           flex: 1,
           overflow: "auto",
@@ -491,6 +528,12 @@ export default function GraphView({
           height={svgHeight}
           viewBox={`0 0 ${svgWidth} ${svgHeight}`}
           style={{ display: "block", minWidth: svgWidth }}
+          onClick={(e) => {
+            // Deselect when clicking empty SVG background
+            if (e.target === e.currentTarget && onDeselect) {
+              onDeselect();
+            }
+          }}
         >
           <defs>
             <marker
@@ -503,6 +546,16 @@ export default function GraphView({
             >
               <polygon points="0 0, 8 3, 0 6" fill="#4a4a5a" />
             </marker>
+            {/* Glow filter for selected nodes */}
+            <filter id="nodeGlow" x="-50%" y="-50%" width="200%" height="200%">
+              <feDropShadow
+                dx="0"
+                dy="0"
+                stdDeviation="6"
+                floodColor={AC}
+                floodOpacity="0.8"
+              />
+            </filter>
           </defs>
 
           {/* Edges (rendered first, under nodes) */}

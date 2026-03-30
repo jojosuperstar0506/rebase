@@ -30,6 +30,7 @@ interface IntakePanelProps {
   onDescriptionChange: (desc: string) => void;
   onFilesChange: (files: File[]) => void;
   onSubmit: () => void;
+  inlineError?: string | null;
 }
 
 export default function IntakePanel({
@@ -38,6 +39,7 @@ export default function IntakePanel({
   onDescriptionChange,
   onFilesChange,
   onSubmit,
+  inlineError,
 }: IntakePanelProps) {
   const [hoveredExample, setHoveredExample] = useState<number | null>(null);
   const [activeExample, setActiveExample] = useState<number | null>(null);
@@ -56,6 +58,7 @@ export default function IntakePanel({
 
   return (
     <div
+      className="ip-outer"
       style={{
         display: "flex",
         flexDirection: "column",
@@ -64,8 +67,20 @@ export default function IntakePanel({
         minHeight: "100vh",
       }}
     >
+      <style>{`
+        .ip-card { width: 100%; max-width: 720px; }
+        .ip-textarea { min-height: 140px; }
+        .ip-submit { min-height: 44px; }
+        .ip-pill { min-height: 36px; }
+        @media (max-width: 768px) {
+          .ip-outer { padding: 24px 16px 32px !important; }
+          .ip-card { padding: 20px !important; }
+          .ip-textarea { min-height: 180px !important; }
+          .ip-header h1 { font-size: 24px !important; }
+        }
+      `}</style>
       {/* Header */}
-      <div style={{ textAlign: "center", marginBottom: 36 }}>
+      <div className="ip-header" style={{ textAlign: "center", marginBottom: 36 }}>
         <h1
           style={{
             fontSize: 28,
@@ -102,9 +117,8 @@ export default function IntakePanel({
 
       {/* Main card */}
       <div
+        className="ip-card"
         style={{
-          width: "100%",
-          maxWidth: 720,
           background: S1,
           border: `1px solid ${BD}`,
           borderRadius: 12,
@@ -133,11 +147,11 @@ export default function IntakePanel({
             }}
             rows={6}
             placeholder="例如：每天早上，销售部从微信群收集客户订单，手动录入到Excel表格里，再发给仓库部打印拣货单..."
+            className="ip-textarea"
             style={{
               width: "100%",
-              minHeight: 140,
               background: BG,
-              border: `1px solid ${BD}`,
+              border: `1px solid ${inlineError ? "#ef4444" : BD}`,
               borderRadius: 8,
               padding: "12px 14px",
               color: TX,
@@ -153,9 +167,14 @@ export default function IntakePanel({
               e.currentTarget.style.borderColor = AC;
             }}
             onBlur={(e) => {
-              e.currentTarget.style.borderColor = BD;
+              e.currentTarget.style.borderColor = inlineError ? "#ef4444" : BD;
             }}
           />
+          {inlineError && (
+            <div style={{ color: "#ef4444", fontSize: 12, marginTop: 6 }}>
+              ⚠ {inlineError}
+            </div>
+          )}
         </div>
 
         {/* File upload section */}
@@ -192,6 +211,7 @@ export default function IntakePanel({
               return (
                 <button
                   key={i}
+                  className="ip-pill"
                   onClick={() => handleExampleClick(i)}
                   onMouseEnter={() => setHoveredExample(i)}
                   onMouseLeave={() => setHoveredExample(null)}
@@ -220,6 +240,7 @@ export default function IntakePanel({
 
         {/* Submit button */}
         <button
+          className="ip-submit"
           onClick={onSubmit}
           disabled={!canSubmit}
           onMouseEnter={() => setSubmitHover(true)}
