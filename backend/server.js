@@ -158,6 +158,29 @@ app.post('/api/scheduled-agent', async (req, res) => {
   }
 });
 
+// Onboarding — stores user application from the public signup form
+app.post("/api/onboarding", (req, res) => {
+  try {
+    const { name, company, industry, competitors, email, goal } = req.body;
+    if (!name || !email || !industry) {
+      return res.status(400).json({ error: "name, email, and industry are required" });
+    }
+    const applicantsDir = path.join(__dirname, "config/applicants");
+    fs.mkdirSync(applicantsDir, { recursive: true });
+    const filename = `${Date.now()}-${email.replace(/[^a-z0-9]/gi, "_")}.json`;
+    fs.writeFileSync(path.join(applicantsDir, filename), JSON.stringify({
+      name, company, industry, competitors, email, goal,
+      submittedAt: new Date().toISOString(),
+      status: "pending",
+    }, null, 2));
+    console.log(`[Onboarding] New application from ${name} (${email})`);
+    res.json({ success: true, message: "Application received" });
+  } catch (err) {
+    console.error("Onboarding error:", err.message);
+    res.status(500).json({ error: "Failed to save application" });
+  }
+});
+
 // Manual trigger for intelligence report (for testing)
 app.post("/api/competitor-report/run", async (req, res) => {
   try {

@@ -5,6 +5,9 @@ import AgentMonitor from "./pages/AgentMonitor";
 import CostDashboard from "./pages/CostDashboard";
 import XhsWarroom from "./pages/XhsWarroom";
 import MarketIntelligence from "./pages/MarketIntelligence";
+import Onboarding from "./pages/Onboarding";
+import Login from "./pages/Login";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 const navStyle: React.CSSProperties = {
   display: "flex",
@@ -42,13 +45,18 @@ export default function App() {
         </Link>
       </nav>
       <Routes>
+        {/* Public routes */}
         <Route path="/" element={<DiagnosticDashboard />} />
         <Route path="/demo" element={<DiagnosticDashboard />} />
-        <Route path="/workflows" element={<WorkflowViewer />} />
-        <Route path="/agents" element={<AgentMonitor />} />
-        <Route path="/agents/xhs-content" element={<XhsWarroom />} />
-        <Route path="/agents/market-intelligence" element={<MarketIntelligence />} />
-        <Route path="/costs" element={<CostDashboard />} />
+        <Route path="/onboarding" element={<Onboarding />} />
+        <Route path="/login" element={<Login />} />
+
+        {/* Protected routes — require access code */}
+        <Route path="/workflows" element={<ProtectedRoute><WorkflowViewer /></ProtectedRoute>} />
+        <Route path="/agents" element={<ProtectedRoute><AgentMonitor /></ProtectedRoute>} />
+        <Route path="/agents/xhs-content" element={<ProtectedRoute><XhsWarroom /></ProtectedRoute>} />
+        <Route path="/agents/market-intelligence" element={<ProtectedRoute><MarketIntelligence /></ProtectedRoute>} />
+        <Route path="/costs" element={<ProtectedRoute><CostDashboard /></ProtectedRoute>} />
       </Routes>
     </div>
   );
