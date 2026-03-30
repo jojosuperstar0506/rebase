@@ -23,11 +23,17 @@ const apiLimiter = rateLimit({
 // ── Fix 2: Secret Token Middleware ───────────────────────────────────────────
 // Every request to /api/* must include the header: x-rebase-secret: <your secret>
 // Vercel frontend sends this automatically. Random bots don't know it.
+// Public endpoints (e.g. /api/onboarding) are whitelisted — no secret needed.
+const PUBLIC_API_PATHS = ['/onboarding'];
+
 function requireSecret(req, res, next) {
   const secret = process.env.API_SECRET;
 
   // If no secret is configured, skip this check (dev mode)
   if (!secret) return next();
+
+  // Allow whitelisted public endpoints through without a secret
+  if (PUBLIC_API_PATHS.includes(req.path)) return next();
 
   const provided = req.headers['x-rebase-secret'];
   if (!provided || provided !== secret) {
@@ -48,9 +54,17 @@ app.use('/api', apiLimiter);
 app.use('/api', requireSecret);
 
 // ── Anthropic client ────────────────────────────────────────────────────────
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+const anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+async function callAI(prompt, systemPrompt) {
+  const msg = await anthropicClient.messages.create({
+    model: process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001',
+    max_tokens: 2048,
+    system: systemPrompt || 'You are a helpful AI assistant for Rebase, a company that helps Chinese SMBs adopt AI into their operations.',
+    messages: [{ role: 'user', content: prompt }],
+  });
+  return msg.content[0].text;
+}
 
 // ── Routes ──────────────────────────────────────────────────────────────────
 
@@ -74,17 +88,28 @@ app.post('/api/chat', async (req, res) => {
       return res.status(400).json({ error: 'message is required' });
     }
 
-    const response = await client.messages.create({
-      model: 'claude-opus-4-5',
-      max_tokens: 1024,
-      system: systemPrompt || 'You are a helpful AI assistant for Rebase, a company that helps Chinese SMBs adopt AI into their operations.',
-      messages: [{ role: 'user', content: message }],
-    });
-
-    res.json({ reply: response.content[0].text });
+    const reply = await callAI(message, systemPrompt);
+    res.json({ reply });
   } catch (err) {
     console.error('Chat error:', err.message);
     res.status(500).json({ error: 'Failed to get response from Claude' });
+  }
+});
+
+// AI proxy — same interface as Vercel /api/ai for easy switching between Vercel and ECS
+app.post('/api/ai', async (req, res) => {
+  try {
+    const { model, max_tokens, messages, system } = req.body;
+    const msg = await anthropicClient.messages.create({
+      model: model || process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001',
+      max_tokens: max_tokens || 4096,
+      messages: messages || [],
+      ...(system ? { system } : {}),
+    });
+    res.json(msg);
+  } catch (err) {
+    console.error('AI proxy error:', err.message);
+    res.status(500).json({ error: 'AI request failed' });
   }
 });
 
@@ -109,13 +134,8 @@ Provide a concise GTM analysis with:
 3. Recommended outreach channels
 4. First 30-day action plan`;
 
-    const response = await client.messages.create({
-      model: 'claude-opus-4-5',
-      max_tokens: 2048,
-      messages: [{ role: 'user', content: prompt }],
-    });
-
-    res.json({ analysis: response.content[0].text });
+    const analysis = await callAI(prompt);
+    res.json({ analysis });
   } catch (err) {
     console.error('GTM agent error:', err.message);
     res.status(500).json({ error: 'GTM agent failed' });
@@ -132,18 +152,10 @@ app.post('/api/scheduled-agent', async (req, res) => {
       return res.status(400).json({ error: 'task is required' });
     }
 
-    const response = await client.messages.create({
-      model: 'claude-opus-4-5',
-      max_tokens: 2048,
-      messages: [{
-        role: 'user',
-        content: `Run the following scheduled task: ${task}\n\nData: ${JSON.stringify(data || {})}`,
-      }],
-    });
-
+    const taskResult = await callAI(`Run the following scheduled task: ${task}\n\nData: ${JSON.stringify(data || {})}`);
     res.json({
       task,
-      result: response.content[0].text,
+      result: taskResult,
       completedAt: new Date().toISOString(),
     });
   } catch (err) {
@@ -151,6 +163,85 @@ app.post('/api/scheduled-agent', async (req, res) => {
     res.status(500).json({ error: 'Scheduled agent failed' });
   }
 });
+
+// Onboarding — stores user application from the public signup form
+app.post("/api/onboarding", async (req, res) => {
+  try {
+    const { name, company, industry, competitors, email, goal } = req.body;
+    if (!name || !email || !industry) {
+      return res.status(400).json({ error: "name, email, and industry are required" });
+    }
+    const applicantsDir = path.join(__dirname, "config/applicants");
+    fs.mkdirSync(applicantsDir, { recursive: true });
+    const filename = `${Date.now()}-${email.replace(/[^a-z0-9]/gi, "_")}.json`;
+    const applicant = { name, company, industry, competitors, email, goal, submittedAt: new Date().toISOString(), status: "pending" };
+    fs.writeFileSync(path.join(applicantsDir, filename), JSON.stringify(applicant, null, 2));
+    console.log(`[Onboarding] New application from ${name} (${email})`);
+
+    // Notify Will/Joanna by email (skips silently if keys not configured)
+    notifyNewApplicant(applicant).catch((e) => console.error("[Onboarding] Email failed:", e.message));
+
+    res.json({ success: true, message: "Application received" });
+  } catch (err) {
+    console.error("Onboarding error:", err.message);
+    res.status(500).json({ error: "Failed to save application" });
+  }
+});
+
+// Sends a notification email to REPORT_EMAIL when a new application arrives.
+// Uses Resend REST API via Node's built-in https — no extra npm package needed.
+// If RESEND_API_KEY or REPORT_EMAIL is not set, logs a message and skips.
+async function notifyNewApplicant(applicant) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const toEmail = process.env.REPORT_EMAIL;
+
+  if (!apiKey || !toEmail) {
+    console.log("[Onboarding] Email skipped — set RESEND_API_KEY and REPORT_EMAIL in .env to enable");
+    return;
+  }
+
+  const https = require("https");
+  const body = JSON.stringify({
+    from: "Rebase <onboarding@resend.dev>",
+    to: [toEmail],
+    subject: `New Rebase Application: ${applicant.name} (${applicant.company || "No company"})`,
+    html: `
+      <h2>New Rebase Application</h2>
+      <table style="border-collapse:collapse;font-family:sans-serif;font-size:14px">
+        <tr><td style="padding:6px 12px;color:#666">Name</td><td style="padding:6px 12px"><strong>${applicant.name}</strong></td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Email</td><td style="padding:6px 12px">${applicant.email}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Company</td><td style="padding:6px 12px">${applicant.company || "—"}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Industry</td><td style="padding:6px 12px">${applicant.industry}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Competitors</td><td style="padding:6px 12px">${applicant.competitors || "—"}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Goal</td><td style="padding:6px 12px">${applicant.goal || "—"}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Submitted</td><td style="padding:6px 12px">${applicant.submittedAt}</td></tr>
+      </table>
+      <p style="margin-top:24px;color:#666;font-size:13px">Reply to this applicant directly at <a href="mailto:${applicant.email}">${applicant.email}</a> with their access code to grant them entry to Rebase.</p>
+    `,
+  });
+
+  await new Promise((resolve, reject) => {
+    const req = https.request(
+      { hostname: "api.resend.com", path: "/emails", method: "POST",
+        headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) } },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => { data += chunk; });
+        res.on("end", () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            console.log(`[Onboarding] Notification email sent to ${toEmail}`);
+            resolve();
+          } else {
+            reject(new Error(`Resend API returned ${res.statusCode}: ${data}`));
+          }
+        });
+      }
+    );
+    req.on("error", reject);
+    req.write(body);
+    req.end();
+  });
+}
 
 // Manual trigger for intelligence report (for testing)
 app.post("/api/competitor-report/run", async (req, res) => {
