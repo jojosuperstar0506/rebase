@@ -25,24 +25,42 @@ export default function WorkflowScout() {
     setState((s) => ({ ...s, status: "loading", error: null }));
 
     try {
+      // Step 1: Decompose workflow (multipart with description + files)
       const formData = new FormData();
       formData.append("description", state.description);
       for (const file of state.files) {
         formData.append("files", file);
       }
 
-      const res = await fetch("/api/workflow-scout", {
+      const decomposeRes = await fetch("/api/workflow-decompose", {
         method: "POST",
         body: formData,
       });
 
-      const data = await res.json();
+      const decomposeData = await decomposeRes.json();
 
-      if (!res.ok) {
-        throw new Error(data.error || `Request failed (${res.status})`);
+      if (!decomposeRes.ok) {
+        throw new Error(decomposeData.error || `Decompose failed (${decomposeRes.status})`);
       }
 
-      setState((s) => ({ ...s, status: "ready", result: data }));
+      const { graph } = decomposeData;
+
+      // Step 2: Analyze gaps (JSON body with the graph from Step 1)
+      const analyzeRes = await fetch("/api/workflow-analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ graph }),
+      });
+
+      const analyzeData = await analyzeRes.json();
+
+      if (!analyzeRes.ok) {
+        throw new Error(analyzeData.error || `Analysis failed (${analyzeRes.status})`);
+      }
+
+      const { analysis } = analyzeData;
+
+      setState((s) => ({ ...s, status: "ready", result: { graph, analysis } }));
     } catch (err) {
       setState((s) => ({
         ...s,
