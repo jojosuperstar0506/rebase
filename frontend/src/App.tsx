@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { CSSProperties } from "react";
 import { Routes, Route, Link, useNavigate } from "react-router-dom";
 import DiagnosticDashboard from "./pages/DiagnosticDashboard";
-import WorkflowViewer from "./pages/WorkflowViewer";
+import WorkflowScout from "./pages/WorkflowScout";
 import AgentMonitor from "./pages/AgentMonitor";
 import CostDashboard from "./pages/CostDashboard";
 import XhsWarroom from "./pages/XhsWarroom";
@@ -42,7 +42,7 @@ function Nav() {
   return (
     <nav style={navStyle}>
       <a href="/calculator.html" style={linkStyle}>Diagnostics</a>
-      <Link to="/workflows" style={linkStyle}>Workflows</Link>
+      <Link to="/workflows" style={linkStyle}>流程扫描</Link>
       <Link to="/agents" style={linkStyle}>Agents</Link>
       <Link to="/costs" style={linkStyle}>Costs</Link>
       <Link to="/demo" style={linkStyle}>Demo Dashboard</Link>
@@ -74,9 +74,9 @@ export default function App() {
         <Route path="/demo" element={<DiagnosticDashboard />} />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/workflows" element={<WorkflowScout />} />
 
         {/* Protected routes — require access code */}
-        <Route path="/workflows" element={<ProtectedRoute><WorkflowViewer /></ProtectedRoute>} />
         <Route path="/agents" element={<ProtectedRoute><AgentMonitor /></ProtectedRoute>} />
         <Route path="/agents/xhs-content" element={<ProtectedRoute><XhsWarroom /></ProtectedRoute>} />
         <Route path="/agents/market-intelligence" element={<ProtectedRoute><MarketIntelligence /></ProtectedRoute>} />
