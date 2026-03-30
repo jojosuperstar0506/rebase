@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import type { ReactNode } from "react";
 
 const BG = "#0c0c14";
 const S1 = "#14141e";
@@ -125,7 +126,7 @@ function Field({ value, onChange, placeholder }: { value: string; onChange: (v: 
   );
 }
 
-function RunBtn({ onClick, disabled, children }: { onClick: () => void; disabled: boolean; children: React.ReactNode }) {
+function RunBtn({ onClick, disabled, children }: { onClick: () => void; disabled: boolean; children: ReactNode }) {
   return (
     <button onClick={onClick} disabled={disabled} style={{
       background: disabled ? S2 : "linear-gradient(135deg, " + AC + ", " + AC2 + ")",
@@ -138,7 +139,7 @@ function RunBtn({ onClick, disabled, children }: { onClick: () => void; disabled
   );
 }
 
-function Lbl({ children }: { children: React.ReactNode }) {
+function Lbl({ children }: { children: ReactNode }) {
   return <div style={{ fontSize: 12, color: T2, fontWeight: 600, marginBottom: 5 }}>{children}</div>;
 }
 
