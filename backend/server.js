@@ -23,11 +23,17 @@ const apiLimiter = rateLimit({
 // ── Fix 2: Secret Token Middleware ───────────────────────────────────────────
 // Every request to /api/* must include the header: x-rebase-secret: <your secret>
 // Vercel frontend sends this automatically. Random bots don't know it.
+// Public endpoints (e.g. /api/onboarding) are whitelisted — no secret needed.
+const PUBLIC_API_PATHS = ['/onboarding'];
+
 function requireSecret(req, res, next) {
   const secret = process.env.API_SECRET;
 
   // If no secret is configured, skip this check (dev mode)
   if (!secret) return next();
+
+  // Allow whitelisted public endpoints through without a secret
+  if (PUBLIC_API_PATHS.includes(req.path)) return next();
 
   const provided = req.headers['x-rebase-secret'];
   if (!provided || provided !== secret) {
