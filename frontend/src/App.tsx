@@ -1,6 +1,6 @@
 import { Routes, Route, Link } from "react-router-dom";
 import DiagnosticDashboard from "./pages/DiagnosticDashboard";
-import WorkflowViewer from "./pages/WorkflowViewer";
+import WorkflowScout from "./pages/WorkflowScout";
 import AgentMonitor from "./pages/AgentMonitor";
 import CostDashboard from "./pages/CostDashboard";
 import XhsWarroom from "./pages/XhsWarroom";
@@ -29,7 +29,7 @@ export default function App() {
           Diagnostics
         </a>
         <Link to="/workflows" style={linkStyle}>
-          Workflows
+          流程扫描
         </Link>
         <Link to="/agents" style={linkStyle}>
           Agents
@@ -44,7 +44,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<DiagnosticDashboard />} />
         <Route path="/demo" element={<DiagnosticDashboard />} />
-        <Route path="/workflows" element={<WorkflowViewer />} />
+        <Route path="/workflows" element={<WorkflowScout />} />
         <Route path="/agents" element={<AgentMonitor />} />
         <Route path="/agents/xhs-content" element={<XhsWarroom />} />
         <Route path="/agents/market-intelligence" element={<MarketIntelligence />} />
