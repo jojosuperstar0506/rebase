@@ -1,4 +1,5 @@
-import { Routes, Route, Link } from "react-router-dom";
+import { useState } from "react";
+import { Routes, Route, Link, useNavigate } from "react-router-dom";
 import DiagnosticDashboard from "./pages/DiagnosticDashboard";
 import WorkflowViewer from "./pages/WorkflowViewer";
 import AgentMonitor from "./pages/AgentMonitor";
@@ -16,6 +17,7 @@ const navStyle: React.CSSProperties = {
   borderBottom: "1px solid #e0e0e0",
   backgroundColor: "#fafafa",
   fontFamily: "system-ui, sans-serif",
+  alignItems: "center",
 };
 
 const linkStyle: React.CSSProperties = {
@@ -24,26 +26,47 @@ const linkStyle: React.CSSProperties = {
   fontWeight: 500,
 };
 
+function Nav() {
+  const [isLoggedIn, setIsLoggedIn] = useState(
+    localStorage.getItem("rebase_access") === "true"
+  );
+  const navigate = useNavigate();
+
+  function handleLogout() {
+    localStorage.removeItem("rebase_access");
+    setIsLoggedIn(false);
+    navigate("/login");
+  }
+
+  return (
+    <nav style={navStyle}>
+      <a href="/calculator.html" style={linkStyle}>Diagnostics</a>
+      <Link to="/workflows" style={linkStyle}>Workflows</Link>
+      <Link to="/agents" style={linkStyle}>Agents</Link>
+      <Link to="/costs" style={linkStyle}>Costs</Link>
+      <Link to="/demo" style={linkStyle}>Demo Dashboard</Link>
+
+      {/* Push login/logout to the right */}
+      <span style={{ marginLeft: "auto" }}>
+        {isLoggedIn ? (
+          <button
+            onClick={handleLogout}
+            style={{ background: "none", border: "1px solid #ccc", borderRadius: 6, padding: "4px 14px", cursor: "pointer", color: "#666", fontSize: 14, fontWeight: 500 }}
+          >
+            Log out
+          </button>
+        ) : (
+          <Link to="/login" style={{ ...linkStyle, color: "#06b6d4" }}>Log in</Link>
+        )}
+      </span>
+    </nav>
+  );
+}
+
 export default function App() {
   return (
     <div>
-      <nav style={navStyle}>
-        <a href="/calculator.html" style={linkStyle}>
-          Diagnostics
-        </a>
-        <Link to="/workflows" style={linkStyle}>
-          Workflows
-        </Link>
-        <Link to="/agents" style={linkStyle}>
-          Agents
-        </Link>
-        <Link to="/costs" style={linkStyle}>
-          Costs
-        </Link>
-        <Link to="/demo" style={linkStyle}>
-          Demo Dashboard
-        </Link>
-      </nav>
+      <Nav />
       <Routes>
         {/* Public routes */}
         <Route path="/" element={<DiagnosticDashboard />} />

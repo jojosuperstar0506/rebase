@@ -165,7 +165,7 @@ app.post('/api/scheduled-agent', async (req, res) => {
 });
 
 // Onboarding — stores user application from the public signup form
-app.post("/api/onboarding", (req, res) => {
+app.post("/api/onboarding", async (req, res) => {
   try {
     const { name, company, industry, competitors, email, goal } = req.body;
     if (!name || !email || !industry) {
@@ -174,18 +174,74 @@ app.post("/api/onboarding", (req, res) => {
     const applicantsDir = path.join(__dirname, "config/applicants");
     fs.mkdirSync(applicantsDir, { recursive: true });
     const filename = `${Date.now()}-${email.replace(/[^a-z0-9]/gi, "_")}.json`;
-    fs.writeFileSync(path.join(applicantsDir, filename), JSON.stringify({
-      name, company, industry, competitors, email, goal,
-      submittedAt: new Date().toISOString(),
-      status: "pending",
-    }, null, 2));
+    const applicant = { name, company, industry, competitors, email, goal, submittedAt: new Date().toISOString(), status: "pending" };
+    fs.writeFileSync(path.join(applicantsDir, filename), JSON.stringify(applicant, null, 2));
     console.log(`[Onboarding] New application from ${name} (${email})`);
+
+    // Notify Will/Joanna by email (skips silently if keys not configured)
+    notifyNewApplicant(applicant).catch((e) => console.error("[Onboarding] Email failed:", e.message));
+
     res.json({ success: true, message: "Application received" });
   } catch (err) {
     console.error("Onboarding error:", err.message);
     res.status(500).json({ error: "Failed to save application" });
   }
 });
+
+// Sends a notification email to REPORT_EMAIL when a new application arrives.
+// Uses Resend REST API via Node's built-in https — no extra npm package needed.
+// If RESEND_API_KEY or REPORT_EMAIL is not set, logs a message and skips.
+async function notifyNewApplicant(applicant) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const toEmail = process.env.REPORT_EMAIL;
+
+  if (!apiKey || !toEmail) {
+    console.log("[Onboarding] Email skipped — set RESEND_API_KEY and REPORT_EMAIL in .env to enable");
+    return;
+  }
+
+  const https = require("https");
+  const body = JSON.stringify({
+    from: "Rebase <onboarding@resend.dev>",
+    to: [toEmail],
+    subject: `New Rebase Application: ${applicant.name} (${applicant.company || "No company"})`,
+    html: `
+      <h2>New Rebase Application</h2>
+      <table style="border-collapse:collapse;font-family:sans-serif;font-size:14px">
+        <tr><td style="padding:6px 12px;color:#666">Name</td><td style="padding:6px 12px"><strong>${applicant.name}</strong></td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Email</td><td style="padding:6px 12px">${applicant.email}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Company</td><td style="padding:6px 12px">${applicant.company || "—"}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Industry</td><td style="padding:6px 12px">${applicant.industry}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Competitors</td><td style="padding:6px 12px">${applicant.competitors || "—"}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Goal</td><td style="padding:6px 12px">${applicant.goal || "—"}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Submitted</td><td style="padding:6px 12px">${applicant.submittedAt}</td></tr>
+      </table>
+      <p style="margin-top:24px;color:#666;font-size:13px">Reply to this applicant directly at <a href="mailto:${applicant.email}">${applicant.email}</a> with their access code to grant them entry to Rebase.</p>
+    `,
+  });
+
+  await new Promise((resolve, reject) => {
+    const req = https.request(
+      { hostname: "api.resend.com", path: "/emails", method: "POST",
+        headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) } },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => { data += chunk; });
+        res.on("end", () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            console.log(`[Onboarding] Notification email sent to ${toEmail}`);
+            resolve();
+          } else {
+            reject(new Error(`Resend API returned ${res.statusCode}: ${data}`));
+          }
+        });
+      }
+    );
+    req.on("error", reject);
+    req.write(body);
+    req.end();
+  });
+}
 
 // Manual trigger for intelligence report (for testing)
 app.post("/api/competitor-report/run", async (req, res) => {
