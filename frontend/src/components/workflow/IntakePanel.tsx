@@ -30,6 +30,7 @@ interface IntakePanelProps {
   onDescriptionChange: (desc: string) => void;
   onFilesChange: (files: File[]) => void;
   onSubmit: () => void;
+  inlineError?: string | null;
 }
 
 export default function IntakePanel({
@@ -38,6 +39,7 @@ export default function IntakePanel({
   onDescriptionChange,
   onFilesChange,
   onSubmit,
+  inlineError,
 }: IntakePanelProps) {
   const [hoveredExample, setHoveredExample] = useState<number | null>(null);
   const [activeExample, setActiveExample] = useState<number | null>(null);
@@ -149,7 +151,7 @@ export default function IntakePanel({
             style={{
               width: "100%",
               background: BG,
-              border: `1px solid ${BD}`,
+              border: `1px solid ${inlineError ? "#ef4444" : BD}`,
               borderRadius: 8,
               padding: "12px 14px",
               color: TX,
@@ -165,9 +167,14 @@ export default function IntakePanel({
               e.currentTarget.style.borderColor = AC;
             }}
             onBlur={(e) => {
-              e.currentTarget.style.borderColor = BD;
+              e.currentTarget.style.borderColor = inlineError ? "#ef4444" : BD;
             }}
           />
+          {inlineError && (
+            <div style={{ color: "#ef4444", fontSize: 12, marginTop: 6 }}>
+              ⚠ {inlineError}
+            </div>
+          )}
         </div>
 
         {/* File upload section */}

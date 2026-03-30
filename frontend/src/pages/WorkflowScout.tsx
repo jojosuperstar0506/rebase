@@ -14,6 +14,24 @@ const T2 = "#9898a8";
 
 // ─── Helpers ───
 
+function friendlyError(raw: string): string {
+  if (/failed to fetch|networkerror|network error/i.test(raw))
+    return "网络连接失败，请检查网络后重试\nNetwork error — please check your connection and retry.";
+  if (/400/.test(raw))
+    return "请提供更详细的流程描述（至少20个字符）\nPlease provide a more detailed description (min 20 characters).";
+  if (/504/.test(raw))
+    return "分析超时，请尝试简化流程描述\nAnalysis timed out — please simplify the workflow description.";
+  if (/502/.test(raw))
+    return "AI分析结果异常，请重新描述您的流程\nAI returned an unexpected response — please re-describe your workflow.";
+  if (/500/.test(raw))
+    return "服务器内部错误，请稍后重试\nServer error — please try again in a moment.";
+  if (/json|parse/i.test(raw))
+    return "AI返回的数据格式异常，请重试\nAI response format error — please retry.";
+  if (/AI未能识别/.test(raw))
+    return "AI未能识别流程节点，请提供更详细的描述\nAI couldn't identify workflow steps — please add more detail.";
+  return raw || "未知错误，请稍后重试\nUnknown error — please try again.";
+}
+
 function cleanJsonResponse(text: string): string {
   let cleaned = text.trim();
   cleaned = cleaned.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?\s*```$/i, "");
@@ -182,62 +200,105 @@ export default function WorkflowScout() {
     error: null,
     selectedNodeId: null,
   });
+  const [inlineError, setInlineError] = useState<string | null>(null);
 
   async function handleSubmit() {
+    const description = state.description.trim().slice(0, 5000);
+
+    // Inline validation — stay on idle, don't go to loading
+    if (description.length < 20) {
+      setInlineError("请输入至少20个字符的流程描述 (min 20 characters)");
+      return;
+    }
+    setInlineError(null);
+
     setState((s) => ({ ...s, status: "loading", error: null }));
 
     try {
-      const description = state.description;
-
-      if (description.length < 20) {
-        setState((s) => ({ ...s, status: "error", error: "请输入至少20个字符的流程描述" }));
-        return;
+      // Call 1 — Decompose workflow via /api/ai proxy
+      let decomposeData: unknown;
+      try {
+        const decomposeRes = await fetch("/api/ai", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 8192,
+            system: DECOMPOSE_SYSTEM_PROMPT,
+            messages: [{ role: "user", content: description }],
+          }),
+        });
+        if (!decomposeRes.ok) throw new Error("Workflow decomposition failed: " + decomposeRes.status);
+        const contentType = decomposeRes.headers.get("content-type") ?? "";
+        if (!contentType.includes("application/json")) {
+          throw new Error("Workflow decomposition failed: 502");
+        }
+        decomposeData = await decomposeRes.json();
+      } catch (e: unknown) {
+        if (e instanceof TypeError) throw new Error("Failed to fetch");
+        throw e;
       }
 
-      // Call 1 — Decompose workflow via /api/ai proxy
-      const decomposeRes = await fetch("/api/ai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 8192,
-          system: DECOMPOSE_SYSTEM_PROMPT,
-          messages: [{ role: "user", content: description }],
-        }),
-      });
+      const graphText = (decomposeData as { content?: { text?: string }[] }).content?.[0]?.text ?? "";
+      if (!graphText) throw new Error("Workflow decomposition failed: 502");
 
-      if (!decomposeRes.ok) throw new Error("Workflow decomposition failed: " + decomposeRes.status);
-      const decomposeData = await decomposeRes.json();
-      const graphText = decomposeData.content?.[0]?.text ?? "";
-      const graph = JSON.parse(cleanJsonResponse(graphText));
+      let graph: { nodes?: unknown[]; edges?: unknown[] };
+      try {
+        graph = JSON.parse(cleanJsonResponse(graphText));
+      } catch {
+        throw new Error("Failed to parse JSON from decompose response");
+      }
 
-      if (!graph.nodes || graph.nodes.length === 0) {
+      if (!Array.isArray(graph.nodes) || graph.nodes.length === 0) {
         throw new Error("AI未能识别流程节点，请提供更详细的描述");
       }
 
       // Call 2 — Gap analysis via /api/ai proxy
-      const analyzeRes = await fetch("/api/ai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 8192,
-          system: GAP_ANALYSIS_SYSTEM_PROMPT,
-          messages: [{ role: "user", content: "请分析以下业务流程图并提供优化建议：\n\n" + JSON.stringify(graph) }],
-        }),
-      });
+      let analyzeData: unknown;
+      try {
+        const analyzeRes = await fetch("/api/ai", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 8192,
+            system: GAP_ANALYSIS_SYSTEM_PROMPT,
+            messages: [{ role: "user", content: "请分析以下业务流程图并提供优化建议：\n\n" + JSON.stringify(graph) }],
+          }),
+        });
+        if (!analyzeRes.ok) throw new Error("Gap analysis failed: " + analyzeRes.status);
+        const contentType = analyzeRes.headers.get("content-type") ?? "";
+        if (!contentType.includes("application/json")) {
+          throw new Error("Gap analysis failed: 502");
+        }
+        analyzeData = await analyzeRes.json();
+      } catch (e: unknown) {
+        if (e instanceof TypeError) throw new Error("Failed to fetch");
+        throw e;
+      }
 
-      if (!analyzeRes.ok) throw new Error("Gap analysis failed: " + analyzeRes.status);
-      const analyzeData = await analyzeRes.json();
-      const analysisText = analyzeData.content?.[0]?.text ?? "";
-      const analysis = JSON.parse(cleanJsonResponse(analysisText));
+      const analysisText = (analyzeData as { content?: { text?: string }[] }).content?.[0]?.text ?? "";
+      if (!analysisText) throw new Error("Gap analysis failed: 502");
 
-      setState((s) => ({ ...s, status: "ready", result: { graph, analysis } }));
+      let analysis: { bottlenecks?: unknown[]; opportunities?: unknown[] };
+      try {
+        analysis = JSON.parse(cleanJsonResponse(analysisText));
+      } catch {
+        throw new Error("Failed to parse JSON from analysis response");
+      }
+
+      if (!Array.isArray(analysis.bottlenecks) || !Array.isArray(analysis.opportunities)) {
+        throw new Error("Gap analysis failed: 502");
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setState((s) => ({ ...s, status: "ready", result: { graph: graph as any, analysis: analysis as any } }));
     } catch (err: unknown) {
+      const raw = err instanceof Error ? err.message : String(err);
       setState((s) => ({
         ...s,
         status: "error",
-        error: err instanceof Error ? err.message : "分析失败，请重试",
+        error: friendlyError(raw),
       }));
     }
   }
@@ -254,11 +315,13 @@ export default function WorkflowScout() {
         <IntakePanel
           description={state.description}
           files={state.files}
-          onDescriptionChange={(d) =>
-            setState((s) => ({ ...s, description: d }))
-          }
+          onDescriptionChange={(d) => {
+            setState((s) => ({ ...s, description: d }));
+            if (inlineError) setInlineError(null);
+          }}
           onFilesChange={(f) => setState((s) => ({ ...s, files: f }))}
           onSubmit={handleSubmit}
+          inlineError={inlineError}
         />
       )}
       {state.status === "loading" && <LoadingView />}
@@ -342,15 +405,71 @@ export default function WorkflowScout() {
         </div>
       )}
       {state.status === "error" && (
-        <div style={{ padding: "4rem 2rem", textAlign: "center" }}>
-          <div style={{ fontSize: 18, color: "#ef4444" }}>分析失败</div>
-          <div style={{ fontSize: 14, color: T2, marginTop: 8 }}>{state.error}</div>
-          <button
-            onClick={() => setState((s) => ({ ...s, status: "idle", error: null }))}
-            style={{ marginTop: 16, padding: "8px 20px", background: "transparent", border: `1px solid ${BD}`, borderRadius: 6, color: T2, cursor: "pointer" }}
+        <div
+          style={{
+            minHeight: "100vh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "2rem",
+          }}
+        >
+          <div
+            style={{
+              background: "#14141e",
+              border: `1px solid ${BD}`,
+              borderRadius: 12,
+              padding: "40px 36px",
+              maxWidth: 520,
+              width: "100%",
+              textAlign: "center",
+            }}
           >
-            ← 重试
-          </button>
+            <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: "#ef4444", marginBottom: 4 }}>
+              分析失败
+            </div>
+            <div style={{ fontSize: 13, color: T2, marginBottom: 20 }}>Analysis Failed</div>
+            <div
+              style={{
+                fontSize: 14,
+                color: "#e4e4ec",
+                lineHeight: 1.7,
+                marginBottom: 28,
+                whiteSpace: "pre-line",
+              }}
+            >
+              {state.error}
+            </div>
+            <button
+              onClick={() => setState((s) => ({ ...s, status: "idle", error: null }))}
+              style={{
+                minHeight: 44,
+                width: "100%",
+                padding: "10px 24px",
+                background: "transparent",
+                border: `1px solid ${BD}`,
+                borderRadius: 8,
+                color: "#e4e4ec",
+                cursor: "pointer",
+                fontSize: 15,
+                fontWeight: 600,
+                marginBottom: 20,
+              }}
+            >
+              重新扫描 →
+            </button>
+            <div style={{ fontSize: 12, color: T2, lineHeight: 1.6 }}>
+              如果问题持续，请联系我们：
+              <br />
+              <a
+                href="mailto:hello@rebase.ai"
+                style={{ color: AC, textDecoration: "none" }}
+              >
+                hello@rebase.ai
+              </a>
+            </div>
+          </div>
         </div>
       )}
     </div>

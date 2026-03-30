@@ -91,9 +91,15 @@ export default function InsightsPanel({
           🔴 关键瓶颈
         </div>
 
+        {analysis.bottlenecks.length === 0 && (
+          <div style={{ color: "#22c55e", fontSize: 14, padding: "12px 0" }}>
+            ✅ 未发现明显瓶颈
+          </div>
+        )}
+
         {analysis.bottlenecks.map((b) => {
           const node = nodeMap[b.node_id];
-          const nodeName = node?.name ?? b.node_id;
+          const nodeName = node?.name ?? "未知步骤";
           const isSelected = selectedNodeId === b.node_id;
           const sColor = severityColor(b.severity);
 
@@ -154,9 +160,15 @@ export default function InsightsPanel({
           <span style={{ fontSize: 12, color: T2 }}>按月节省金额排序</span>
         </div>
 
+        {analysis.opportunities.length === 0 && (
+          <div style={{ color: T2, fontSize: 14, padding: "12px 0" }}>
+            暂无自动化建议
+          </div>
+        )}
+
         {analysis.opportunities.map((opp) => {
           const node = nodeMap[opp.node_id];
-          const nodeName = node?.name ?? opp.node_id;
+          const nodeName = node?.name ?? "未知步骤";
           const isSelected = selectedNodeId === opp.node_id;
 
           return (

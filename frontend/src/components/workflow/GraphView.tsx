@@ -171,7 +171,7 @@ function NodeShape({
   const selectedStroke = isSelected ? AC : stroke;
   const selectedWidth = isSelected ? 3 : 1.5;
 
-  const nameText = truncate(node.name, 10);
+  const nameText = truncate(node.name, 12);
   const toolText = node.tool_used ? `${node.tool_used}` : null;
   const timeText = node.avg_time_minutes ? `${node.avg_time_minutes}分钟` : null;
 
@@ -490,6 +490,23 @@ export default function GraphView({
       behavior: "smooth",
     });
   }, [selectedNodeId, layoutNodes]);
+
+  if (graph.nodes.length === 0) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          height: 200,
+          color: T2,
+          fontSize: 14,
+        }}
+      >
+        没有识别到流程节点
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
