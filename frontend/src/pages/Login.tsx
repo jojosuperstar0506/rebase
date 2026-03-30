@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
 const BG = "#0c0c14";
@@ -13,7 +14,7 @@ export default function Login() {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const validCode = import.meta.env.VITE_ACCESS_CODE;
     if (!validCode || code.trim() === validCode) {

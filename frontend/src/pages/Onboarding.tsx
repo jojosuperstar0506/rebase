@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { FormEvent } from "react";
 
 const BG = "#0c0c14";
 const S1 = "#14141e";
@@ -49,7 +50,7 @@ export default function Onboarding() {
 
   function set(field: string) { return (v: string) => setForm((f) => ({ ...f, [field]: v })); }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!form.name || !form.email || !form.industry) {
       setErrorMsg("Please fill in Name, Email, and Industry at minimum.");

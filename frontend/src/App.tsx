@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { CSSProperties } from "react";
 import { Routes, Route, Link, useNavigate } from "react-router-dom";
 import DiagnosticDashboard from "./pages/DiagnosticDashboard";
 import WorkflowViewer from "./pages/WorkflowViewer";
@@ -10,7 +11,7 @@ import Onboarding from "./pages/Onboarding";
 import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
 
-const navStyle: React.CSSProperties = {
+const navStyle: CSSProperties = {
   display: "flex",
   gap: "1.5rem",
   padding: "1rem 2rem",
@@ -20,7 +21,7 @@ const navStyle: React.CSSProperties = {
   alignItems: "center",
 };
 
-const linkStyle: React.CSSProperties = {
+const linkStyle: CSSProperties = {
   textDecoration: "none",
   color: "#333",
   fontWeight: 500,
