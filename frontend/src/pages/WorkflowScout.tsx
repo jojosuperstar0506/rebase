@@ -5,6 +5,7 @@ import LoadingView from "../components/workflow/LoadingView";
 import SummaryBar from "../components/workflow/SummaryBar";
 import GraphView from "../components/workflow/GraphView";
 import InsightsPanel from "../components/workflow/InsightsPanel";
+import ContactModal from "../components/workflow/ContactModal";
 
 // Design tokens
 const BG = "#0c0c14";
@@ -201,6 +202,7 @@ export default function WorkflowScout() {
     selectedNodeId: null,
   });
   const [inlineError, setInlineError] = useState<string | null>(null);
+  const [showContactModal, setShowContactModal] = useState(false);
 
   async function handleSubmit() {
     const description = state.description.trim().slice(0, 5000);
@@ -396,12 +398,25 @@ export default function WorkflowScout() {
             >
               ← 重新扫描
             </button>
-            <button
-              style={{ minHeight: 44, padding: "10px 24px", background: AC, border: "none", borderRadius: 6, color: "#000", fontWeight: 700, fontSize: 14, cursor: "pointer" }}
-            >
-              联系我们获取实施方案 →
-            </button>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+              <button
+                onClick={() => setShowContactModal(true)}
+                style={{ minHeight: 44, padding: "10px 24px", background: AC, border: "none", borderRadius: 6, color: "#000", fontWeight: 700, fontSize: 14, cursor: "pointer" }}
+              >
+                联系我们获取实施方案 →
+              </button>
+              <div style={{ fontSize: 12, color: T2 }}>
+                或添加微信咨询：
+                <span style={{ color: AC, fontWeight: 600, userSelect: "all" }}>rebase_ai</span>
+              </div>
+            </div>
           </div>
+
+          <ContactModal
+            isOpen={showContactModal}
+            onClose={() => setShowContactModal(false)}
+            workflowName={state.result.graph.workflow_name}
+          />
         </div>
       )}
       {state.status === "error" && (
