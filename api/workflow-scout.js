@@ -3,6 +3,21 @@ import {
   extractFileContent,
 } from "./lib/parse-files.js";
 
+function cleanJsonResponse(text) {
+  let cleaned = text.trim();
+  // Remove markdown code fences: ```json ... ``` or ``` ... ```
+  cleaned = cleaned.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?\s*```$/i, '');
+  // If still not starting with { or [, try to find the first { and last }
+  if (!cleaned.startsWith('{') && !cleaned.startsWith('[')) {
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1) {
+      cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+    }
+  }
+  return cleaned;
+}
+
 export const config = {
   api: {
     bodyParser: false,
@@ -238,7 +253,7 @@ async function decomposeWorkflow(apiKey, description, fileTexts, imageBase64s) {
   const rawText = data.content[0].text;
 
   try {
-    return JSON.parse(rawText);
+    return JSON.parse(cleanJsonResponse(rawText));
   } catch {
     throw new Error(
       `Failed to parse LLM response as JSON. Raw response: ${rawText.slice(0, 500)}`
@@ -296,7 +311,7 @@ async function analyzeWorkflow(apiKey, graph) {
   const rawText = data.content[0].text;
 
   try {
-    return JSON.parse(rawText);
+    return JSON.parse(cleanJsonResponse(rawText));
   } catch {
     throw new Error(
       `Failed to parse gap analysis response as JSON. Raw response: ${rawText.slice(0, 500)}`
