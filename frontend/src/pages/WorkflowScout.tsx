@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { ScoutState } from "../types/workflow";
 import IntakePanel from "../components/workflow/IntakePanel";
 import LoadingView from "../components/workflow/LoadingView";
@@ -203,6 +203,13 @@ export default function WorkflowScout() {
   });
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [showContactModal, setShowContactModal] = useState(false);
+
+  // Browser tab title
+  useEffect(() => {
+    const prev = document.title;
+    document.title = "流程扫描 | Rebase";
+    return () => { document.title = prev; };
+  }, []);
 
   async function handleSubmit() {
     const description = state.description.trim().slice(0, 5000);
