@@ -1,6 +1,6 @@
 require('dotenv').config();
 const express = require('express');
-const axios = require('axios');
+const Anthropic = require('@anthropic-ai/sdk');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const { startScheduler, runDailyReport, generateFeedbackToken } = require("./scheduler");
@@ -48,13 +48,16 @@ app.use('/api', apiLimiter);
 app.use('/api', requireSecret);
 
 // ── Anthropic client ────────────────────────────────────────────────────────
-async function callGemini(prompt) {
-  const key = process.env.GEMINI_API_KEY;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`;
-  const response = await axios.post(url, {
-    contents: [{ parts: [{ text: prompt }] }]
+const anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+async function callAI(prompt, systemPrompt) {
+  const msg = await anthropicClient.messages.create({
+    model: process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001',
+    max_tokens: 2048,
+    system: systemPrompt || 'You are a helpful AI assistant for Rebase, a company that helps Chinese SMBs adopt AI into their operations.',
+    messages: [{ role: 'user', content: prompt }],
   });
-  return response.data.candidates[0].content.parts[0].text;
+  return msg.content[0].text;
 }
 
 // ── Routes ──────────────────────────────────────────────────────────────────
@@ -79,12 +82,28 @@ app.post('/api/chat', async (req, res) => {
       return res.status(400).json({ error: 'message is required' });
     }
 
-    const fullPrompt = `${systemPrompt || 'You are a helpful AI assistant for Rebase, a company that helps Chinese SMBs adopt AI into their operations.'}\n\n${message}`;
-    const reply = await callGemini(fullPrompt);
+    const reply = await callAI(message, systemPrompt);
     res.json({ reply });
   } catch (err) {
     console.error('Chat error:', err.message);
     res.status(500).json({ error: 'Failed to get response from Claude' });
+  }
+});
+
+// AI proxy — same interface as Vercel /api/ai for easy switching between Vercel and ECS
+app.post('/api/ai', async (req, res) => {
+  try {
+    const { model, max_tokens, messages, system } = req.body;
+    const msg = await anthropicClient.messages.create({
+      model: model || process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001',
+      max_tokens: max_tokens || 4096,
+      messages: messages || [],
+      ...(system ? { system } : {}),
+    });
+    res.json(msg);
+  } catch (err) {
+    console.error('AI proxy error:', err.message);
+    res.status(500).json({ error: 'AI request failed' });
   }
 });
 
@@ -109,7 +128,7 @@ Provide a concise GTM analysis with:
 3. Recommended outreach channels
 4. First 30-day action plan`;
 
-    const analysis = await callGemini(prompt);
+    const analysis = await callAI(prompt);
     res.json({ analysis });
   } catch (err) {
     console.error('GTM agent error:', err.message);
@@ -127,7 +146,7 @@ app.post('/api/scheduled-agent', async (req, res) => {
       return res.status(400).json({ error: 'task is required' });
     }
 
-    const taskResult = await callGemini(`Run the following scheduled task: ${task}\n\nData: ${JSON.stringify(data || {})}`);
+    const taskResult = await callAI(`Run the following scheduled task: ${task}\n\nData: ${JSON.stringify(data || {})}`);
     res.json({
       task,
       result: taskResult,
