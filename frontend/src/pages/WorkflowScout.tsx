@@ -569,11 +569,17 @@ export default function WorkflowScout() {
                 onNodeSelect={(id) =>
                   setState((s) => ({
                     ...s,
-                    selectedNodeId: s.selectedNodeId === id ? null : id,
+                    selectedNodeId:
+                      id === null
+                        ? null
+                        : s.selectedNodeId === id
+                        ? null
+                        : id,
                   }))
                 }
                 comparison={state.result.comparison}
                 currentView={comparisonView}
+                onShowContact={() => setShowContactModal(true)}
               />
             </div>
           </div>
