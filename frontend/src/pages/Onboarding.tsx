@@ -1,7 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
 
 const BG = "#0c0c14";
 const S1 = "#14141e";
@@ -46,7 +45,7 @@ function TextArea({ label, value, onChange, placeholder }: {
 }
 
 export default function Onboarding() {
-  const [form, setForm] = useState({ name: "", company: "", industry: "", competitors: "", email: "", goal: "" });
+  const [form, setForm] = useState({ name: "", phone: "", company: "", industry: "", competitors: "", email: "", goal: "" });
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const navigate = useNavigate();
@@ -55,27 +54,21 @@ export default function Onboarding() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!form.name || !form.email || !form.industry) {
-      setErrorMsg("Please fill in Name, Email, and Industry at minimum.");
+    if (!form.name || !form.phone || !form.industry) {
+      setErrorMsg("Please fill in Name, Phone, and Industry at minimum.");
       return;
     }
     setStatus("loading");
     setErrorMsg("");
     try {
-      // Save profile to Supabase if configured
-      if (supabase) {
-        await supabase.from("profiles").insert([{
-          name: form.name,
-          email: form.email,
-          company: form.company,
-          industry: form.industry,
-          competitors: form.competitors,
-          goal: form.goal,
-        }]);
-      }
+      await fetch("/api/onboarding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
       setStatus("success");
-      // Redirect to login after 1.5s with email pre-filled
-      setTimeout(() => navigate("/login", { state: { email: form.email } }), 1500);
+      // Redirect to login after 1.5s with phone pre-filled
+      setTimeout(() => navigate("/login", { state: { phone: form.phone } }), 1500);
     } catch {
       setStatus("error");
       setErrorMsg("Something went wrong. Please try again.");
@@ -89,7 +82,7 @@ export default function Onboarding() {
           <div style={{ fontSize: 40, marginBottom: 16 }}>✅</div>
           <div style={{ fontSize: 22, fontWeight: 700, color: TX, marginBottom: 12 }}>You're all set!</div>
           <div style={{ fontSize: 14, color: T2, lineHeight: 1.7 }}>
-            Taking you to login... you'll receive a code at <span style={{ color: AC }}>{form.email}</span>.
+            Taking you to login... you'll receive a code at <span style={{ color: AC }}>{form.phone}</span>.
           </div>
         </div>
       </div>
@@ -108,7 +101,8 @@ export default function Onboarding() {
         <div style={{ background: S1, border: `1px solid ${BD}`, borderRadius: 12, padding: 36 }}>
           <form onSubmit={handleSubmit}>
             <Field label="FULL NAME *" value={form.name} onChange={set("name")} placeholder="Your name" />
-            <Field label="EMAIL *" value={form.email} onChange={set("email")} placeholder="you@company.com" type="email" />
+            <Field label="PHONE NUMBER *" value={form.phone} onChange={set("phone")} placeholder="+86 138 0000 0000" type="tel" />
+            <Field label="EMAIL" value={form.email} onChange={set("email")} placeholder="you@company.com" type="email" />
             <Field label="COMPANY NAME" value={form.company} onChange={set("company")} placeholder="Your company" />
             <Field label="INDUSTRY *" value={form.industry} onChange={set("industry")} placeholder="e.g. 电商 / 零售 / SaaS / 消费品" />
             <Field label="COMPETITORS TO TRACK" value={form.competitors} onChange={set("competitors")} placeholder="e.g. 竞品A, 竞品B, 竞品C (comma separated)" />
