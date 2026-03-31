@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { CSSProperties } from "react";
 import { Routes, Route, Link, useNavigate } from "react-router-dom";
+import { supabase } from "./lib/supabase";
 import DiagnosticDashboard from "./pages/DiagnosticDashboard";
 import WorkflowScout from "./pages/WorkflowScout";
 import AgentMonitor from "./pages/AgentMonitor";
@@ -33,8 +34,9 @@ function Nav() {
   );
   const navigate = useNavigate();
 
-  function handleLogout() {
+  async function handleLogout() {
     localStorage.removeItem("rebase_access");
+    if (supabase) await supabase.auth.signOut();
     setIsLoggedIn(false);
     navigate("/login");
   }

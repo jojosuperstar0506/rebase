@@ -1,5 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "../lib/supabase";
 
 const BG = "#0c0c14";
 const S1 = "#14141e";
@@ -47,6 +49,7 @@ export default function Onboarding() {
   const [form, setForm] = useState({ name: "", company: "", industry: "", competitors: "", email: "", goal: "" });
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
+  const navigate = useNavigate();
 
   function set(field: string) { return (v: string) => setForm((f) => ({ ...f, [field]: v })); }
 
@@ -59,17 +62,23 @@ export default function Onboarding() {
     setStatus("loading");
     setErrorMsg("");
     try {
-      const ecsUrl = import.meta.env.VITE_ECS_URL || "http://8.217.242.191";
-      const res = await fetch(`${ecsUrl}/api/onboarding`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) throw new Error("Server error");
+      // Save profile to Supabase if configured
+      if (supabase) {
+        await supabase.from("profiles").insert([{
+          name: form.name,
+          email: form.email,
+          company: form.company,
+          industry: form.industry,
+          competitors: form.competitors,
+          goal: form.goal,
+        }]);
+      }
       setStatus("success");
+      // Redirect to login after 1.5s with email pre-filled
+      setTimeout(() => navigate("/login", { state: { email: form.email } }), 1500);
     } catch {
       setStatus("error");
-      setErrorMsg("Failed to submit. Please email us directly at hello@rebase.ai");
+      setErrorMsg("Something went wrong. Please try again.");
     }
   }
 
@@ -78,9 +87,9 @@ export default function Onboarding() {
       <div style={{ minHeight: "100vh", background: BG, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "system-ui, sans-serif" }}>
         <div style={{ width: 500, background: S1, border: `1px solid ${BD}`, borderRadius: 12, padding: 48, textAlign: "center" }}>
           <div style={{ fontSize: 40, marginBottom: 16 }}>✅</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: TX, marginBottom: 12 }}>Application Received</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: TX, marginBottom: 12 }}>You're all set!</div>
           <div style={{ fontSize: 14, color: T2, lineHeight: 1.7 }}>
-            We'll review your application and send you an access code within 24 hours to <span style={{ color: AC }}>{form.email}</span>.
+            Taking you to login... you'll receive a code at <span style={{ color: AC }}>{form.email}</span>.
           </div>
         </div>
       </div>
