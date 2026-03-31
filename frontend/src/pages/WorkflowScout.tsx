@@ -6,6 +6,7 @@ import SummaryBar from "../components/workflow/SummaryBar";
 import GraphView from "../components/workflow/GraphView";
 import InsightsPanel from "../components/workflow/InsightsPanel";
 import ContactModal from "../components/workflow/ContactModal";
+import ComparisonToggle from "../components/workflow/ComparisonToggle";
 
 // Design tokens
 const BG = "#0c0c14";
@@ -148,6 +149,7 @@ RULES:
 - automation_rate = (nodes where is_manual=false) / (total nodes)
 - industry_benchmark_rate: use 0.75 for retail/e-commerce
 - summary: 2-3 sentences in Chinese. Mention: current automation rate vs benchmark, total potential monthly savings, top 1-2 priorities. Actionable tone.
+- The summary field must be written in natural business Chinese. NEVER reference node IDs (like node_1, node_3) in the summary — use the actual step names instead (like 收集订单信息, Excel汇总). The summary is for business decision-makers, not engineers.
 - summary_en: English translation of summary.
 - Include ALL bottleneck nodes, not just top 3. But limit automation opportunities to the top 5 most impactful.
 - total_time_minutes: sum of all nodes' avg_time_minutes
@@ -293,6 +295,7 @@ export default function WorkflowScout() {
   });
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [showContactModal, setShowContactModal] = useState(false);
+  const [comparisonView, setComparisonView] = useState<"original" | "optimized">("original");
 
   // Browser tab title
   useEffect(() => {
@@ -503,9 +506,21 @@ export default function WorkflowScout() {
           <SummaryBar analysis={state.result.analysis} />
           <div className="ws-results">
             <div className="ws-graph">
+              {state.result.comparison && (
+                <ComparisonToggle
+                  view={comparisonView}
+                  onViewChange={setComparisonView}
+                />
+              )}
               <GraphView
-                graph={state.result.graph}
-                bottlenecks={state.result.analysis.bottlenecks}
+                graph={
+                  comparisonView === "optimized" && state.result.comparison
+                    ? state.result.comparison.optimized
+                    : state.result.graph
+                }
+                bottlenecks={
+                  comparisonView === "optimized" ? [] : state.result.analysis.bottlenecks
+                }
                 selectedNodeId={state.selectedNodeId}
                 onNodeClick={(id) =>
                   setState((s) => ({
@@ -514,6 +529,7 @@ export default function WorkflowScout() {
                   }))
                 }
                 onDeselect={() => setState((s) => ({ ...s, selectedNodeId: null }))}
+                isOptimized={comparisonView === "optimized"}
               />
             </div>
             <div className="ws-insights">
@@ -533,7 +549,7 @@ export default function WorkflowScout() {
           {/* Bottom bar */}
           <div className="ws-bottom">
             <button
-              onClick={() => setState((s) => ({ ...s, status: "idle", result: null, error: null, description: "", files: [], selectedNodeId: null }))}
+              onClick={() => { setState((s) => ({ ...s, status: "idle", result: null, error: null, description: "", files: [], selectedNodeId: null })); setComparisonView("original"); }}
               style={{ minHeight: 44, padding: "8px 20px", background: "transparent", border: `1px solid ${BD}`, borderRadius: 6, color: T2, cursor: "pointer", fontSize: 14 }}
             >
               ← 重新扫描

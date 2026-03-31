@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useRef } from "react";
+import { useMemo, useEffect, useRef, useState } from "react";
 import type { WorkflowGraph, WorkflowNode, WorkflowEdge, Bottleneck } from "../../types/workflow";
 
 // Design tokens
@@ -31,6 +31,7 @@ interface GraphViewProps {
   selectedNodeId: string | null;
   onNodeClick: (nodeId: string) => void;
   onDeselect?: () => void;
+  isOptimized?: boolean;
 }
 
 interface LayoutNode {
@@ -159,10 +160,12 @@ function NodeShape({
   ln,
   isSelected,
   onClick,
+  isOptimized,
 }: {
   ln: LayoutNode;
   isSelected: boolean;
   onClick: () => void;
+  isOptimized?: boolean;
 }) {
   const { node, x, y, isBottleneck } = ln;
   const fill = getNodeFill(node, isBottleneck);
@@ -326,6 +329,19 @@ function NodeShape({
           />
         </rect>
       )}
+
+      {/* ✨ Optimized indicator — top-right corner badge */}
+      {isOptimized && (node as { optimization_note?: string }).optimization_note && (
+        <text
+          x={NODE_W / 2 - 4}
+          y={-NODE_H / 2 + 12}
+          textAnchor="end"
+          fontSize={11}
+          style={{ pointerEvents: "none", userSelect: "none" }}
+        >
+          ✨
+        </text>
+      )}
     </g>
   );
 }
@@ -403,12 +419,13 @@ function EdgePath({
 
 // ─── Legend ───
 
-function Legend() {
+function Legend({ isOptimized }: { isOptimized?: boolean }) {
   const items = [
-    { color: RED, label: "手动瓶颈 Bottleneck" },
+    ...(!isOptimized ? [{ color: RED, label: "手动瓶颈 Bottleneck" }] : []),
     { color: AMBER, label: "手动步骤 Manual" },
     { color: GREEN, label: "已自动化 Automated" },
     { color: GRAY, label: "决策/交接 Decision" },
+    ...(isOptimized ? [{ color: GREEN, label: "✨ 已优化 Optimized" }] : []),
   ];
 
   return (
@@ -455,8 +472,11 @@ export default function GraphView({
   selectedNodeId,
   onNodeClick,
   onDeselect,
+  isOptimized,
 }: GraphViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const isFirstRender = useRef(true);
+  const [svgOpacity, setSvgOpacity] = useState(1);
 
   const bottleneckIds = useMemo(
     () => new Set(bottlenecks.map((b) => b.node_id)),
@@ -475,6 +495,17 @@ export default function GraphView({
     }
     return m;
   }, [layoutNodes]);
+
+  // Crossfade when graph switches (skip on first render)
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    setSvgOpacity(0);
+    const t = setTimeout(() => setSvgOpacity(1), 150);
+    return () => clearTimeout(t);
+  }, [graph.workflow_name]);
 
   // Auto-scroll SVG container to keep selected node visible
   useEffect(() => {
@@ -558,33 +589,37 @@ export default function GraphView({
             </filter>
           </defs>
 
-          {/* Edges (rendered first, under nodes) */}
-          {graph.edges.map((edge, i) => {
-            const sp = posMap.get(edge.source_id);
-            const tp = posMap.get(edge.target_id);
-            if (!sp || !tp) return null;
-            return (
-              <EdgePath
-                key={`e-${i}`}
-                edge={edge}
-                sourcePos={sp}
-                targetPos={tp}
-              />
-            );
-          })}
+          {/* Crossfade wrapper */}
+          <g style={{ opacity: svgOpacity, transition: "opacity 0.3s ease" }}>
+            {/* Edges (rendered first, under nodes) */}
+            {graph.edges.map((edge, i) => {
+              const sp = posMap.get(edge.source_id);
+              const tp = posMap.get(edge.target_id);
+              if (!sp || !tp) return null;
+              return (
+                <EdgePath
+                  key={`e-${i}`}
+                  edge={edge}
+                  sourcePos={sp}
+                  targetPos={tp}
+                />
+              );
+            })}
 
-          {/* Nodes */}
-          {layoutNodes.map((ln) => (
-            <NodeShape
-              key={ln.node.id}
-              ln={ln}
-              isSelected={selectedNodeId === ln.node.id}
-              onClick={() => onNodeClick(ln.node.id)}
-            />
-          ))}
+            {/* Nodes */}
+            {layoutNodes.map((ln) => (
+              <NodeShape
+                key={ln.node.id}
+                ln={ln}
+                isSelected={selectedNodeId === ln.node.id}
+                onClick={() => onNodeClick(ln.node.id)}
+                isOptimized={isOptimized}
+              />
+            ))}
+          </g>
         </svg>
       </div>
-      <Legend />
+      <Legend isOptimized={isOptimized} />
     </div>
   );
 }
