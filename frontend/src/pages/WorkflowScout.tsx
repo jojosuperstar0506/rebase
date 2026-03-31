@@ -148,6 +148,7 @@ RULES:
 - automation_rate = (nodes where is_manual=false) / (total nodes)
 - industry_benchmark_rate: use 0.75 for retail/e-commerce
 - summary: 2-3 sentences in Chinese. Mention: current automation rate vs benchmark, total potential monthly savings, top 1-2 priorities. Actionable tone.
+- The summary field must be written in natural business Chinese. NEVER reference node IDs (like node_1, node_3) in the summary — use the actual step names instead (like 收集订单信息, Excel汇总). The summary is for business decision-makers, not engineers.
 - summary_en: English translation of summary.
 - Include ALL bottleneck nodes, not just top 3. But limit automation opportunities to the top 5 most impactful.
 - total_time_minutes: sum of all nodes' avg_time_minutes
