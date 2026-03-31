@@ -74,6 +74,13 @@ RULES:
 - workflow_name_en: English equivalent (e.g., "Order Fulfillment Process")
 - Produce 6-15 nodes typically. Fewer only if the process is genuinely simple (3-5 steps described).
 - Keep output concise. Use short node names (max 8 Chinese characters). Omit null fields. Target 6-10 nodes.
+- Real business workflows are NOT purely linear. Actively look for and create:
+  * Decision branches (金额判断, 审批结果, 质量检查结果, 库存是否充足)
+  * Parallel tracks (e.g., warehouse processing happens while finance prepares payment)
+  * Exception/error paths (退货不合格怎么办, 审批被拒怎么办, 库存不足怎么办)
+  * Handoffs between departments (each department change should be a handoff node)
+- Aim for at least 2 decision nodes and at least 1 parallel branch in any workflow with 8+ steps
+- A purely linear chain of nodes is almost certainly wrong — real processes have conditionals
 - tenant_id: always "demo"
 - version: always 1
 
