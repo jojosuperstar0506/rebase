@@ -539,7 +539,11 @@ export default function WorkflowScout() {
             <div className="ws-insights">
               <InsightsPanel
                 analysis={state.result.analysis}
-                graph={state.result.graph}
+                graph={
+                  comparisonView === "optimized" && state.result.comparison
+                    ? state.result.comparison.optimized
+                    : state.result.graph
+                }
                 selectedNodeId={state.selectedNodeId}
                 onNodeSelect={(id) =>
                   setState((s) => ({
@@ -547,6 +551,8 @@ export default function WorkflowScout() {
                     selectedNodeId: s.selectedNodeId === id ? null : id,
                   }))
                 }
+                comparison={state.result.comparison}
+                currentView={comparisonView}
               />
             </div>
           </div>
