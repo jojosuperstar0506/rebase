@@ -120,22 +120,25 @@ function OptimizedView({
                 background: isSelected ? `${AC}08` : S2,
                 borderRadius: 8,
                 padding: 16,
-                marginBottom: 12,
+                marginBottom: 10,
                 cursor: "pointer",
                 border: isSelected ? `1px solid ${AC}60` : "1px solid transparent",
                 transition: "background 0.2s, border-color 0.2s",
+                overflow: "hidden",
+                wordBreak: "break-word",
+                overflowWrap: "break-word",
               }}
             >
               {/* Header */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: AC }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: AC, flex: 1, minWidth: 0, wordBreak: "break-word", overflowWrap: "break-word" }}>
                   🏆 {optNode.name}
                 </span>
                 {isNew ? (
                   <span style={{
                     fontSize: 11, fontWeight: 700, color: GREEN,
                     background: `${GREEN}15`, border: `1px solid ${GREEN}40`,
-                    borderRadius: 10, padding: "2px 8px",
+                    borderRadius: 10, padding: "2px 8px", flexShrink: 0,
                   }}>
                     ✨ 新增步骤
                   </span>
@@ -143,7 +146,7 @@ function OptimizedView({
                   <span style={{
                     fontSize: 11, fontWeight: 700, color: GREEN,
                     background: `${GREEN}15`, border: `1px solid ${GREEN}40`,
-                    borderRadius: 10, padding: "2px 8px",
+                    borderRadius: 10, padding: "2px 8px", flexShrink: 0,
                   }}>
                     ↓ {reductionPct}%
                   </span>
@@ -240,12 +243,14 @@ export default function InsightsPanel({
   const containerStyle: React.CSSProperties = {
     overflowY: "auto",
     overflowX: "hidden",
-    maxHeight: "calc(100vh - 200px)",
+    maxHeight: "calc(100vh - 280px)",
+    paddingRight: 16,
     display: "flex",
     flexDirection: "column",
     gap: 24,
     wordBreak: "break-word",
     overflowWrap: "break-word",
+    scrollbarWidth: "thin",
   };
 
   // ── Optimized view ──
@@ -269,7 +274,7 @@ export default function InsightsPanel({
         <div style={{ fontSize: 12, color: AC, fontWeight: 600, marginBottom: 8, letterSpacing: "0.05em" }}>
           AI 分析摘要
         </div>
-        <p style={{ fontSize: 14, color: TX, lineHeight: 1.7, margin: 0, wordBreak: "break-word", overflowWrap: "break-word" }}>
+        <p style={{ fontSize: 14, color: TX, lineHeight: 1.8, margin: 0, wordBreak: "break-word", overflowWrap: "break-word" }}>
           {analysis.summary}
         </p>
       </div>
@@ -297,13 +302,16 @@ export default function InsightsPanel({
               style={{
                 background: isSelected ? `${AC}08` : S2,
                 borderLeft: `3px solid ${isSelected ? AC : sColor}`,
-                borderRadius: 8, padding: 16, marginBottom: 12, cursor: "pointer",
+                borderRadius: 8, padding: 16, marginBottom: 10, cursor: "pointer",
                 outline: isSelected ? `1px solid ${AC}50` : "1px solid transparent",
                 transition: "background 0.2s, outline 0.2s, border-color 0.2s",
+                overflow: "hidden",
+                wordBreak: "break-word",
+                overflowWrap: "break-word",
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: TX, wordBreak: "break-word", overflowWrap: "break-word", minWidth: 0 }}>{nodeName}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: TX, wordBreak: "break-word", overflowWrap: "break-word", minWidth: 0, flex: 1 }}>{nodeName}</span>
                 <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: sColor, borderRadius: 4, padding: "2px 8px", letterSpacing: "0.05em", flexShrink: 0 }}>
                   {severityLabel(b.severity)}
                 </span>
@@ -339,9 +347,12 @@ export default function InsightsPanel({
               onClick={() => onNodeSelect(opp.node_id)}
               style={{
                 background: isSelected ? `${AC}08` : S2,
-                borderRadius: 8, padding: "16px 20px", marginBottom: 12, cursor: "pointer",
+                borderRadius: 8, padding: "16px 20px", marginBottom: 10, cursor: "pointer",
                 border: isSelected ? `1px solid ${AC}60` : "1px solid transparent",
                 transition: "background 0.2s, border-color 0.2s",
+                overflow: "hidden",
+                wordBreak: "break-word",
+                overflowWrap: "break-word",
               }}
             >
               <div style={{ fontSize: 14, fontWeight: 700, color: TX, marginBottom: 10 }}>💡 {nodeName}</div>
