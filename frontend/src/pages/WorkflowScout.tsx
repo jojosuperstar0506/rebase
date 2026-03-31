@@ -513,7 +513,21 @@ export default function WorkflowScout() {
               {state.result.comparison && (
                 <ComparisonToggle
                   view={comparisonView}
-                  onViewChange={setComparisonView}
+                  onViewChange={(v) => {
+                    // Reset selectedNodeId if it doesn't exist in the target graph
+                    const targetNodes =
+                      v === "optimized" && state.result!.comparison
+                        ? state.result!.comparison.optimized.nodes
+                        : state.result!.graph.nodes;
+                    const idExists = targetNodes.some(
+                      (n) => n.id === state.selectedNodeId
+                    );
+                    setState((s) => ({
+                      ...s,
+                      selectedNodeId: idExists ? s.selectedNodeId : null,
+                    }));
+                    setComparisonView(v);
+                  }}
                 />
               )}
               <GraphView
