@@ -239,10 +239,13 @@ export default function InsightsPanel({
 
   const containerStyle: React.CSSProperties = {
     overflowY: "auto",
+    overflowX: "hidden",
     maxHeight: "calc(100vh - 200px)",
     display: "flex",
     flexDirection: "column",
     gap: 24,
+    wordBreak: "break-word",
+    overflowWrap: "break-word",
   };
 
   // ── Optimized view ──
@@ -262,11 +265,11 @@ export default function InsightsPanel({
   return (
     <div style={containerStyle}>
       {/* Executive Summary */}
-      <div style={{ background: `${AC}10`, borderLeft: `3px solid ${AC}`, borderRadius: 8, padding: "14px 16px" }}>
+      <div style={{ background: `${AC}10`, borderLeft: `3px solid ${AC}`, borderRadius: 8, padding: "14px 16px", overflow: "hidden" }}>
         <div style={{ fontSize: 12, color: AC, fontWeight: 600, marginBottom: 8, letterSpacing: "0.05em" }}>
           AI 分析摘要
         </div>
-        <p style={{ fontSize: 14, color: TX, lineHeight: 1.7, margin: 0 }}>
+        <p style={{ fontSize: 14, color: TX, lineHeight: 1.7, margin: 0, wordBreak: "break-word", overflowWrap: "break-word" }}>
           {analysis.summary}
         </p>
       </div>
@@ -299,13 +302,13 @@ export default function InsightsPanel({
                 transition: "background 0.2s, outline 0.2s, border-color 0.2s",
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: TX }}>{nodeName}</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: sColor, borderRadius: 4, padding: "2px 8px", letterSpacing: "0.05em" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: TX, wordBreak: "break-word", overflowWrap: "break-word", minWidth: 0 }}>{nodeName}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: sColor, borderRadius: 4, padding: "2px 8px", letterSpacing: "0.05em", flexShrink: 0 }}>
                   {severityLabel(b.severity)}
                 </span>
               </div>
-              <p style={{ fontSize: 13, color: T2, margin: "0 0 10px", lineHeight: 1.6 }}>{b.reason}</p>
+              <p style={{ fontSize: 13, color: T2, margin: "0 0 10px", lineHeight: 1.6, wordBreak: "break-word", overflowWrap: "break-word" }}>{b.reason}</p>
               <div style={{ fontSize: 12, color: T2 }}>
                 ⏱ 每日浪费 <span style={{ color: sColor, fontWeight: 600 }}>{b.time_waste_minutes}</span> 分钟
               </div>
