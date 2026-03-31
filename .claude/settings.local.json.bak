@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where node)",
+      "Bash(where npm)",
+      "Bash(where node.exe)",
+      "Bash(where npx.exe)",
+      "Bash(dir \"C:\\\\Program Files\\\\nodejs\")",
+      "Bash(dir \"C:\\\\Users\\\\wchiang\\\\AppData\\\\Roaming\\\\npm\")",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(where gh)",
+      "Bash(gh --version)",
+      "Bash(winget install --id GitHub.cli --accept-source-agreements --accept-package-agreements)",
+      "Bash(powershell -Command \"Get-Command gh -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source\")",
+      "Bash(powershell -Command \"Invoke-WebRequest -Uri ''https://github.com/cli/cli/releases/download/v2.88.1/gh_2.88.1_windows_amd64.zip'' -OutFile ''$env:TEMP\\\\gh.zip''; Expand-Archive -Path ''$env:TEMP\\\\gh.zip'' -DestinationPath ''$env:TEMP\\\\gh'' -Force; Get-ChildItem ''$env:TEMP\\\\gh'' -Recurse -Filter ''gh.exe'' | Select-Object -ExpandProperty FullName\")",
+      "Bash(ls -la \"C:\\\\Users\\\\wchiang\\\\Deloitte \\(O365D\\)\\\\Internal Development - Will''s Folder\\\\Will & Joanna''s SMB idea\")",
+      "Bash(ls \"C:\\\\Users\\\\wchiang\\\\Deloitte \\(O365D\\)\\\\Internal Development - Will''s Folder\\\\Will & Joanna''s SMB idea\"/*.md)",
+      "Bash(xargs grep:*)",
+      "Bash(sed -i 's/^export default function App/function App/' /tmp/jsx_deploy.txt)",
+      "Read(//tmp/**)",
+      "Read(//c/Users/wchiang/Deloitte \\(O365D\\)/Internal Development - Will''''s Folder/**)",
+      "Bash(gh pr:*)"
+    ]
+  }
+}

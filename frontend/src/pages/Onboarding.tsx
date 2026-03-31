@@ -61,17 +61,19 @@ export default function Onboarding() {
     setStatus("loading");
     setErrorMsg("");
     try {
-      await fetch("/api/onboarding", {
+      const res = await fetch("/api/onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Submission failed");
       setStatus("success");
       // Redirect to login after 1.5s with phone pre-filled
       setTimeout(() => navigate("/login", { state: { phone: form.phone } }), 1500);
-    } catch {
+    } catch (err) {
       setStatus("error");
-      setErrorMsg("Something went wrong. Please try again.");
+      setErrorMsg(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     }
   }
 

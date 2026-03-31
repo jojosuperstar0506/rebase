@@ -2,10 +2,16 @@ require('dotenv').config();
 const express = require('express');
 const Anthropic = require('@anthropic-ai/sdk');
 const cors = require('cors');
+const crypto = require('crypto');
+const https = require('https');
 const rateLimit = require('express-rate-limit');
+const jwt = require('jsonwebtoken');
 const { startScheduler, runDailyReport, generateFeedbackToken } = require("./scheduler");
 const fs = require("fs");
 const path = require("path");
+
+// ── OTP Store (in-memory, expires in 10 min) ────────────────────────────────
+const otpStore = new Map(); // phone -> { code, expiresAt }
 
 const app = express();
 
@@ -24,7 +30,7 @@ const apiLimiter = rateLimit({
 // Every request to /api/* must include the header: x-rebase-secret: <your secret>
 // Vercel frontend sends this automatically. Random bots don't know it.
 // Public endpoints (e.g. /api/onboarding) are whitelisted — no secret needed.
-const PUBLIC_API_PATHS = ['/onboarding'];
+const PUBLIC_API_PATHS = ['/onboarding', '/auth/send-otp', '/auth/verify-otp'];
 
 function requireSecret(req, res, next) {
   const secret = process.env.API_SECRET;
@@ -167,16 +173,17 @@ app.post('/api/scheduled-agent', async (req, res) => {
 // Onboarding — stores user application from the public signup form
 app.post("/api/onboarding", async (req, res) => {
   try {
-    const { name, company, industry, competitors, email, goal } = req.body;
-    if (!name || !email || !industry) {
-      return res.status(400).json({ error: "name, email, and industry are required" });
+    const { name, phone, company, industry, competitors, email, goal } = req.body;
+    if (!name || !phone || !industry) {
+      return res.status(400).json({ error: "name, phone, and industry are required" });
     }
     const applicantsDir = path.join(__dirname, "config/applicants");
     fs.mkdirSync(applicantsDir, { recursive: true });
-    const filename = `${Date.now()}-${email.replace(/[^a-z0-9]/gi, "_")}.json`;
-    const applicant = { name, company, industry, competitors, email, goal, submittedAt: new Date().toISOString(), status: "pending" };
+    const safePhone = phone.replace(/[^a-z0-9]/gi, "_");
+    const filename = `${Date.now()}-${safePhone}.json`;
+    const applicant = { name, phone, company, industry, competitors, email, goal, submittedAt: new Date().toISOString(), status: "pending" };
     fs.writeFileSync(path.join(applicantsDir, filename), JSON.stringify(applicant, null, 2));
-    console.log(`[Onboarding] New application from ${name} (${email})`);
+    console.log(`[Onboarding] New application from ${name} (phone: ${phone.slice(0, 6)}...)`);  // masked for privacy
 
     // Notify Will/Joanna by email (skips silently if keys not configured)
     notifyNewApplicant(applicant).catch((e) => console.error("[Onboarding] Email failed:", e.message));
@@ -374,6 +381,93 @@ function feedbackPage(icon, title, message) {
   </div>
 </body></html>`;
 }
+
+// ── SMS OTP Auth ─────────────────────────────────────────────────────────────
+// Sends a 6-digit OTP via Alibaba Cloud SMS.
+// If ALI_SMS_* env vars are not set, logs the code to console (dev mode).
+async function sendSMS(phone, code) {
+  const accessKeyId = process.env.ALI_SMS_ACCESS_KEY_ID;
+  const accessKeySecret = process.env.ALI_SMS_ACCESS_KEY_SECRET;
+  const signName = process.env.ALI_SMS_SIGN_NAME;
+  const templateCode = process.env.ALI_SMS_TEMPLATE_CODE;
+
+  if (!accessKeyId || !accessKeySecret) {
+    console.log(`[SMS DEV MODE] OTP for ${phone}: ${code}`);
+    return;
+  }
+
+  const params = {
+    AccessKeyId: accessKeyId,
+    Action: "SendSms",
+    Format: "JSON",
+    PhoneNumbers: phone,
+    SignName: signName,
+    SignatureMethod: "HMAC-SHA1",
+    SignatureNonce: crypto.randomBytes(16).toString("hex"),
+    SignatureVersion: "1.0",
+    TemplateCode: templateCode,
+    TemplateParam: JSON.stringify({ code }),
+    Timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+    Version: "2017-05-25",
+  };
+
+  const sortedKeys = Object.keys(params).sort();
+  const canonicalQS = sortedKeys
+    .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`)
+    .join("&");
+  const stringToSign = `GET&${encodeURIComponent("/")}&${encodeURIComponent(canonicalQS)}`;
+  const signature = crypto.createHmac("sha1", accessKeySecret + "&").update(stringToSign).digest("base64");
+  const url = `https://dysmsapi.aliyuncs.com/?${canonicalQS}&Signature=${encodeURIComponent(signature)}`;
+
+  await new Promise((resolve, reject) => {
+    https.get(url, (res) => {
+      let data = "";
+      res.on("data", (chunk) => { data += chunk; });
+      res.on("end", () => {
+        const result = JSON.parse(data);
+        if (result.Code === "OK") { console.log(`[SMS] Sent to ${phone}`); resolve(); }
+        else reject(new Error(`Alibaba SMS error: ${result.Message} (${result.Code})`));
+      });
+    }).on("error", reject);
+  });
+}
+
+// POST /api/auth/send-otp — generate and send OTP to phone
+app.post("/api/auth/send-otp", async (req, res) => {
+  const { phone } = req.body;
+  if (!phone) return res.status(400).json({ error: "Phone number is required" });
+
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  otpStore.set(phone, { code, expiresAt: Date.now() + 10 * 60 * 1000 });
+
+  try {
+    await sendSMS(phone, code);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("[OTP] SMS failed:", err.message);
+    res.status(500).json({ error: "Failed to send SMS. Please try again." });
+  }
+});
+
+// POST /api/auth/verify-otp — verify OTP and return JWT
+app.post("/api/auth/verify-otp", (req, res) => {
+  const { phone, code } = req.body;
+  if (!phone || !code) return res.status(400).json({ error: "Phone and code are required" });
+
+  const stored = otpStore.get(phone);
+  if (!stored) return res.status(400).json({ error: "No code found. Please request a new one." });
+  if (Date.now() > stored.expiresAt) {
+    otpStore.delete(phone);
+    return res.status(400).json({ error: "Code expired. Please request a new one." });
+  }
+  if (stored.code !== code) return res.status(400).json({ error: "Invalid code. Please try again." });
+
+  otpStore.delete(phone);
+  const secret = process.env.JWT_SECRET || "rebase-dev-secret";
+  const token = jwt.sign({ phone }, secret, { expiresIn: "7d" });
+  console.log(`[Auth] User logged in: ${phone}`);
+  res.json({ success: true, token });
+});
 
 // ── Start server ────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;

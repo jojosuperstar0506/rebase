@@ -34,7 +34,28 @@
       "Bash(PYTHONPATH=. python3 -c \"from shared.schemas import *; print\\(''''Schemas OK:'''', [cls.__name__ for cls in [AnalysisResult, WorkflowGraph, AgentSpec, Task, CostRecord]]\\)\")",
       "Bash(PYTHONPATH=. python3 -c \"from gateway.main import app; print\\(''''Gateway OK:'''', type\\(app\\).__name__\\)\")",
       "Bash(git reset:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(cp \"C:\\\\Users\\\\wchiang\\\\Deloitte \\(O365D\\)\\\\Internal Development - Will''s Folder\\\\Will & Joanna''s SMB idea\\\\deploy\\\\calculator\\\\public\\\\index.html\" \"C:\\\\Users\\\\wchiang\\\\Deloitte \\(O365D\\)\\\\Internal Development - Will''s Folder\\\\Will & Joanna''s SMB idea\\\\frontend\\\\public\\\\calculator.html\")",
+      "Bash(mkdir -p \"C:\\\\Users\\\\wchiang\\\\Deloitte \\(O365D\\)\\\\Internal Development - Will''s Folder\\\\Will & Joanna''s SMB idea\\\\frontend\\\\api\")",
+      "Bash(cp \"C:\\\\Users\\\\wchiang\\\\Deloitte \\(O365D\\)\\\\Internal Development - Will''s Folder\\\\Will & Joanna''s SMB idea\\\\deploy\\\\calculator\\\\api\\\\submit-lead.js\" \"C:\\\\Users\\\\wchiang\\\\Deloitte \\(O365D\\)\\\\Internal Development - Will''s Folder\\\\Will & Joanna''s SMB idea\\\\frontend\\\\api\\\\submit-lead.js\")",
+      "Bash(cp \"C:\\\\Users\\\\wchiang\\\\Deloitte \\(O365D\\)\\\\Internal Development - Will''s Folder\\\\Will & Joanna''s SMB idea\\\\deploy\\\\calculator\\\\api\\\\save-survey.js\" \"C:\\\\Users\\\\wchiang\\\\Deloitte \\(O365D\\)\\\\Internal Development - Will''s Folder\\\\Will & Joanna''s SMB idea\\\\frontend\\\\api\\\\save-survey.js\")",
+      "Bash(mkdir -p \"C:/Users/wchiang/Deloitte \\(O365D\\)/Internal Development - Will''s Folder/Will & Joanna''s SMB idea/frontend/public\")",
+      "Bash(mkdir -p \"C:/Users/wchiang/Deloitte \\(O365D\\)/Internal Development - Will''s Folder/Will & Joanna''s SMB idea/frontend/api\")",
+      "Read(//c/Users/wchiang/Deloitte \\(O365D\\)/Internal Development - Will''''s Folder/**)",
+      "Bash(cp \"deploy/calculator/public/index.html\" \"frontend/public/calculator.html\")",
+      "Bash(cp \"deploy/calculator/api/submit-lead.js\" \"frontend/api/submit-lead.js\")",
+      "Bash(cp \"deploy/calculator/api/save-survey.js\" \"frontend/api/save-survey.js\")",
+      "Bash(ls \"C:\\\\Users\\\\wchiang\\\\Deloitte \\(O365D\\)\\\\Internal Development - Will''s Folder\\\\Will & Joanna''s SMB idea\\\\backend\\\\config\\\\users\\\\will\"\")",
+      "Bash(node node_modules/typescript/bin/tsc --noEmit)",
+      "Bash(cmd /c \"cd /d \"\"C:\\\\Users\\\\wchiang\\\\Deloitte \\(O365D\\)\\\\Internal Development - Will''s Folder\\\\Will & Joanna''s SMB idea\\\\frontend\"\" && node node_modules\\\\typescript\\\\bin\\\\tsc --noEmit 2>&1\")",
+      "Bash(cmd /c \"cd /d \"\"C:\\\\Users\\\\wchiang\\\\Deloitte \\(O365D\\)\\\\Internal Development - Will''s Folder\\\\Will & Joanna''s SMB idea\\\\frontend\"\" && node node_modules\\\\typescript\\\\bin\\\\tsc --noEmit\")",
+      "Bash(powershell -Command \"Set-Location ''C:\\\\Users\\\\wchiang\\\\Deloitte \\(O365D\\)\\\\Internal Development - Will''''s Folder\\\\Will & Joanna''''s SMB idea\\\\frontend''; & ''.\\\\node_modules\\\\.bin\\\\tsc'' --noEmit 2>&1; Write-Host ''Exit:'' $LASTEXITCODE\")",
+      "Bash(powershell -Command \"Get-ChildItem -Path ''C:\\\\Users\\\\wchiang\\\\Deloitte \\(O365D\\)\\\\Internal Development - Will''''s Folder\\\\Will & Joanna''''s SMB idea\\\\frontend\\\\src'' -Recurse -Filter ''*.tsx'' | Select-String -Pattern ''React\\\\.'' | Select-Object Filename, LineNumber, Line\")",
+      "Bash(powershell -Command \"where.exe node 2>&1; where.exe npm 2>&1\")",
+      "Bash(find \"/c/Users/wchiang/Deloitte \\(O365D\\)/Internal Development - Will''''s Folder/Will & Joanna''''s SMB idea\" -name \"vercel.json\" -o -name \".env*\")",
+      "Bash(find \"/c/Users/wchiang/Deloitte \\(O365D\\)/Internal Development - Will''''s Folder/Will & Joanna''''s SMB idea/api\" -type f -name \"*.js\")",
+      "Bash(grep -r \"rebase_token\\\\|JWT_SECRET\\\\|verify-otp\\\\|send-otp\" \"/c/Users/wchiang/Deloitte \\(O365D\\)/Internal Development - Will''''s Folder/Will & Joanna''''s SMB idea/frontend/src\" --include=*.tsx --include=*.ts)",
+      "Bash(grep -r \"ECS_URL\\\\|API_SECRET\" \"/c/Users/wchiang/Deloitte \\(O365D\\)/Internal Development - Will''''s Folder/Will & Joanna''''s SMB idea\" --include=*.js --include=*.ts --include=*.tsx)"
     ]
   }
 }

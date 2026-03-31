@@ -1,7 +1,6 @@
 import { useState } from "react";
 import type { CSSProperties } from "react";
 import { Routes, Route, Link, useNavigate } from "react-router-dom";
-import { supabase } from "./lib/supabase";
 import DiagnosticDashboard from "./pages/DiagnosticDashboard";
 import WorkflowScout from "./pages/WorkflowScout";
 import AgentMonitor from "./pages/AgentMonitor";
@@ -30,13 +29,12 @@ const linkStyle: CSSProperties = {
 
 function Nav() {
   const [isLoggedIn, setIsLoggedIn] = useState(
-    localStorage.getItem("rebase_access") === "true"
+    !!localStorage.getItem("rebase_token")
   );
   const navigate = useNavigate();
 
-  async function handleLogout() {
-    localStorage.removeItem("rebase_access");
-    if (supabase) await supabase.auth.signOut();
+  function handleLogout() {
+    localStorage.removeItem("rebase_token");
     setIsLoggedIn(false);
     navigate("/login");
   }
