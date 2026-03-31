@@ -78,11 +78,29 @@ export interface GapAnalysis {
   summary_en: string;
 }
 
+// ─── Optimized Workflow (v1.1) ───
+
+export interface OptimizedWorkflowNode extends WorkflowNode {
+  optimization_note: string;          // CN: "从手动Excel录入升级为聚水潭ERP自动同步"
+  optimization_note_en: string;
+  original_node_id: string | null;    // maps back to original graph node, null if step is new
+  time_reduction_pct: number;         // 0-1, how much time saved vs original
+}
+
+export interface ComparisonData {
+  original: WorkflowGraph;
+  optimized: WorkflowGraph;           // nodes are OptimizedWorkflowNode[]
+  comparison_summary: string;         // CN executive comparison summary
+  comparison_summary_en: string;
+  benchmark_sources: string[];        // ["聚水潭官方数据", "iResearch 2025电商SaaS报告"]
+}
+
 // ─── API Response ───
 
 export interface WorkflowScoutResponse {
   graph: WorkflowGraph;
   analysis: GapAnalysis;
+  comparison: ComparisonData | null;  // null if Call 3 fails (graceful degradation)
 }
 
 // ─── UI State ───

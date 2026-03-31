@@ -23,6 +23,10 @@ const MESSAGES = [
     cn: "正在生成优化建议...",
     en: "Generating optimization recommendations...",
   },
+  {
+    cn: "正在生成行业标杆对比...",
+    en: "Generating industry benchmark comparison...",
+  },
 ];
 
 const NODE_COUNT = 6;
