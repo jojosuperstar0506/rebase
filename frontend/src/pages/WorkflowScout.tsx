@@ -503,7 +503,11 @@ export default function WorkflowScout() {
               </span>
             )}
           </div>
-          <SummaryBar analysis={state.result.analysis} />
+          <SummaryBar
+            analysis={state.result.analysis}
+            comparison={state.result.comparison}
+            currentView={comparisonView}
+          />
           <div className="ws-results">
             <div className="ws-graph">
               {state.result.comparison && (
