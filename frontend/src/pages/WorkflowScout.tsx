@@ -190,6 +190,96 @@ SCHEMA:
   "summary_en": "string (English, 2-3 sentences)"
 }`;
 
+const OPTIMIZE_SYSTEM_PROMPT = `You are a retail/e-commerce operations optimization consultant (零售/电商运营优化顾问). You transform existing manual workflows into optimized, automated versions using real Chinese SaaS tools and industry best practices.
+
+TASK: Given a WorkflowGraph (the user's current workflow) and a GapAnalysis (identified bottlenecks and opportunities), generate an optimized version of the SAME workflow that represents industry best-in-class automation.
+
+CRITICAL RULES:
+- The optimized workflow must represent the SAME business process, not a different one
+- Do NOT delete core business logic steps — transform them from manual to automated
+- Some manual steps may be merged (e.g., "手动录入" + "手动核对" → "系统自动同步+异常告警")
+- Some new steps may be added (e.g., automated notifications, exception handling)
+- The total node count should be similar to the original (±3 nodes)
+- Every node must have realistic, specific tool names — never generic like "某ERP"
+- Time estimates must be realistic for automated processes, not zero
+
+RETAIL/E-COMMERCE AUTOMATION BENCHMARKS (真实行业数据):
+
+订单处理 Order Processing:
+- 聚水潭ERP: 服务超过20万电商商家，支持淘宝/天猫/京东/抖音/拼多多多渠道订单自动同步，<30秒完成
+- 旺店通ERP: 多渠道订单聚合，头部商家实现90%+订单处理自动化
+- 标杆水平: 订单处理1-2分钟(自动同步+仅处理异常)，SMB现状: 20-45分钟(手动跨平台收集)
+
+库存管理 Inventory:
+- 条码扫描枪+ERP实时同步: 日单量>1000的商家标配
+- 聚水潭/旺店通智能补货: 安全库存预警+自动生成采购单
+- 标杆水平: 实时库存准确率>99%，SMB现状: 每周手动盘点，准确率85-92%
+
+财务对账 Financial Reconciliation:
+- 用友好会计/金蝶精斗云: 银行流水自动导入，与ERP订单自动匹配
+- 支付宝/微信商户平台API: 结算自动对账
+- 标杆水平: 自动对账+仅处理异常(5分钟/天)，SMB现状: 手动Excel对账30-60分钟/天
+
+审批流程 Approvals:
+- 钉钉审批流/飞书审批: 移动端审批，可配置规则，自动流转
+- 标杆水平: <5分钟移动端审批，SMB现状: 微信群沟通30-60分钟，无审计记录
+
+报表 Reporting:
+- 简道云/明道云: 低代码仪表盘，实时从ERP/OMS拉取数据
+- 帆软FineBI: 中型企业BI分析
+- 标杆水平: 实时自动刷新仪表盘，SMB现状: 每周手动Excel汇总2-4小时
+
+客服与售后 Customer Service & Returns:
+- 企业微信+智能客服(智齿/网易七鱼): 工单系统+SLA追踪
+- 平台API自动退款: 标准退货自动处理
+- 标杆水平: 标准退货<24小时自动处理，SMB现状: 3-5个工作日，Excel手动跟踪
+
+TOOL MAPPING (优先推荐):
+手动Excel录入 → 聚水潭ERP/旺店通ERP自动同步
+手动微信沟通 → 钉钉/飞书自动通知
+纸质审批 → 钉钉审批流/飞书审批
+手动Excel对账 → 用友好会计/金蝶精斗云自动对账
+手动Excel报表 → 简道云仪表盘/明道云报表
+微信群客服 → 企业微信客服+智能客服系统
+手动盘点 → 条码扫描枪+ERP库存模块
+纸质验收 → 移动端扫码验收+ERP自动入库
+
+OUTPUT FORMAT:
+Return a JSON object with this structure:
+{
+  "optimized_graph": {
+    "tenant_id": "demo",
+    "workflow_name": "string (same process name + '(行业标杆版)')",
+    "workflow_name_en": "string (same + '(Best-in-Class)')",
+    "description": "string",
+    "nodes": [
+      {
+        "id": "opt_node_1",
+        "name": "string (Chinese)",
+        "name_en": "string (English)",
+        "department": "string",
+        "node_type": "task|decision|handoff|approval|data_entry|notification",
+        "tool_used": "string (specific product name)",
+        "avg_time_minutes": number,
+        "cost_per_execution_rmb": number,
+        "error_rate": number,
+        "is_manual": boolean,
+        "optimization_note": "string (Chinese — what changed from original)",
+        "optimization_note_en": "string",
+        "original_node_id": "string|null (maps to original node id)",
+        "time_reduction_pct": number
+      }
+    ],
+    "edges": [...same format as original...],
+    "version": 1
+  },
+  "comparison_summary": "string (Chinese, 2-3 sentences comparing the two workflows with specific numbers)",
+  "comparison_summary_en": "string",
+  "benchmark_sources": ["聚水潭官方案例数据(服务20万+商家)", "iResearch 2025中国电商SaaS报告", "行业头部企业实践调研"]
+}
+
+Return ONLY valid JSON. No markdown fences, no explanation.`;
+
 // ─── Component ───
 
 export default function WorkflowScout() {
@@ -300,8 +390,51 @@ export default function WorkflowScout() {
         throw new Error("Gap analysis failed: 502");
       }
 
+      // Call 3 — Generate optimized workflow (non-blocking — failure keeps comparison=null)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setState((s) => ({ ...s, status: "ready", result: { graph: graph as any, analysis: analysis as any } }));
+      let comparison: import("../types/workflow").ComparisonData | null = null;
+      try {
+        const optimizeRes = await fetch("/api/ai", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 8192,
+            system: OPTIMIZE_SYSTEM_PROMPT,
+            messages: [{
+              role: "user",
+              content: "请根据以下当前流程和分析结果，生成行业标杆版本的优化流程：\n\n当前流程：\n" + JSON.stringify(graph) + "\n\n分析结果：\n" + JSON.stringify(analysis),
+            }],
+          }),
+        });
+        if (optimizeRes.ok) {
+          const contentType = optimizeRes.headers.get("content-type") ?? "";
+          if (contentType.includes("application/json")) {
+            const optimizeData = await optimizeRes.json();
+            const optimizeText = (optimizeData as { content?: { text?: string }[] }).content?.[0]?.text ?? "";
+            if (optimizeText) {
+              const optimizeResult = JSON.parse(cleanJsonResponse(optimizeText));
+              if (optimizeResult.optimized_graph?.nodes) {
+                comparison = {
+                  original: graph as import("../types/workflow").WorkflowGraph,
+                  optimized: optimizeResult.optimized_graph,
+                  comparison_summary: optimizeResult.comparison_summary ?? "",
+                  comparison_summary_en: optimizeResult.comparison_summary_en ?? "",
+                  benchmark_sources: Array.isArray(optimizeResult.benchmark_sources)
+                    ? optimizeResult.benchmark_sources
+                    : [],
+                };
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("Call 3 (optimize) failed, showing v1.0 results:", e);
+        // comparison stays null — graceful degradation
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setState((s) => ({ ...s, status: "ready", result: { graph: graph as any, analysis: analysis as any, comparison } }));
     } catch (err: unknown) {
       const raw = err instanceof Error ? err.message : String(err);
       setState((s) => ({
