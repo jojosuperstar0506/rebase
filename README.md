@@ -81,24 +81,54 @@ Key capabilities: intent packs (reusable workflow modules), shadow mode (2-4 wee
 
 ---
 
-## Current Work
+## What's Live Right Now
 
-### William — Layer 2 Diagnostics (Client Entry Point)
+> **Platform URL:** [rebase-lac.vercel.app](https://rebase-lac.vercel.app) · **ECS Backend:** 8.217.242.191
+
+### Rebase Platform (Vercel) — Will's Track
+
+| # | Feature | Status | Description |
+|---|---------|--------|-------------|
+| 1 | **AI Diagnostics Calculator** | ✅ Live | `/calculator.html` — 5-step AI maturity assessment, bilingual (ZH/EN), dark/light mode. Early access CTA pre-fills the onboarding form. |
+| 2 | **User Onboarding Form** | ✅ Live | `/onboarding` — Collects name, company, industry, competitors, goal. Submits to ECS backend + sends Resend email. |
+| 3 | **Access Gate (Invite Code)** | ✅ Live | `/login` — Validates invite code against `ACCESS_CODE` env var, issues 30-day JWT. Only approved users reach agent pages. |
+| 4 | **Admin Panel** | ✅ Live | `/admin` — Password-protected applicant management. Review pending users, approve and generate invite codes, view approval history. |
+| 5 | **Agent Monitor** | ✅ Live | `/agents` — Live status of all AI virtual employees. Bilingual, fully themed. |
+| 6 | **XHS War Room** | ✅ Live | `/agents/xhs-content` — 4-tab AI content tool: competitor analysis, long-tail keywords, decision path analysis, content generation. Calls Claude via Vercel API. |
+| 7 | **Market Intelligence** | ✅ Live | `/agents/market-intelligence` — Daily competitor & trend report overview. Bilingual. |
+| 8 | **Workflow Scout** | ✅ Live | `/workflows` — Interactive workflow discovery tool. Bilingual, fully themed. |
+| 9 | **Cost & ROI Dashboard** | ✅ Live | `/costs` — Coming-soon page with feature preview cards for AI spend tracking and ROI reporting. |
+| 10 | **Bilingual + Dark/Light Theme** | ✅ Live | Global ZH/EN toggle and dark/light mode across every page. Controlled by `AppContext`. |
+
+### Backend Services (Alibaba Cloud ECS HK)
+
+| # | Service | Status | Description |
+|---|---------|--------|-------------|
+| 1 | **Node.js/Express API** | ✅ Live | Port 3000, proxied by Nginx on port 80. PM2 process manager. |
+| 2 | **Onboarding storage** | ✅ Live | Saves applicant profiles as JSON in `backend/config/users/`. |
+| 3 | **Market Intelligence Agent** | ✅ Live | Daily 6:30am HK cron — fetches news, Claude analysis, email report. |
+| 4 | **Scheduler** | ✅ Live | `node-cron` — runs daily intelligence report + weekly playbook rewrite. |
+
+### Joanna — Virtual Employee Prototypes
 
 | # | Piece | Status | Description |
 |---|-------|--------|-------------|
-| 1 | **AI Intake Agent** | Ready for Dify build | 15-20 min AI conversation → structured JSON |
-| 2 | **Document Analysis Engine** | Stubs defined | Classify docs, extract fields, calculate metrics |
-| 3 | **Report Generator** | Stubs defined | Auto-generated HTML findings report |
+| 1 | **3-Screen Visualization Dashboard** | ✅ Done | Department map, before/after AI toggle, ROI summary |
+| 2 | **Product Structure Agent** (Layer 2 demo) | ✅ v0.1 Done | Upload ERP exports → auto-analyze portfolio, inventory, purchasing recs |
+| 3 | **OMI Competitive Intelligence Agent** | ✅ v2 Done | Full pipeline: Chrome scrape → temporal analysis → scoring → Claude narrative → WeChat delivery |
+| 4 | **Joanna Virtual Employee** (XHS Marketing) | TODO | One-button Xiaohongshu content creator with brand voice |
+| 5 | **Image Generator** (Marketing toolkit) | TODO | Luxury-brand quality marketing visuals |
 
-### Joanna — Virtual Employee Prototypes + Frontend
+### What Needs to Happen Next
 
-| # | Piece | Status | Description |
-|---|-------|--------|-------------|
-| 1 | **3-Screen Visualization Dashboard** | Done | Department map, before/after AI toggle, ROI summary |
-| 2 | **Product Structure Agent** (Layer 2 demo) | v0.1 Done | Upload ERP exports → auto-analyze portfolio, inventory, purchasing recs |
-| 3 | **Joanna Virtual Employee** (XHS Marketing) | TODO | One-button Xiaohongshu content creator with brand voice |
-| 4 | **Image Generator** (Marketing toolkit) | TODO | Luxury-brand quality marketing visuals |
+| Priority | Task | Owner | Blocking what |
+|----------|------|-------|---------------|
+| 🔴 **Immediate** | Set `ACCESS_CODE` env var in Vercel | Will | Login doesn't work without this |
+| 🔴 **Immediate** | Set `ANTHROPIC_API_KEY` in Vercel | Will | XHS War Room AI calls fail |
+| 🟡 **Soon** | Set `RESEND_API_KEY` + `NOTIFICATION_EMAIL` in Vercel | Will | Onboarding form emails not sending |
+| 🟡 **Soon** | Implement ECS backend `/api/onboarding` + `/api/admin/*` routes | Will | Admin panel shows empty (falls back to email-only) |
+| 🟢 **Next sprint** | AI Intake Agent (Dify build) | Will | Automated pre-call data collection |
+| 🟢 **Next sprint** | XHS Virtual Employee (Joanna VE) | Joanna | Layer 3 prototype |
 
 ---
 
@@ -139,21 +169,33 @@ Key capabilities: intent packs (reusable workflow modules), shadow mode (2-4 wee
 
 ## Tech Stack
 
+### Live / In Use Today
+
 | Tool | Role |
 |------|------|
-| **FastAPI** | API framework (all backend services) |
-| **Dify** | Chatflow platform (intake agent) |
+| **React + Vite + TypeScript** | Frontend SPA — deployed on Vercel |
+| **Vercel** | Frontend hosting + serverless API functions (`frontend/api/`) |
+| **Node.js + Express** | ECS backend — agent orchestration, scheduling, storage |
+| **PM2 + Nginx** | Process management and reverse proxy on ECS |
+| **Anthropic Claude** | AI for XHS War Room (via Vercel API proxy) + Market Intelligence reports |
+| **Resend** | Transactional email — onboarding notifications + admin approvals |
+| **JWT (HS256)** | Session auth — 30-day tokens issued on invite code validation |
+| **Alibaba Cloud ECS HK** | Backend server at 8.217.242.191 |
+| **node-cron** | Scheduled jobs — daily intelligence report at 6:30am HK |
+
+### Planned / Coming Soon
+
+| Tool | Role |
+|------|------|
+| **FastAPI** | API framework (Python services — diagnostics pipeline) |
+| **Dify** | Chatflow platform (AI intake agent) |
 | **DeepSeek V3** | Primary LLM — production analysis, classification |
 | **Qwen (通义千问)** | Backup LLM — Chinese language tasks |
-| **GLM-4-Flash** | Dev/testing LLM — free tier |
-| **React + Vite + TypeScript** | Frontend |
-| **Streamlit** | Internal tool UIs (Product Agent) |
-| **PostgreSQL** | Client data storage |
+| **Streamlit** | Internal tool UIs (Product Structure Agent) |
+| **PostgreSQL** | Client data storage (RDS) |
 | **Redis** | Cache, session state |
-| **Neo4j** | Workflow graphs |
 | **Temporal.io** | Durable workflow orchestration |
-| **Alibaba Cloud** | Cloud hosting (HK → Guangzhou) |
-| **Kingdee / Yonyou / QuickBooks** | ERP connectors (planned) |
+| **Kingdee / Yonyou / QuickBooks** | ERP connectors |
 
 ---
 
@@ -205,28 +247,43 @@ All config is region-agnostic via environment variables. See `.env.example`.
 ## Quick Start
 
 ### Prerequisites
-- Python 3.10+
 - Node.js 18+
+- A Vercel account (for deployment)
 
-### Backend
-```bash
-cp .env.example .env          # Copy env template, fill in your values
-pip install -e ".[dev]"       # Install Python dependencies
-python -m gateway.main        # Start API gateway on :8000
-```
-
-### Frontend
+### Run Frontend Locally
 ```bash
 cd frontend
+cp .env.example .env.local    # Set VITE_ACCESS_CODE and VITE_ADMIN_PASSWORD
 npm install
-npm run dev                   # Start dev server on :5173
+npm run dev                   # http://localhost:5173
 ```
 
-### Product Structure Agent
+### Run ECS Backend Locally
+```bash
+cd backend
+cp .env.example .env          # Fill in API keys
+npm install
+npm run dev                   # http://localhost:3000
+```
+
+### Key Environment Variables (Vercel)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ACCESS_CODE` | 🔴 Yes | Invite code users enter to log in (e.g. `rebase2026`) |
+| `ANTHROPIC_API_KEY` | 🔴 Yes | Powers XHS War Room AI analysis |
+| `VITE_ADMIN_PASSWORD` | 🔴 Yes | Admin panel password for Will/Joanna |
+| `JWT_SECRET` | 🟡 Recommended | Signs user session tokens (defaults to ACCESS_CODE) |
+| `RESEND_API_KEY` | 🟡 Recommended | Sends onboarding + approval email notifications |
+| `NOTIFICATION_EMAIL` | 🟡 Recommended | Where onboarding emails are sent |
+| `ECS_BACKEND_URL` | 🟢 Optional | Links to ECS for applicant storage (`http://8.217.242.191`) |
+| `ECS_API_SECRET` | 🟢 Optional | Authenticates Vercel → ECS requests |
+
+### Python Services (Diagnostics — Coming Soon)
 ```bash
 cd services/product-agent
 pip install -r requirements.txt
-streamlit run app.py          # Start on :8501
+streamlit run app.py          # Product Structure Agent on :8501
 ```
 
 ---

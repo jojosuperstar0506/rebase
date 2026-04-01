@@ -1,4 +1,151 @@
-# Changelog — AI Workforce Diagnostics Calculator
+# Changelog — Rebase Platform
+
+---
+
+## [Platform v1.0] — 2026-04-01 — Full Client-Facing Platform Live on Vercel
+
+**Author:** William
+**Commit:** `c5f8e8d`
+**URL:** [rebase-lac.vercel.app](https://rebase-lac.vercel.app)
+
+### What Shipped
+
+#### 1. User Access Gate (Invite Code → JWT)
+
+Users can no longer access agent pages without an invite. Flow:
+1. User visits `/login`, enters invite code
+2. Code validated against `ACCESS_CODE` Vercel env var (case-insensitive)
+3. Server issues HS256 JWT (30-day expiry) stored in `localStorage`
+4. `ProtectedRoute` wraps all agent/workflow/cost pages — redirects to `/login` if no valid token
+
+**Files:** `frontend/src/pages/Login.tsx`, `frontend/api/auth/verify-code.js`, `frontend/src/components/ProtectedRoute.tsx`
+
+---
+
+#### 2. User Onboarding Form (`/onboarding`)
+
+Prospects fill in their details to request early access:
+- **Fields:** Full name, phone, company, industry, competitors to track, goal
+- **Pre-fill:** Calculator saves `rebase_prefill` to `localStorage`; Onboarding reads it on mount and pre-populates the form automatically
+- **Submission:** `POST /api/onboarding` → ECS backend (if configured) → Resend email notification → WeChat webhook fallback
+
+**Files:** `frontend/src/pages/Onboarding.tsx`, `frontend/api/onboarding.js`
+
+---
+
+#### 3. Admin Panel (`/admin`)
+
+Password-protected management interface for Will/Joanna:
+- Lists all applicants with name, company, industry, phone, email, goal, applied date
+- Filter by All / Pending / Approved
+- One-click "Approve & Generate Code" — calls `POST /api/admin/approve`, returns invite code
+- Copy-to-clipboard button on each invite code
+- Auth persisted in `localStorage` — navigating away and back doesn't require re-login
+- Sends Resend email to admin confirming approval with the invite code
+
+**Files:** `frontend/src/pages/Admin.tsx`, `frontend/api/admin/applicants.js`, `frontend/api/admin/approve.js`
+
+---
+
+#### 4. Full Bilingual Support (ZH/EN) Across All Pages
+
+Global language toggle (controlled by `AppContext`) now drives every page:
+
+| Page | Bilingual |
+|------|-----------|
+| Diagnostic Calculator | ✅ (ZH/EN toggle button top-right) |
+| Onboarding Form | ✅ |
+| Login | ✅ |
+| Agent Monitor | ✅ (agent names, descriptions, capabilities, status labels) |
+| XHS War Room | ✅ (UI chrome — buttons, headers, placeholders) |
+| Market Intelligence | ✅ (all headings, step descriptions, CTA) |
+| Workflow Scout | ✅ |
+| Cost Dashboard | ✅ |
+| Navigation | ✅ |
+
+---
+
+#### 5. Global Dark/Light Theme — All Pages Fixed
+
+All pages now use `useApp()` and `C.*` tokens from `AppContext`. No more hardcoded dark colors.
+
+- **XhsWarroom.tsx** — Was using 9 hardcoded dark constants (`BG="#0c0c14"` etc.). All sub-components (`Md`, `FileTextArea`, `Field`, `RunBtn`, `Lbl`, `ResultBox`, `Tab4`, main layout) now call `useApp()`.
+- **MarketIntelligence.tsx** — Same fix. All dark constants replaced with `C.*`.
+- **CostDashboard.tsx** — Replaced 7-line placeholder stub with a full themed coming-soon page.
+
+---
+
+#### 6. Navigation Fixes
+
+- Admin link: visible when logged out (anyone can find it), hidden for regular logged-in users, visible for admin-authed users
+- Nav tabs update instantly on login/logout (dispatches `rebase_auth_change` event)
+- Auth state re-checked on every route change (`location.pathname` useEffect)
+- Logout button replaces Login button when user is authenticated
+
+---
+
+#### 7. Calculator Early Access CTA
+
+Results page now has an "Early Access" card that:
+1. Saves calculator inputs (`name`, `phone`, `company`, `industry`) to `localStorage` as `rebase_prefill`
+2. Navigates user to `/onboarding`
+3. Onboarding form auto-populates with their calculator data (cleared from localStorage after use)
+
+Also added "← Back to Home" link on results page.
+
+---
+
+### Bug Fixes in This Release
+
+| Bug | Root Cause | Fix |
+|-----|-----------|-----|
+| Login returned 404 | `api/auth/verify-code.js` didn't exist | Created the file |
+| Onboarding submission returned 404 | `api/onboarding.js` didn't exist | Created the file |
+| Admin panel showed error immediately | `api/admin/applicants.js` didn't exist | Created the file |
+| Approve button returned 500 | `api/admin/approve.js` didn't exist | Created the file |
+| Admin auth lost on navigation | `useState(false)` — component unmounts | `useState(() => !!localStorage.getItem("admin_authed"))` |
+| XHS War Room broken in light mode | 9 hardcoded dark color constants | `useApp()` + `C.*` tokens throughout |
+| Market Intelligence broken in light mode | Same hardcoded dark constants | Same fix |
+| Nav tabs didn't update after login | Login never dispatched `rebase_auth_change` | Added `window.dispatchEvent(new CustomEvent("rebase_auth_change"))` |
+| Onboarding inputs lost focus every keystroke | `Field` component defined inside parent function → remount on every render | Moved `Field` to module scope |
+| Goal preset deselected when typing | Single `form.goal` field for both button and textarea | Split into `goalPreset` + `goalCustom` state |
+| Gradient text showed as colored block after theme toggle | React applies inline styles property-by-property (flicker) | Injected CSS class via `<style>` tag — applied atomically |
+
+---
+
+### Environment Variables Required
+
+Set these in **Vercel → Settings → Environment Variables** then redeploy:
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `ACCESS_CODE` | 🔴 Yes | Invite code users enter to log in |
+| `ANTHROPIC_API_KEY` | 🔴 Yes | XHS War Room AI calls |
+| `VITE_ADMIN_PASSWORD` | 🔴 Yes | Admin panel password |
+| `JWT_SECRET` | 🟡 Recommended | Signs JWT tokens (defaults to ACCESS_CODE if unset) |
+| `RESEND_API_KEY` | 🟡 Recommended | Email notifications for onboarding + approvals |
+| `NOTIFICATION_EMAIL` | 🟡 Recommended | Where to send notifications |
+| `ECS_BACKEND_URL` | 🟢 Optional | `http://8.217.242.191` — links admin panel to ECS storage |
+| `ECS_API_SECRET` | 🟢 Optional | Authenticates Vercel → ECS requests |
+
+---
+
+## [Calculator v0.4.0] — 2026-04-01 — Bilingual + Early Access CTA
+
+**Author:** William
+
+- Added `LANG` translations object (ZH/EN) with ~30 string keys each
+- Added language state and toggle button (top-right, alongside dark/light toggle)
+- All UI chrome wired to `L.*` translation keys
+- Early Access card on results page: saves to `rebase_prefill` localStorage → redirects to `/onboarding`
+- "← Back to Home" link added to results page
+- Fixed disabled button invisible in light mode (explicit colors for disabled state)
+
+---
+
+# Changelog — AI Workforce Diagnostics Calculator (Legacy entries below)
+
+---
 
 ---
 

@@ -2,7 +2,7 @@
 
 > Single source of truth for product progress. Pull this up every session.
 
-**Last updated:** 2026-03-28
+**Last updated:** 2026-04-01
 
 ---
 
@@ -48,18 +48,30 @@ Converts prospects to believers               Proves intelligence layer works on
 
 ---
 
-## Where We Are Now (as of 2026-03-28)
+## Where We Are Now (as of 2026-04-01)
 
 | Stream | Owner | Status | Layer | Notes |
 |--------|-------|--------|-------|-------|
-| Diagnostics tool (client entry point) | William | In progress | 2 | Intake agent + analysis pipeline |
-| Product Structure Agent (ERP intelligence demo) | Joanna | v0.1 Done | 2 | 3-file ERP export analysis, Streamlit UI |
-| 3-screen visualization dashboard | Joanna | Done | 2 | Department map, before/after toggle, ROI summary — on Vercel |
-| **OMI Competitive Intelligence** | **Joanna** | **v2 Done** | **3** | **Full pipeline: scrape → temporal → scoring → narrative → dashboard → WeChat delivery** |
+| **Rebase Platform (Vercel)** | **William** | **✅ v1 Live** | **—** | **Full platform at rebase-lac.vercel.app — access gate, onboarding, admin, 5 agent pages, bilingual, themed** |
+| Diagnostics Calculator | William | ✅ Live | 1 | `/calculator.html` — 5-step AI maturity tool, bilingual, early access CTA wired to onboarding |
+| ECS Backend (Node.js) | William | ✅ Live | — | 8.217.242.191 — Express API, PM2, Nginx, Market Intelligence cron at 6:30am HK |
+| Product Structure Agent (ERP intelligence demo) | Joanna | ✅ v0.1 Done | 2 | 3-file ERP export analysis, Streamlit UI |
+| 3-screen visualization dashboard | Joanna | ✅ Done | 2 | Department map, before/after toggle, ROI summary — on Vercel |
+| **OMI Competitive Intelligence** | **Joanna** | **✅ v2 Done** | **3** | **Full pipeline: scrape → temporal → scoring → narrative → dashboard → WeChat delivery** |
 | FRD (functional requirements) | Joanna | In progress | All | Defining overall product features |
-| Cloud infrastructure & deployment | William | ✅ Done | — | ✅ Done (William) — HK ECS live at 8.217.242.191 |
-| Virtual employee prototypes | Joanna | In progress | 3 | Competitive Intel (done), Marketing (Joanna VE), Image Gen |
+| AI Intake Agent (Dify build) | William | TODO | 2 | Next: bring prompt architecture to life in Dify |
+| XHS Virtual Employee (Joanna VE) | Joanna | TODO | 3 | Next: one-button XHS content creator |
 | ERP connector research | William | TODO | 2-3 | Kingdee/QuickBooks API assessment |
+
+### 🔴 Immediate Blockers (Will must action before platform works end-to-end)
+
+| Action | Where | Why |
+|--------|-------|-----|
+| Set `ACCESS_CODE=rebase2026` | Vercel → Settings → Env Vars | Login returns 500 without this |
+| Set `ANTHROPIC_API_KEY=sk-ant-...` | Vercel → Settings → Env Vars | XHS War Room AI calls fail |
+| Set `VITE_ADMIN_PASSWORD=...` | Vercel → Settings → Env Vars | Admin panel password |
+| Set `RESEND_API_KEY` + `NOTIFICATION_EMAIL` | Vercel → Settings → Env Vars | Onboarding emails go nowhere |
+| Redeploy on Vercel after adding vars | Vercel → Deployments → Redeploy | Picks up new env vars |
 
 ---
 
@@ -132,7 +144,36 @@ Converts prospects to believers               Proves intelligence layer works on
 | Complete ROI calculation engine | William | Partial | Extend existing calculator |
 | Test with mock data + polish | Both | TODO | |
 
-### 2F. Cloud & Deployment
+### 2F. Platform & Access Control (William) — NEW ✅ DONE
+
+> The Rebase platform itself — the shell that houses all agent pages and controls who has access.
+
+**Live at:** [rebase-lac.vercel.app](https://rebase-lac.vercel.app)
+
+| Task | Owner | Status | Notes |
+|------|-------|--------|-------|
+| AI Diagnostics Calculator (`/calculator.html`) | William | ✅ Done | 5-step maturity assessment, bilingual ZH/EN, dark/light mode |
+| Early Access CTA in calculator | William | ✅ Done | Saves form data to localStorage, redirects to `/onboarding` with pre-fill |
+| User Onboarding Form (`/onboarding`) | William | ✅ Done | Full form — name, company, industry, competitors, goal. ECS proxy + Resend email fallback |
+| Access Gate / Login (`/login`) | William | ✅ Done | Invite code → HS256 JWT (30-day) → `localStorage` |
+| Admin Panel (`/admin`) | William | ✅ Done | Password-protected, lists applicants, approve → generate invite code, Resend notification |
+| Vercel API: `POST /api/onboarding` | William | ✅ Done | ECS proxy → email notification → WeChat webhook |
+| Vercel API: `POST /api/auth/verify-code` | William | ✅ Done | Validates `ACCESS_CODE`, issues JWT |
+| Vercel API: `GET /api/admin/applicants` | William | ✅ Done | ECS proxy, empty-list fallback |
+| Vercel API: `POST /api/admin/approve` | William | ✅ Done | Returns invite code, sends Resend approval email |
+| Global dark/light theme (`AppContext`) | William | ✅ Done | All pages use `C.*` tokens — zero hardcoded colors |
+| Global bilingual support (ZH/EN) | William | ✅ Done | All pages react to `lang` context — every string translated |
+| Agent Monitor (`/agents`) | William | ✅ Done | Live agent status grid, bilingual, themed |
+| XHS War Room (`/agents/xhs-content`) | William | ✅ Done | 4-tab AI content tool — calls Claude via `/api/ai` |
+| Market Intelligence (`/agents/market-intelligence`) | William | ✅ Done | Overview page, bilingual, themed |
+| Workflow Scout (`/workflows`) | William | ✅ Done | Interactive workflow discovery, bilingual, themed |
+| Cost & ROI Dashboard (`/costs`) | William | ✅ Done | Coming-soon page with 4 feature preview cards |
+| ProtectedRoute (JWT gate) | William | ✅ Done | All agent/workflow/cost pages require valid token |
+| ECS backend `POST /api/admin/applicants` | William | TODO | Store applicants so admin panel shows them (currently email-only) |
+| ECS backend `POST /api/admin/approve` | William | TODO | Persist approval status on ECS |
+| Cost Dashboard — real data | William | Future | Wire to actual Anthropic API usage |
+
+### 2G. Cloud & Deployment (ECS — Live ✅)
 
 **Cloud Strategy: Start Hong Kong → Add Guangzhou Later**
 
@@ -163,24 +204,27 @@ Phase 2 (Scale):   Add Alibaba Cloud Guangzhou — enterprise-ready
 
 | Task | Owner | Status | Notes |
 |------|-------|--------|-------|
-| Set up Alibaba Cloud HK account | Joanna | TODO | |
-| Provision ECS server | Joanna | TODO | |
-| Set up RDS PostgreSQL | Joanna | TODO | |
-| Set up OSS bucket | Joanna | TODO | |
-| Get DeepSeek API key | Joanna | TODO | |
+| Set up Alibaba Cloud HK account | Joanna | ✅ Done | |
+| Provision ECS server | William | ✅ Done | 2 CPU, 4GB RAM, HK region — 8.217.242.191 |
+| Install Node.js, PM2, Nginx, git on ECS | William | ✅ Done | Backend API running on port 80 |
+| Deploy frontend to Vercel | William | ✅ Done | Auto-deploys on push to `main` |
+| Set `ANTHROPIC_API_KEY` in Vercel | William | 🔴 TODO | Needed for XHS War Room |
+| Set `ACCESS_CODE` in Vercel | William | 🔴 TODO | Needed for user login |
+| Set `RESEND_API_KEY` in Vercel | William | 🟡 TODO | Needed for email notifications |
+| Set up RDS PostgreSQL | Joanna | TODO | Sprint 2 |
+| Set up OSS bucket | Joanna | TODO | Sprint 2 |
 | Domain name registration | Joanna | TODO | |
-| Deploy backend (Docker) | William | TODO | |
 | Start ICP filing (parallel) | Joanna | TODO | 1-3 weeks |
-| `.env.example` + `CLAUDE.md` | Both | Done | Environment variable guardrails |
+| `.env.example` + `CLAUDE.md` | Both | ✅ Done | Environment variable guardrails |
 
 **Environment Variables Rule:** All external service URLs, API keys, and region-specific config MUST come from `.env` — never hardcoded. See `CLAUDE.md`.
 
-### 2G. Frontend & Visualization
+### 2H. Frontend & Visualization
 
 | Task | Owner | Status | Notes |
 |------|-------|--------|-------|
-| 3-screen visualization dashboard | Joanna | Done | On Vercel |
-| Deploy to Vercel | Joanna | Done | Auto-deploys on push to main |
+| 3-screen visualization dashboard | Joanna | ✅ Done | On Vercel |
+| Deploy to Vercel | Joanna | ✅ Done | Auto-deploys on push to main |
 | Connect dashboard to live diagnostics API | Joanna | TODO | Replace mock data |
 | Agent output display in dashboard | Joanna | TODO | Show virtual employee status + output |
 
@@ -261,60 +305,88 @@ Already built as Product Structure Agent. See Section 2C above.
 
 ## Sprint Plan (2-week sprints)
 
-### Sprint 1 (Weeks 1-2): Foundation — CURRENT
+### Sprint 0 (Completed — Foundation & Platform)
 
-**William (CTO):**
+> Will built the full client-facing platform. Joanna built the core intelligence prototypes.
+
+**William — DONE:**
 | Task | Status | Notes |
 |------|--------|-------|
-| Architect & wire API gateway | TODO | Service routing, `/api/diagnostics/*` |
-| Design & implement intake data pipeline | TODO | POST /intake, GET /intake/{id} |
-| Build & deploy Dify chatflow | TODO | Bring prompt architecture to life |
-| Validate with mock client sessions | TODO | 3-5 scenarios |
-| **Research Kingdee/QuickBooks APIs** | TODO | NEW — what data is accessible, auth methods, rate limits |
+| Vercel frontend deployment + CI/CD | ✅ Done | Auto-deploys on push to `main` |
+| Alibaba Cloud ECS backend (HK) | ✅ Done | Node.js + PM2 + Nginx at 8.217.242.191 |
+| AI Diagnostics Calculator | ✅ Done | `/calculator.html` — bilingual, 5-step, lead capture |
+| User onboarding form + submission API | ✅ Done | `/onboarding` + `POST /api/onboarding` |
+| Invite code access gate + JWT auth | ✅ Done | `/login` + `POST /api/auth/verify-code` |
+| Admin panel + applicant management APIs | ✅ Done | `/admin` + `/api/admin/*` |
+| Global dark/light theme + bilingual (all pages) | ✅ Done | `AppContext` — every page uses `C.*` tokens and `lang` |
+| All 5 agent pages themed + bilingual | ✅ Done | AgentMonitor, XhsWarroom, MarketIntelligence, WorkflowScout, CostDashboard |
+| Market Intelligence daily cron | ✅ Done | 6:30am HK — news fetch → Claude analysis → email report |
+
+**Joanna — DONE:**
+| Task | Status | Notes |
+|------|--------|-------|
+| 3-screen visualization dashboard | ✅ Done | On Vercel |
+| Product Structure Agent v0.1 | ✅ Done | 3-file ERP analysis, Streamlit, FastAPI |
+| OMI Competitive Intelligence v2 | ✅ Done | Full pipeline: scrape → temporal → score → narrative → WeChat |
+
+---
+
+### Sprint 1 (Current — First Users + AI Intake): Target: April 2026
+
+**William:**
+| Task | Status | Notes |
+|------|--------|-------|
+| Set Vercel env vars (`ACCESS_CODE`, `ANTHROPIC_API_KEY`, `RESEND_API_KEY`) | 🔴 TODO **DO FIRST** | Platform blocked without these |
+| Add ECS backend routes for admin panel (`/api/admin/*`) | TODO | So admin panel shows real applicants instead of empty |
+| Build & deploy Dify AI Intake chatflow | TODO | Bring 5-phase prompt architecture to life |
+| Validate intake agent with 3-5 mock client sessions | TODO | Refine conversation quality |
+| Research Kingdee/QuickBooks APIs | TODO | What data is accessible, auth, rate limits |
 
 **Joanna:**
 | Task | Status | Notes |
 |------|--------|-------|
-| Product Structure Agent v1 | Done | Full pipeline: 3-file merge, analysis, Excel, Streamlit, FastAPI |
-| Connect frontend dashboard to live API | TODO | Replace mock data |
-| Cloud provider selection + initial setup | TODO | Get diagnostics deployable |
+| Share platform link with 3-5 target SMB contacts | TODO | Real user feedback on onboarding + calculator |
+| Joanna Virtual Employee (XHS) v1 | TODO | Brand voice + content templates + one-button pipeline |
+| Connect 3-screen dashboard to live API data | TODO | Replace mock data |
 | FRD — diagnostics + workflow discovery scope | In progress | |
+
+---
 
 ### Sprint 2 (Weeks 3-4): Depth + ERP
 
-**William (CTO):**
+**William:**
 | Task | Status | Notes |
 |------|--------|-------|
-| Architect document classification system | TODO | Multi-stage LLM pipeline |
-| Design & build field extraction engine | TODO | Per-doc-type extraction |
-| Build metrics computation layer | TODO | Volume, timing, error analytics |
-| **ERP connector v0 — read-only Kingdee or QuickBooks** | TODO | NEW — pull transaction data |
+| Document classification system | TODO | Multi-stage LLM pipeline |
+| Field extraction engine | TODO | Per-doc-type extraction |
+| Metrics computation layer | TODO | Volume, timing, error analytics |
+| ERP connector v0 — read-only Kingdee or QuickBooks | TODO | Pull transaction data |
 
 **Joanna:**
 | Task | Status | Notes |
 |------|--------|-------|
-| **Joanna Virtual Employee (XHS) v1** | TODO | Brand voice + content templates + one-button pipeline |
-| Product Structure Agent v2 — Kingdee export support | TODO | Expand beyond 聚水潭 format |
-| Frontend: dashboard show virtual employee outputs | TODO | Each agent as card with status + output |
+| XHS Virtual Employee v1 | TODO | Brand voice + content templates |
+| Product Structure Agent v2 — Kingdee export support | TODO | Expand beyond 聚水潭 |
 | FRD — agent execution + cost optimization scope | TODO | |
+
+---
 
 ### Sprint 3 (Weeks 5-6): Polish + Integration
 
-**William (CTO):**
+**William:**
 | Task | Status | Notes |
 |------|--------|-------|
-| Design report generation system | TODO | Auto-generated HTML findings report |
-| Build chart/visualization engine | TODO | Inline SVG charts |
-| **ERP connector v1 — bidirectional** | TODO | NEW — read + write back to ERP |
-| End-to-end integration architecture | TODO | Full pipeline: intake → analysis → report |
+| Report generation system | TODO | Auto-generated HTML findings report |
+| Chart/visualization engine | TODO | Inline SVG charts |
+| ERP connector v1 — bidirectional | TODO | Read + write back to ERP |
+| End-to-end pipeline: intake → analysis → report | TODO | |
 
 **Joanna:**
 | Task | Status | Notes |
 |------|--------|-------|
-| **Image Generator v1** | TODO | API integration, prompt templates, luxury aesthetic |
-| Marketing Agent v2 — batch generation + scheduling | TODO | Generate a week's content at once |
+| Image Generator v1 | TODO | API integration, prompt templates, luxury aesthetic |
+| XHS Marketing Agent v2 — batch generation + scheduling | TODO | |
 | End-to-end demo flow | TODO | ERP data → intelligence → virtual employee → results |
-| Cloud deployment — get diagnostics live | TODO | Full pipeline |
 
 ---
 
@@ -401,6 +473,10 @@ Already built as Product Structure Agent. See Section 2C above.
 | 2026-03-28 | OMI Competitive Intelligence v2 complete (TASK-01 through TASK-08) | Joanna | Full pipeline: SQLite → Chrome extraction → temporal → scoring → narrative → dashboard → WeChat delivery. 258 tests. |
 | 2026-03-28 | Merged Jo-competitive-intelligence branch to main | Joanna | PR #10 — all changes now on Vercel production |
 | 2026-03-28 | WeChat Work delivery module added | Joanna | Dry-run by default, `--send` for real delivery, `--cron-hint` for Monday 9am scheduling |
+| 2026-04-01 | Platform v1 shipped — full client-facing flow live on Vercel | William | Onboarding → invite code access gate → admin panel → 5 agent pages. All themed + bilingual. |
+| 2026-04-01 | Auth model: shared `ACCESS_CODE` + JWT (30-day) | William | MVP decision — single master code for all approved users. Rotate by changing Vercel env var. Per-user codes deferred to when ECS has persistent DB. |
+| 2026-04-01 | Vercel serverless functions as API proxy layer | William | `frontend/api/` handles onboarding, auth, admin — proxies to ECS when configured, falls back to email notifications otherwise. Zero-config fallback means platform works before ECS routes are built. |
+| 2026-04-01 | All pages now use `AppContext` `C.*` tokens | William | Eliminated all hardcoded dark colors. Light/dark mode works across every page including XhsWarroom and MarketIntelligence which previously had hardcoded `#0c0c14` etc. |
 
 ---
 
