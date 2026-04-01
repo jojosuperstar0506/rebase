@@ -106,7 +106,7 @@ export default function Onboarding() {
                   ))}
                 </div>
                 <textarea
-                  value={form.goal.length > 15 ? form.goal : ""}
+                  value={form.goal}
                   onChange={(e) => set("goal")(e.target.value)}
                   placeholder={t(s.placeholders.goal, lang)}
                   rows={3}

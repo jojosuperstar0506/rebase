@@ -137,7 +137,7 @@ function AppRoutes() {
         <Route path="/login" element={<Login />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/demo" element={<DiagnosticDashboard />} />
-        <Route path="/workflows" element={<WorkflowScout />} />
+        <Route path="/workflows" element={<ProtectedRoute><WorkflowScout /></ProtectedRoute>} />
 
         {/* Protected — require invite code */}
         <Route path="/agents" element={<ProtectedRoute><AgentMonitor /></ProtectedRoute>} />

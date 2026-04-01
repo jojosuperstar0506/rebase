@@ -7,12 +7,7 @@ import GraphView from "../components/workflow/GraphView";
 import InsightsPanel from "../components/workflow/InsightsPanel";
 import ContactModal from "../components/workflow/ContactModal";
 import ComparisonToggle from "../components/workflow/ComparisonToggle";
-
-// Design tokens
-const BG = "#0c0c14";
-const BD = "#2a2a3a";
-const AC = "#06b6d4";
-const T2 = "#9898a8";
+import { useApp } from "../context/AppContext";
 
 // ─── Helpers ───
 
@@ -292,6 +287,7 @@ Return ONLY valid JSON. No markdown fences, no explanation.`;
 // ─── Component ───
 
 export default function WorkflowScout() {
+  const { colors: C } = useApp();
   const [state, setState] = useState<ScoutState>({
     status: "idle",
     description: "",
@@ -459,7 +455,7 @@ export default function WorkflowScout() {
     <div
       style={{
         minHeight: "100vh",
-        background: BG,
+        background: C.bg,
         fontFamily: "system-ui, sans-serif",
       }}
     >
@@ -500,12 +496,12 @@ export default function WorkflowScout() {
 
           {/* Title bar */}
           <div className="ws-title">
-            <span style={{ fontSize: 18, fontWeight: 700, color: "#e4e4ec" }}>流程扫描结果</span>
-            <span style={{ fontSize: 18, fontWeight: 400, color: T2 }}>
+            <span style={{ fontSize: 18, fontWeight: 700, color: C.tx }}>流程扫描结果</span>
+            <span style={{ fontSize: 18, fontWeight: 400, color: C.t2 }}>
               — {state.result.graph.workflow_name}
             </span>
             {state.result.graph.workflow_name_en && (
-              <span style={{ fontSize: 13, color: T2 }}>
+              <span style={{ fontSize: 13, color: C.t2 }}>
                 ({state.result.graph.workflow_name_en})
               </span>
             )}
@@ -587,20 +583,20 @@ export default function WorkflowScout() {
           <div className="ws-bottom">
             <button
               onClick={() => { setState((s) => ({ ...s, status: "idle", result: null, error: null, description: "", files: [], selectedNodeId: null })); setComparisonView("original"); }}
-              style={{ minHeight: 44, padding: "8px 20px", background: "transparent", border: `1px solid ${BD}`, borderRadius: 6, color: T2, cursor: "pointer", fontSize: 14 }}
+              style={{ minHeight: 44, padding: "8px 20px", background: "transparent", border: `1px solid ${C.bd}`, borderRadius: 6, color: C.t2, cursor: "pointer", fontSize: 14 }}
             >
               ← 重新扫描
             </button>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
               <button
                 onClick={() => setShowContactModal(true)}
-                style={{ minHeight: 44, padding: "10px 24px", background: AC, border: "none", borderRadius: 6, color: "#000", fontWeight: 700, fontSize: 14, cursor: "pointer" }}
+                style={{ minHeight: 44, padding: "10px 24px", background: C.ac, border: "none", borderRadius: 6, color: "#000", fontWeight: 700, fontSize: 14, cursor: "pointer" }}
               >
                 联系我们获取实施方案 →
               </button>
-              <div style={{ fontSize: 12, color: T2 }}>
+              <div style={{ fontSize: 12, color: C.t2 }}>
                 或添加微信咨询：
-                <span style={{ color: AC, fontWeight: 600, userSelect: "all" }}>rebase_ai</span>
+                <span style={{ color: C.ac, fontWeight: 600, userSelect: "all" }}>rebase_ai</span>
               </div>
             </div>
           </div>
@@ -624,8 +620,8 @@ export default function WorkflowScout() {
         >
           <div
             style={{
-              background: "#14141e",
-              border: `1px solid ${BD}`,
+              background: C.s1,
+              border: `1px solid ${C.bd}`,
               borderRadius: 12,
               padding: "40px 36px",
               maxWidth: 520,
@@ -634,14 +630,14 @@ export default function WorkflowScout() {
             }}
           >
             <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: "#ef4444", marginBottom: 4 }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: C.danger, marginBottom: 4 }}>
               分析失败
             </div>
-            <div style={{ fontSize: 13, color: T2, marginBottom: 20 }}>Analysis Failed</div>
+            <div style={{ fontSize: 13, color: C.t2, marginBottom: 20 }}>Analysis Failed</div>
             <div
               style={{
                 fontSize: 14,
-                color: "#e4e4ec",
+                color: C.tx,
                 lineHeight: 1.7,
                 marginBottom: 28,
                 whiteSpace: "pre-line",
@@ -656,9 +652,9 @@ export default function WorkflowScout() {
                 width: "100%",
                 padding: "10px 24px",
                 background: "transparent",
-                border: `1px solid ${BD}`,
+                border: `1px solid ${C.bd}`,
                 borderRadius: 8,
-                color: "#e4e4ec",
+                color: C.tx,
                 cursor: "pointer",
                 fontSize: 15,
                 fontWeight: 600,
@@ -667,12 +663,12 @@ export default function WorkflowScout() {
             >
               重新扫描 →
             </button>
-            <div style={{ fontSize: 12, color: T2, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.6 }}>
               如果问题持续，请联系我们：
               <br />
               <a
                 href="mailto:hello@rebase.ai"
-                style={{ color: AC, textDecoration: "none" }}
+                style={{ color: C.ac, textDecoration: "none" }}
               >
                 hello@rebase.ai
               </a>
