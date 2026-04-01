@@ -31,11 +31,9 @@ export default async function handler(req, res) {
   const { code } = req.body || {};
   if (!code) return res.status(400).json({ error: "Code is required" });
 
-  const ACCESS_CODE = process.env.ACCESS_CODE || process.env.VITE_ACCESS_CODE;
-  if (!ACCESS_CODE) {
-    console.error("ACCESS_CODE env var not set");
-    return res.status(500).json({ error: "Server configuration error" });
-  }
+  // Falls back to a built-in default so the platform works out of the box without Vercel env var setup.
+  // Set ACCESS_CODE in Vercel env vars to use your own code.
+  const ACCESS_CODE = process.env.ACCESS_CODE || process.env.VITE_ACCESS_CODE || "rebase2026";
 
   // Case-insensitive comparison
   if (code.trim().toUpperCase() !== ACCESS_CODE.trim().toUpperCase()) {

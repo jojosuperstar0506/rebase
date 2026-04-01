@@ -268,16 +268,16 @@ npm run dev                   # http://localhost:3000
 
 ### Key Environment Variables (Vercel)
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `ACCESS_CODE` | 🔴 Yes | Invite code users enter to log in (e.g. `rebase2026`) |
-| `ANTHROPIC_API_KEY` | 🔴 Yes | Powers XHS War Room AI analysis |
-| `VITE_ADMIN_PASSWORD` | 🔴 Yes | Admin panel password for Will/Joanna |
-| `JWT_SECRET` | 🟡 Recommended | Signs user session tokens (defaults to ACCESS_CODE) |
-| `RESEND_API_KEY` | 🟡 Recommended | Sends onboarding + approval email notifications |
-| `NOTIFICATION_EMAIL` | 🟡 Recommended | Where onboarding emails are sent |
-| `ECS_BACKEND_URL` | 🟢 Optional | Links to ECS for applicant storage (`http://8.217.242.191`) |
-| `ECS_API_SECRET` | 🟢 Optional | Authenticates Vercel → ECS requests |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ACCESS_CODE` | `rebase2026` | Invite code users enter to log in — change this to your own code |
+| `VITE_ADMIN_PASSWORD` | `rebase-admin-2026` | Admin panel password — change before going live with real users |
+| `ANTHROPIC_API_KEY` | *(none)* | 🔴 Required for XHS War Room AI calls to work |
+| `JWT_SECRET` | *(falls back to ACCESS_CODE)* | Signs user session tokens |
+| `RESEND_API_KEY` | *(none)* | 🟡 Needed to receive onboarding + approval emails |
+| `NOTIFICATION_EMAIL` | *(none)* | 🟡 Where to send those notifications |
+| `ECS_BACKEND_URL` | *(none)* | 🟢 `http://8.217.242.191` — links admin panel to ECS applicant storage |
+| `ECS_API_SECRET` | *(none)* | 🟢 Authenticates Vercel → ECS requests |
 
 ### Python Services (Diagnostics — Coming Soon)
 ```bash

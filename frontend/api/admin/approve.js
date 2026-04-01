@@ -10,10 +10,8 @@ export default async function handler(req, res) {
     const { name, phone } = req.body || {};
     if (!name || !phone) return res.status(400).json({ error: "name and phone are required" });
 
-    const ACCESS_CODE = process.env.ACCESS_CODE || process.env.VITE_ACCESS_CODE;
-    if (!ACCESS_CODE) {
-      return res.status(500).json({ error: "ACCESS_CODE env var not configured" });
-    }
+    // Falls back to built-in default — same as verify-code.js. Set ACCESS_CODE in Vercel to customise.
+    const ACCESS_CODE = process.env.ACCESS_CODE || process.env.VITE_ACCESS_CODE || "rebase2026";
 
     const ECS_URL = process.env.ECS_BACKEND_URL;
     const ECS_SECRET = process.env.ECS_API_SECRET;

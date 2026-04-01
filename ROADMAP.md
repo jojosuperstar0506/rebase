@@ -63,15 +63,22 @@ Converts prospects to believers               Proves intelligence layer works on
 | XHS Virtual Employee (Joanna VE) | Joanna | TODO | 3 | Next: one-button XHS content creator |
 | ERP connector research | William | TODO | 2-3 | Kingdee/QuickBooks API assessment |
 
-### 🔴 Immediate Blockers (Will must action before platform works end-to-end)
+### 🔴 Only One Blocker Remaining
+
+The platform works out of the box with built-in defaults — no Vercel env vars required to get started. Defaults:
+- `ACCESS_CODE` → `"rebase2026"` (users can log in with this immediately)
+- `VITE_ADMIN_PASSWORD` → `"rebase-admin-2026"` (Will/Joanna can access admin immediately)
+
+**The only thing that truly needs a Vercel env var:**
 
 | Action | Where | Why |
 |--------|-------|-----|
-| Set `ACCESS_CODE=rebase2026` | Vercel → Settings → Env Vars | Login returns 500 without this |
-| Set `ANTHROPIC_API_KEY=sk-ant-...` | Vercel → Settings → Env Vars | XHS War Room AI calls fail |
-| Set `VITE_ADMIN_PASSWORD=...` | Vercel → Settings → Env Vars | Admin panel password |
-| Set `RESEND_API_KEY` + `NOTIFICATION_EMAIL` | Vercel → Settings → Env Vars | Onboarding emails go nowhere |
-| Redeploy on Vercel after adding vars | Vercel → Deployments → Redeploy | Picks up new env vars |
+| Set `ANTHROPIC_API_KEY=sk-ant-...` | Vercel → Settings → Env Vars → Redeploy | XHS War Room AI calls fail without this |
+
+**Optionally (to customise codes and enable email notifications):**
+- `ACCESS_CODE` — change from the default `rebase2026` to your own invite code
+- `VITE_ADMIN_PASSWORD` — change from default `rebase-admin-2026`
+- `RESEND_API_KEY` + `NOTIFICATION_EMAIL` — to receive onboarding application emails
 
 ---
 
@@ -336,7 +343,7 @@ Already built as Product Structure Agent. See Section 2C above.
 **William:**
 | Task | Status | Notes |
 |------|--------|-------|
-| Set Vercel env vars (`ACCESS_CODE`, `ANTHROPIC_API_KEY`, `RESEND_API_KEY`) | 🔴 TODO **DO FIRST** | Platform blocked without these |
+| Set `ANTHROPIC_API_KEY` in Vercel | 🔴 TODO | XHS War Room is the only thing that needs this — everything else works with built-in defaults |
 | Add ECS backend routes for admin panel (`/api/admin/*`) | TODO | So admin panel shows real applicants instead of empty |
 | Build & deploy Dify AI Intake chatflow | TODO | Bring 5-phase prompt architecture to life |
 | Validate intake agent with 3-5 mock client sessions | TODO | Refine conversation quality |
