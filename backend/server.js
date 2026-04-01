@@ -10,9 +10,6 @@ const { startScheduler, runDailyReport, generateFeedbackToken } = require("./sch
 const fs = require("fs");
 const path = require("path");
 
-// ── OTP Store (in-memory, expires in 10 min) ────────────────────────────────
-const otpStore = new Map(); // phone -> { code, expiresAt }
-
 const app = express();
 
 // ── Fix 1: Rate Limiting ─────────────────────────────────────────────────────
@@ -30,7 +27,7 @@ const apiLimiter = rateLimit({
 // Every request to /api/* must include the header: x-rebase-secret: <your secret>
 // Vercel frontend sends this automatically. Random bots don't know it.
 // Public endpoints (e.g. /api/onboarding) are whitelisted — no secret needed.
-const PUBLIC_API_PATHS = ['/onboarding', '/auth/send-otp', '/auth/verify-otp'];
+const PUBLIC_API_PATHS = ['/onboarding', '/auth/verify-code'];
 
 function requireSecret(req, res, next) {
   const secret = process.env.API_SECRET;
@@ -382,91 +379,95 @@ function feedbackPage(icon, title, message) {
 </body></html>`;
 }
 
-// ── SMS OTP Auth ─────────────────────────────────────────────────────────────
-// Sends a 6-digit OTP via Alibaba Cloud SMS.
-// If ALI_SMS_* env vars are not set, logs the code to console (dev mode).
-async function sendSMS(phone, code) {
-  const accessKeyId = process.env.ALI_SMS_ACCESS_KEY_ID;
-  const accessKeySecret = process.env.ALI_SMS_ACCESS_KEY_SECRET;
-  const signName = process.env.ALI_SMS_SIGN_NAME;
-  const templateCode = process.env.ALI_SMS_TEMPLATE_CODE;
-
-  if (!accessKeyId || !accessKeySecret) {
-    console.log(`[SMS DEV MODE] OTP for ${phone}: ${code}`);
-    return;
-  }
-
-  const params = {
-    AccessKeyId: accessKeyId,
-    Action: "SendSms",
-    Format: "JSON",
-    PhoneNumbers: phone,
-    SignName: signName,
-    SignatureMethod: "HMAC-SHA1",
-    SignatureNonce: crypto.randomBytes(16).toString("hex"),
-    SignatureVersion: "1.0",
-    TemplateCode: templateCode,
-    TemplateParam: JSON.stringify({ code }),
-    Timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
-    Version: "2017-05-25",
-  };
-
-  const sortedKeys = Object.keys(params).sort();
-  const canonicalQS = sortedKeys
-    .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`)
-    .join("&");
-  const stringToSign = `GET&${encodeURIComponent("/")}&${encodeURIComponent(canonicalQS)}`;
-  const signature = crypto.createHmac("sha1", accessKeySecret + "&").update(stringToSign).digest("base64");
-  const url = `https://dysmsapi.aliyuncs.com/?${canonicalQS}&Signature=${encodeURIComponent(signature)}`;
-
-  await new Promise((resolve, reject) => {
-    https.get(url, (res) => {
-      let data = "";
-      res.on("data", (chunk) => { data += chunk; });
-      res.on("end", () => {
-        const result = JSON.parse(data);
-        if (result.Code === "OK") { console.log(`[SMS] Sent to ${phone}`); resolve(); }
-        else reject(new Error(`Alibaba SMS error: ${result.Message} (${result.Code})`));
-      });
-    }).on("error", reject);
-  });
+// ── Invite Code Auth ──────────────────────────────────────────────────────────
+// Helpers to read all approved applicant files
+function getApplicantsDir() {
+  return path.join(__dirname, "config/applicants");
 }
 
-// POST /api/auth/send-otp — generate and send OTP to phone
-app.post("/api/auth/send-otp", async (req, res) => {
-  const { phone } = req.body;
-  if (!phone) return res.status(400).json({ error: "Phone number is required" });
+function loadAllApplicants() {
+  const dir = getApplicantsDir();
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir)
+    .filter((f) => f.endsWith(".json"))
+    .map((f) => {
+      try { return JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")); }
+      catch { return null; }
+    })
+    .filter(Boolean);
+}
 
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
-  otpStore.set(phone, { code, expiresAt: Date.now() + 10 * 60 * 1000 });
+// POST /api/auth/verify-code — user enters their invite code
+// Returns a JWT containing their full profile (name, company, industry, competitors, goal)
+app.post("/api/auth/verify-code", (req, res) => {
+  const { code } = req.body;
+  if (!code) return res.status(400).json({ error: "Invite code is required" });
 
-  try {
-    await sendSMS(phone, code);
-    res.json({ success: true });
-  } catch (err) {
-    console.error("[OTP] SMS failed:", err.message);
-    res.status(500).json({ error: "Failed to send SMS. Please try again." });
+  const applicants = loadAllApplicants();
+  const user = applicants.find(
+    (a) => a.status === "approved" && a.inviteCode && a.inviteCode.toUpperCase() === code.trim().toUpperCase()
+  );
+
+  if (!user) {
+    return res.status(401).json({ error: "Invalid or unrecognised invite code. Check your code and try again." });
   }
+
+  const secret = process.env.JWT_SECRET || "rebase-dev-secret";
+  const payload = {
+    sub: user.phone || user.email,
+    name: user.name,
+    company: user.company || "",
+    industry: user.industry || "",
+    competitors: user.competitors || "",
+    goal: user.goal || "",
+  };
+  const token = jwt.sign(payload, secret, { expiresIn: "30d" });
+  console.log(`[Auth] ${user.name} (${user.company}) logged in with invite code`);
+  res.json({ success: true, token, user: { name: user.name, company: user.company } });
 });
 
-// POST /api/auth/verify-otp — verify OTP and return JWT
-app.post("/api/auth/verify-otp", (req, res) => {
-  const { phone, code } = req.body;
-  if (!phone || !code) return res.status(400).json({ error: "Phone and code are required" });
+// POST /api/admin/approve — generate an invite code for an applicant
+// Protected by x-rebase-secret header (only Will/Joanna can call this)
+// Body: { "phone": "+86 138 0000 0000" }  OR  { "name": "John Doe" }
+// Returns the generated invite code so you can share it with the user
+app.post("/api/admin/approve", (req, res) => {
+  const { phone, name } = req.body;
+  if (!phone && !name) return res.status(400).json({ error: "Provide phone or name to identify the applicant" });
 
-  const stored = otpStore.get(phone);
-  if (!stored) return res.status(400).json({ error: "No code found. Please request a new one." });
-  if (Date.now() > stored.expiresAt) {
-    otpStore.delete(phone);
-    return res.status(400).json({ error: "Code expired. Please request a new one." });
+  const dir = getApplicantsDir();
+  if (!fs.existsSync(dir)) return res.status(404).json({ error: "No applicants found" });
+
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json"));
+  let matchFile = null;
+  let applicant = null;
+
+  for (const f of files) {
+    try {
+      const data = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
+      const phoneMatch = phone && data.phone && data.phone.replace(/\s/g, "") === phone.replace(/\s/g, "");
+      const nameMatch = name && data.name && data.name.toLowerCase() === name.toLowerCase();
+      if (phoneMatch || nameMatch) { matchFile = f; applicant = data; break; }
+    } catch { continue; }
   }
-  if (stored.code !== code) return res.status(400).json({ error: "Invalid code. Please try again." });
 
-  otpStore.delete(phone);
-  const secret = process.env.JWT_SECRET || "rebase-dev-secret";
-  const token = jwt.sign({ phone }, secret, { expiresIn: "7d" });
-  console.log(`[Auth] User logged in: ${phone}`);
-  res.json({ success: true, token });
+  if (!applicant) return res.status(404).json({ error: "Applicant not found. Check the phone or name." });
+  if (applicant.status === "approved") {
+    return res.json({ message: "Already approved", inviteCode: applicant.inviteCode, user: applicant.name });
+  }
+
+  // Generate a memorable, user-specific code: RB-[COMPANY]-[4RANDOM]
+  const base = (applicant.company || applicant.name || "USER")
+    .toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+  const suffix = crypto.randomBytes(2).toString("hex").toUpperCase();
+  const inviteCode = `RB-${base}-${suffix}`;
+
+  applicant.status = "approved";
+  applicant.inviteCode = inviteCode;
+  applicant.approvedAt = new Date().toISOString();
+  fs.writeFileSync(path.join(dir, matchFile), JSON.stringify(applicant, null, 2));
+
+  console.log(`[Admin] Approved ${applicant.name} → invite code: ${inviteCode}`);
+  res.json({ success: true, inviteCode, user: applicant.name, company: applicant.company });
 });
 
 // ── Start server ────────────────────────────────────────────────────────────

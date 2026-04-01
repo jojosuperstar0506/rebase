@@ -3,7 +3,7 @@ export default async function handler(req, res) {
   const ecsUrl = process.env.ECS_URL;
   if (!ecsUrl) return res.status(500).json({ error: "Server configuration error: ECS_URL not set" });
   try {
-    const response = await fetch(`${ecsUrl}/api/auth/send-otp`, {
+    const response = await fetch(`${ecsUrl}/api/auth/verify-code`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

@@ -1,0 +1,42 @@
+// useUser — decodes the JWT stored in localStorage and returns the current user's profile.
+// The profile is embedded in the token at login time — no extra API call needed.
+//
+// Usage in any agent page:
+//   const user = useUser();
+//   console.log(user.company);      // "ACME Corp"
+//   console.log(user.competitors);  // "竞品A, 竞品B"
+//   console.log(user.industry);     // "电商"
+
+export interface UserProfile {
+  name: string;
+  company: string;
+  industry: string;
+  competitors: string;   // comma-separated string, e.g. "竞品A, 竞品B"
+  goal: string;
+  sub: string;           // phone or email — unique identifier
+  isLoggedIn: boolean;
+}
+
+const EMPTY: UserProfile = {
+  name: "", company: "", industry: "", competitors: "", goal: "", sub: "", isLoggedIn: false,
+};
+
+export function useUser(): UserProfile {
+  const token = localStorage.getItem("rebase_token");
+  if (!token) return EMPTY;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    if (!payload.exp || payload.exp * 1000 < Date.now()) return EMPTY;
+    return {
+      name: payload.name || "",
+      company: payload.company || "",
+      industry: payload.industry || "",
+      competitors: payload.competitors || "",
+      goal: payload.goal || "",
+      sub: payload.sub || "",
+      isLoggedIn: true,
+    };
+  } catch {
+    return EMPTY;
+  }
+}
