@@ -9,6 +9,7 @@ import XhsWarroom from "./pages/XhsWarroom";
 import MarketIntelligence from "./pages/MarketIntelligence";
 import Onboarding from "./pages/Onboarding";
 import Login from "./pages/Login";
+import Admin from "./pages/Admin";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 const navStyle: CSSProperties = {
@@ -74,6 +75,7 @@ export default function App() {
         <Route path="/demo" element={<DiagnosticDashboard />} />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/admin" element={<Admin />} />
         <Route path="/workflows" element={<WorkflowScout />} />
 
         {/* Protected routes — require access code */}

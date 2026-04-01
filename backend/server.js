@@ -397,6 +397,17 @@ function loadAllApplicants() {
     .filter(Boolean);
 }
 
+// GET /api/admin/applicants — list all applicants (pending + approved)
+app.get("/api/admin/applicants", (req, res) => {
+  const applicants = loadAllApplicants();
+  // Sort: pending first, then approved, newest first within each group
+  const sorted = applicants.sort((a, b) => {
+    if (a.status === b.status) return new Date(b.submittedAt) - new Date(a.submittedAt);
+    return a.status === "pending" ? -1 : 1;
+  });
+  res.json({ applicants: sorted });
+});
+
 // POST /api/auth/verify-code — user enters their invite code
 // Returns a JWT containing their full profile (name, company, industry, competitors, goal)
 app.post("/api/auth/verify-code", (req, res) => {
