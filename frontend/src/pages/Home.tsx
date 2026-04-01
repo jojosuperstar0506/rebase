@@ -17,7 +17,7 @@ export default function Home() {
         </div>
         <h1 style={{ fontSize: "clamp(36px, 6vw, 64px)", fontWeight: 800, lineHeight: 1.15, margin: "0 0 24px", letterSpacing: -1 }}>
           {t(h.heroTitle1, lang)}{" "}
-          <span style={{ background: `linear-gradient(135deg, ${C.ac}, ${C.ac2})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+          <span style={{ background: `linear-gradient(135deg, ${C.ac}, ${C.ac2})`, WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent", display: "inline" }}>
             {t(h.heroTitle2, lang)}
           </span>
         </h1>

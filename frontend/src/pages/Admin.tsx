@@ -126,8 +126,14 @@ export default function Admin() {
 
   function handleLogin(e: React.FormEvent) {
     e.preventDefault();
-    if (password === ADMIN_PASSWORD) { setAuthed(true); setPwError(""); }
-    else setPwError("Incorrect password");
+    if (password === ADMIN_PASSWORD) {
+      setAuthed(true);
+      setPwError("");
+      localStorage.setItem("admin_authed", "true");
+      window.dispatchEvent(new CustomEvent("rebase_auth_change"));
+    } else {
+      setPwError("Incorrect password");
+    }
   }
 
   async function handleApprove(name: string, phone: string): Promise<{ inviteCode: string } | null> {

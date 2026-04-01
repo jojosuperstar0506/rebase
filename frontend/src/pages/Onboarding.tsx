@@ -6,7 +6,9 @@ import { T, t } from "../i18n";
 
 export default function Onboarding() {
   const { colors: C, lang, theme, setTheme, setLang } = useApp();
-  const [form, setForm] = useState({ name: "", phone: "", company: "", industry: "", competitors: "", email: "", goal: "" });
+  const [form, setForm] = useState({ name: "", phone: "", company: "", industry: "", competitors: "", email: "" });
+  const [goalPreset, setGoalPreset] = useState("");   // which quick-select button is active
+  const [goalCustom, setGoalCustom] = useState("");   // free-form textarea content
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const navigate = useNavigate();
@@ -27,7 +29,7 @@ export default function Onboarding() {
       const res = await fetch("/api/onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, goal: goalPreset || goalCustom }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Submission failed");
@@ -98,16 +100,19 @@ export default function Onboarding() {
                     <button
                       key={opt}
                       type="button"
-                      onClick={() => set("goal")(form.goal === opt ? "" : opt)}
-                      style={{ padding: "6px 14px", borderRadius: 20, border: `1px solid ${form.goal === opt ? C.ac : C.bd}`, background: form.goal === opt ? C.ac + "22" : C.s2, color: form.goal === opt ? C.ac : C.t2, fontSize: 13, cursor: "pointer" }}
+                      onClick={() => {
+                        setGoalPreset((prev) => (prev === opt ? "" : opt));
+                        setGoalCustom("");
+                      }}
+                      style={{ padding: "6px 14px", borderRadius: 20, border: `1px solid ${goalPreset === opt ? C.ac : C.bd}`, background: goalPreset === opt ? C.ac + "22" : C.s2, color: goalPreset === opt ? C.ac : C.t2, fontSize: 13, cursor: "pointer" }}
                     >
                       {opt}
                     </button>
                   ))}
                 </div>
                 <textarea
-                  value={form.goal}
-                  onChange={(e) => set("goal")(e.target.value)}
+                  value={goalCustom}
+                  onChange={(e) => { setGoalCustom(e.target.value); setGoalPreset(""); }}
                   placeholder={t(s.placeholders.goal, lang)}
                   rows={3}
                   style={{ width: "100%", padding: "10px 12px", background: C.inputBg, border: `1px solid ${C.inputBd}`, borderRadius: 6, color: C.tx, fontSize: 14, outline: "none", resize: "vertical", boxSizing: "border-box" }}

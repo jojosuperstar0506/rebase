@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { CSSProperties } from "react";
 import { Routes, Route, Link, useNavigate, useLocation } from "react-router-dom";
 
@@ -43,13 +43,24 @@ function Nav() {
   const { colors: C, theme, lang, setTheme, setLang } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
-  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem("rebase_token"));
+  function checkAuth() {
+    return !!localStorage.getItem("rebase_token") || !!localStorage.getItem("admin_authed");
+  }
+  const [isLoggedIn, setIsLoggedIn] = useState(checkAuth);
   const nav = T.nav;
+
+  // Re-check auth when admin logs in from the same tab
+  useEffect(() => {
+    function onAuthChange() { setIsLoggedIn(checkAuth()); }
+    window.addEventListener("rebase_auth_change", onAuthChange);
+    return () => window.removeEventListener("rebase_auth_change", onAuthChange);
+  }, []);
 
   if (HIDE_NAV_ON.includes(location.pathname)) return null;
 
   function handleLogout() {
     localStorage.removeItem("rebase_token");
+    localStorage.removeItem("admin_authed");
     setIsLoggedIn(false);
     navigate("/");
   }
