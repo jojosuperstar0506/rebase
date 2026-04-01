@@ -1,15 +1,6 @@
 import { useState, useRef } from "react";
 import type { ReactNode } from "react";
-
-const BG = "#0c0c14";
-const S1 = "#14141e";
-const S2 = "#1c1c28";
-const BD = "#2a2a3a";
-const AC = "#f59e0b";
-const AC2 = "#d97706";
-const TX = "#e4e4ec";
-const T2 = "#9898a8";
-const T3 = "#5c5c6c";
+import { useApp } from "../context/AppContext";
 
 async function askAI(prompt: string): Promise<string> {
   try {
@@ -34,34 +25,35 @@ async function askAI(prompt: string): Promise<string> {
 }
 
 function Md({ text }: { text: string }) {
+  const { colors: C } = useApp();
   if (!text) return null;
   const lines = text.split("\n");
   return (
-    <div style={{ fontSize: 13, lineHeight: 1.85, color: TX }}>
+    <div style={{ fontSize: 13, lineHeight: 1.85, color: C.tx }}>
       {lines.map(function (ln, i) {
         const t = ln.trim();
         if (!t) return <div key={i} style={{ height: 6 }} />;
         if (t.indexOf("### ") === 0) {
-          return <h4 key={i} style={{ fontSize: 14, fontWeight: 700, color: AC, margin: "14px 0 4px", borderBottom: "1px solid " + BD, paddingBottom: 4 }}>{t.substring(4)}</h4>;
+          return <h4 key={i} style={{ fontSize: 14, fontWeight: 700, color: C.ac, margin: "14px 0 4px", borderBottom: "1px solid " + C.bd, paddingBottom: 4 }}>{t.substring(4)}</h4>;
         }
         if (t.indexOf("## ") === 0) {
-          return <h3 key={i} style={{ fontSize: 16, fontWeight: 700, color: "#fff", margin: "18px 0 6px" }}>{t.substring(3)}</h3>;
+          return <h3 key={i} style={{ fontSize: 16, fontWeight: 700, color: C.tx, margin: "18px 0 6px" }}>{t.substring(3)}</h3>;
         }
         if (t.indexOf("# ") === 0) {
-          return <h2 key={i} style={{ fontSize: 18, fontWeight: 800, color: AC, margin: "22px 0 8px" }}>{t.substring(2)}</h2>;
+          return <h2 key={i} style={{ fontSize: 18, fontWeight: 800, color: C.ac, margin: "22px 0 8px" }}>{t.substring(2)}</h2>;
         }
         const parts = t.split(/(\*\*[^*]+\*\*)/g);
         const rendered = parts.map(function (p, j) {
           if (p.indexOf("**") === 0 && p.lastIndexOf("**") === p.length - 2 && p.length > 4) {
-            return <strong key={j} style={{ color: AC }}>{p.slice(2, -2)}</strong>;
+            return <strong key={j} style={{ color: C.ac }}>{p.slice(2, -2)}</strong>;
           }
           return <span key={j}>{p}</span>;
         });
         if (t.indexOf("- ") === 0 || t.indexOf("\u2022 ") === 0) {
-          return <div key={i} style={{ paddingLeft: 14, margin: "2px 0", position: "relative" }}><span style={{ position: "absolute", left: 0, color: AC }}>{"\u2022"}</span>{rendered}</div>;
+          return <div key={i} style={{ paddingLeft: 14, margin: "2px 0", position: "relative" }}><span style={{ position: "absolute", left: 0, color: C.ac }}>{"\u2022"}</span>{rendered}</div>;
         }
         if (t.match(/^\d+[.)]/)) {
-          return <div key={i} style={{ paddingLeft: 6, margin: "2px 0", color: TX }}>{rendered}</div>;
+          return <div key={i} style={{ paddingLeft: 6, margin: "2px 0", color: C.tx }}>{rendered}</div>;
         }
         return <p key={i} style={{ margin: "3px 0" }}>{rendered}</p>;
       })}
@@ -70,6 +62,7 @@ function Md({ text }: { text: string }) {
 }
 
 function FileTextArea({ value, onChange, placeholder, rows }: { value: string; onChange: (v: string) => void; placeholder: string; rows?: number }) {
+  const { colors: C } = useApp();
   const fRef = useRef<HTMLInputElement>(null);
   function handleFile(file: File) {
     if (!file) return;
@@ -87,17 +80,17 @@ function FileTextArea({ value, onChange, placeholder, rows }: { value: string; o
         onDragOver={function (e) { e.preventDefault(); }}
         onDrop={function (e) { e.preventDefault(); if (e.dataTransfer.files[0]) { handleFile(e.dataTransfer.files[0]); } }}
         style={{
-          width: "100%", background: BG, border: "1px solid " + BD, borderRadius: 8,
-          padding: 12, color: TX, fontSize: 13, resize: "vertical", outline: "none",
+          width: "100%", background: C.inputBg, border: "1px solid " + C.inputBd, borderRadius: 8,
+          padding: 12, color: C.tx, fontSize: 13, resize: "vertical", outline: "none",
           fontFamily: "inherit", boxSizing: "border-box",
         }}
       />
       <button
         onClick={function () { if (fRef.current) { fRef.current.click(); } }}
         style={{
-          position: "absolute", bottom: 8, right: 8, background: S2,
-          border: "1px solid " + BD, borderRadius: 5, padding: "4px 10px",
-          color: T2, fontSize: 11, cursor: "pointer",
+          position: "absolute", bottom: 8, right: 8, background: C.s2,
+          border: "1px solid " + C.bd, borderRadius: 5, padding: "4px 10px",
+          color: C.t2, fontSize: 11, cursor: "pointer",
         }}
       >
         {"\ud83d\udcce CSV"}
@@ -112,14 +105,15 @@ function FileTextArea({ value, onChange, placeholder, rows }: { value: string; o
 }
 
 function Field({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+  const { colors: C } = useApp();
   return (
     <input
       value={value}
       onChange={function (e) { onChange(e.target.value); }}
       placeholder={placeholder}
       style={{
-        width: "100%", background: BG, border: "1px solid " + BD, borderRadius: 8,
-        padding: "9px 12px", color: TX, fontSize: 13, outline: "none",
+        width: "100%", background: C.inputBg, border: "1px solid " + C.inputBd, borderRadius: 8,
+        padding: "9px 12px", color: C.tx, fontSize: 13, outline: "none",
         fontFamily: "inherit", boxSizing: "border-box",
       }}
     />
@@ -127,11 +121,12 @@ function Field({ value, onChange, placeholder }: { value: string; onChange: (v: 
 }
 
 function RunBtn({ onClick, disabled, children }: { onClick: () => void; disabled: boolean; children: ReactNode }) {
+  const { colors: C } = useApp();
   return (
     <button onClick={onClick} disabled={disabled} style={{
-      background: disabled ? S2 : "linear-gradient(135deg, " + AC + ", " + AC2 + ")",
+      background: disabled ? C.s2 : "linear-gradient(135deg, " + C.ac + ", " + C.ac2 + ")",
       border: "none", borderRadius: 8, padding: "11px 28px",
-      color: disabled ? T3 : "#000", fontSize: 14, fontWeight: 700,
+      color: disabled ? C.t3 : "#000", fontSize: 14, fontWeight: 700,
       cursor: disabled ? "not-allowed" : "pointer", fontFamily: "inherit",
     }}>
       {children}
@@ -140,24 +135,26 @@ function RunBtn({ onClick, disabled, children }: { onClick: () => void; disabled
 }
 
 function Lbl({ children }: { children: ReactNode }) {
-  return <div style={{ fontSize: 12, color: T2, fontWeight: 600, marginBottom: 5 }}>{children}</div>;
+  const { colors: C } = useApp();
+  return <div style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5 }}>{children}</div>;
 }
 
 function ResultBox({ result, loading }: { result: string; loading: boolean }) {
+  const { colors: C } = useApp();
   return (
     <div style={{
-      background: S1, border: "1px solid " + BD, borderRadius: 10,
+      background: C.s1, border: "1px solid " + C.bd, borderRadius: 10,
       padding: 18, minHeight: 120, maxHeight: "55vh", overflow: "auto",
     }}>
       {loading && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-          <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: AC, animation: "blink 1s infinite" }} />
-          <span style={{ fontSize: 12, color: AC }}>AI 分析中，请稍候...</span>
+          <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: C.ac, animation: "blink 1s infinite" }} />
+          <span style={{ fontSize: 12, color: C.ac }}>AI 分析中，请稍候...</span>
         </div>
       )}
       {result ? <Md text={result} /> : null}
       {!result && !loading ? (
-        <div style={{ textAlign: "center", color: T3, padding: "30px 0", fontSize: 13 }}>
+        <div style={{ textAlign: "center", color: C.t3, padding: "30px 0", fontSize: 13 }}>
           输入数据后点击按钮，分析结果将在此显示
         </div>
       ) : null}
@@ -301,6 +298,7 @@ function Tab3() {
 }
 
 function Tab4() {
+  const { colors: C } = useApp();
   const [kw, setKw] = useState("");
   const [product, setProduct] = useState("");
   const [noteStyle, setNoteStyle] = useState("种草体");
@@ -352,10 +350,10 @@ function Tab4() {
             {styleOptions.map(function (s) {
               return (
                 <button key={s} onClick={function () { setNoteStyle(s); }} style={{
-                  background: noteStyle === s ? AC : BG,
-                  border: "1px solid " + (noteStyle === s ? AC : BD),
+                  background: noteStyle === s ? C.ac : C.inputBg,
+                  border: "1px solid " + (noteStyle === s ? C.ac : C.bd),
                   borderRadius: 6, padding: "5px 11px",
-                  color: noteStyle === s ? "#000" : T2,
+                  color: noteStyle === s ? "#000" : C.t2,
                   fontSize: 12, cursor: "pointer",
                   fontWeight: noteStyle === s ? 700 : 400,
                   fontFamily: "inherit",
@@ -367,8 +365,8 @@ function Tab4() {
         <div>
           <Lbl>篇数</Lbl>
           <select value={count} onChange={function (e) { setCount(e.target.value); }} style={{
-            background: BG, border: "1px solid " + BD, borderRadius: 8,
-            padding: "8px 12px", color: TX, fontSize: 13, fontFamily: "inherit",
+            background: C.inputBg, border: "1px solid " + C.inputBd, borderRadius: 8,
+            padding: "8px 12px", color: C.tx, fontSize: 13, fontFamily: "inherit",
           }}>
             <option value="1">1篇</option>
             <option value="2">2篇</option>
@@ -395,46 +393,47 @@ const ALL_TABS = [
 ];
 
 export default function XhsWarroom() {
+  const { colors: C } = useApp();
   const [tab, setTab] = useState("t1");
   const found = ALL_TABS.find(function (t) { return t.id === tab; });
   const ActiveComp = found ? found.Comp : Tab1;
 
   return (
-    <div style={{ minHeight: "100vh", background: BG, fontFamily: '"Noto Sans SC", "PingFang SC", system-ui, sans-serif', color: TX }}>
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: '"Noto Sans SC", "PingFang SC", system-ui, sans-serif', color: C.tx }}>
       <style>{[
         "@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;600;700;800&display=swap');",
         "* { box-sizing: border-box; }",
         "@keyframes blink { 0%,100% { opacity: 1 } 50% { opacity: .3 } }",
         "::-webkit-scrollbar { width: 5px }",
-        "::-webkit-scrollbar-thumb { background: " + BD + "; border-radius: 3px }"
+        "::-webkit-scrollbar-thumb { background: " + C.bd + "; border-radius: 3px }"
       ].join("\n")}</style>
 
-      <div style={{ borderBottom: "1px solid " + BD, padding: "18px 24px 0" }}>
+      <div style={{ borderBottom: "1px solid " + C.bd, padding: "18px 24px 0" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
           <div style={{
             width: 36, height: 36, borderRadius: 9,
-            background: "linear-gradient(135deg, " + AC + ", " + AC2 + ")",
+            background: "linear-gradient(135deg, " + C.ac + ", " + C.ac2 + ")",
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 17, fontWeight: 900, color: "#000",
           }}>{"O"}</div>
           <div>
-            <div style={{ fontSize: 17, fontWeight: 800, color: "#fff" }}>OMI 内容作战室</div>
-            <div style={{ fontSize: 11, color: T3 }}>小红书爆款内容工业化 · AI驱动</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: C.tx }}>OMI 内容作战室</div>
+            <div style={{ fontSize: 11, color: C.t3 }}>小红书爆款内容工业化 · AI驱动</div>
           </div>
         </div>
         <div style={{ display: "flex", gap: 2 }}>
           {ALL_TABS.map(function (t, i) {
             return (
               <button key={t.id} onClick={function () { setTab(t.id); }} style={{
-                background: tab === t.id ? S1 : "transparent",
-                border: "1px solid " + (tab === t.id ? BD : "transparent"),
-                borderBottom: tab === t.id ? ("1px solid " + S1) : "none",
+                background: tab === t.id ? C.s1 : "transparent",
+                border: "1px solid " + (tab === t.id ? C.bd : "transparent"),
+                borderBottom: tab === t.id ? ("1px solid " + C.s1) : "none",
                 borderRadius: "8px 8px 0 0", padding: "8px 16px",
                 cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
                 position: "relative", bottom: -1, fontFamily: "inherit",
               }}>
                 <span style={{ fontSize: 14 }}>{t.icon}</span>
-                <span style={{ fontSize: 13, fontWeight: tab === t.id ? 700 : 400, color: tab === t.id ? "#fff" : T3 }}>
+                <span style={{ fontSize: 13, fontWeight: tab === t.id ? 700 : 400, color: tab === t.id ? C.tx : C.t3 }}>
                   {String(i + 1) + ". " + t.label}
                 </span>
               </button>
@@ -446,8 +445,8 @@ export default function XhsWarroom() {
       <div style={{ padding: "20px 24px 40px", maxWidth: 880 }}>
         <div style={{
           display: "flex", alignItems: "center", gap: 6, marginBottom: 16,
-          padding: "8px 12px", background: S1, borderRadius: 7,
-          border: "1px solid " + BD, fontSize: 11,
+          padding: "8px 12px", background: C.s1, borderRadius: 7,
+          border: "1px solid " + C.bd, fontSize: 11,
         }}>
           {ALL_TABS.map(function (t, i) {
             return (
@@ -455,13 +454,13 @@ export default function XhsWarroom() {
                 <span style={{
                   width: 20, height: 20, borderRadius: "50%",
                   display: "inline-flex", alignItems: "center", justifyContent: "center",
-                  background: tab === t.id ? AC : "transparent",
-                  border: "1px solid " + (tab === t.id ? AC : BD),
-                  color: tab === t.id ? "#000" : T3,
+                  background: tab === t.id ? C.ac : "transparent",
+                  border: "1px solid " + (tab === t.id ? C.ac : C.bd),
+                  color: tab === t.id ? "#000" : C.t3,
                   fontSize: 10, fontWeight: 700,
                 }}>{String(i + 1)}</span>
-                <span style={{ color: tab === t.id ? "#fff" : T3, fontWeight: tab === t.id ? 700 : 400 }}>{t.label}</span>
-                {i < 3 ? <span style={{ color: T3, margin: "0 2px" }}>{"\u2192"}</span> : null}
+                <span style={{ color: tab === t.id ? C.tx : C.t3, fontWeight: tab === t.id ? 700 : 400 }}>{t.label}</span>
+                {i < 3 ? <span style={{ color: C.t3, margin: "0 2px" }}>{"\u2192"}</span> : null}
               </span>
             );
           })}

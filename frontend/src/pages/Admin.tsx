@@ -98,7 +98,8 @@ function ApplicantCard({ applicant, onApprove, colors }: {
 
 export default function Admin() {
   const { colors: C } = useApp();
-  const [authed, setAuthed] = useState(false);
+  // Restore auth from localStorage so navigating away and back doesn't require re-login
+  const [authed, setAuthed] = useState(() => !!localStorage.getItem("admin_authed"));
   const [password, setPassword] = useState("");
   const [pwError, setPwError] = useState("");
   const [applicants, setApplicants] = useState<Applicant[]>([]);
@@ -219,8 +220,15 @@ export default function Admin() {
         {error && <div style={{ color: C.danger, background: C.danger + "11", border: `1px solid ${C.danger}44`, borderRadius: 8, padding: 16, marginBottom: 16 }}>{error}</div>}
 
         {!loading && !error && shown.length === 0 && (
-          <div style={{ color: C.t2, textAlign: "center", padding: 60, background: C.s1, borderRadius: 10, border: `1px solid ${C.bd}` }}>
-            {filter === "pending" ? "No pending applicants right now." : filter === "approved" ? "No approved users yet." : "No applicants yet."}
+          <div style={{ color: C.t2, textAlign: "center", padding: 40, background: C.s1, borderRadius: 10, border: `1px solid ${C.bd}` }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>📭</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: C.tx, marginBottom: 8 }}>
+              {filter === "pending" ? "No pending applicants right now." : filter === "approved" ? "No approved users yet." : "No applicants yet."}
+            </div>
+            <div style={{ fontSize: 13, color: C.t3, lineHeight: 1.6 }}>
+              Applications submitted via the onboarding form are emailed to you.<br />
+              To enable this panel, set <code style={{ color: C.ac }}>ECS_BACKEND_URL</code> and <code style={{ color: C.ac }}>ECS_API_SECRET</code> in Vercel env vars.
+            </div>
           </div>
         )}
 
