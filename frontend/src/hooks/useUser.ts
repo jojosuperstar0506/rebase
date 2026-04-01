@@ -21,12 +21,19 @@ const EMPTY: UserProfile = {
   name: "", company: "", industry: "", competitors: "", goal: "", sub: "", isLoggedIn: false,
 };
 
+function decodeJwtPayload(token: string): Record<string, unknown> {
+  const base64url = token.split(".")[1];
+  const base64 = base64url.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64 + "==".slice(0, (4 - (base64.length % 4)) % 4);
+  return JSON.parse(atob(padded));
+}
+
 export function useUser(): UserProfile {
   const token = localStorage.getItem("rebase_token");
   if (!token) return EMPTY;
   try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    if (!payload.exp || payload.exp * 1000 < Date.now()) return EMPTY;
+    const payload = decodeJwtPayload(token);
+    if (!payload.exp || (payload.exp as number) * 1000 < Date.now()) return EMPTY;
     return {
       name: payload.name || "",
       company: payload.company || "",
