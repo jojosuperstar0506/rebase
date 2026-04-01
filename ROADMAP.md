@@ -69,16 +69,12 @@ The platform works out of the box with built-in defaults — no Vercel env vars 
 - `ACCESS_CODE` → `"rebase2026"` (users can log in with this immediately)
 - `VITE_ADMIN_PASSWORD` → `"rebase-admin-2026"` (Will/Joanna can access admin immediately)
 
-**The only thing that truly needs a Vercel env var:**
+**No blockers remaining.** The platform is fully functional. All critical env vars are set.
 
-| Action | Where | Why |
-|--------|-------|-----|
-| Set `ANTHROPIC_API_KEY=sk-ant-...` | Vercel → Settings → Env Vars → Redeploy | XHS War Room AI calls fail without this |
-
-**Optionally (to customise codes and enable email notifications):**
-- `ACCESS_CODE` — change from the default `rebase2026` to your own invite code
-- `VITE_ADMIN_PASSWORD` — change from default `rebase-admin-2026`
-- `RESEND_API_KEY` + `NOTIFICATION_EMAIL` — to receive onboarding application emails
+**Optional improvements:**
+- `RESEND_API_KEY` + `NOTIFICATION_EMAIL` — to receive onboarding application emails in your inbox
+- `ACCESS_CODE` — change from the default `rebase2026` to a custom invite code
+- `VITE_ADMIN_PASSWORD` — change from default `rebase-admin-2026` before sharing with more admins
 
 ---
 
@@ -215,8 +211,8 @@ Phase 2 (Scale):   Add Alibaba Cloud Guangzhou — enterprise-ready
 | Provision ECS server | William | ✅ Done | 2 CPU, 4GB RAM, HK region — 8.217.242.191 |
 | Install Node.js, PM2, Nginx, git on ECS | William | ✅ Done | Backend API running on port 80 |
 | Deploy frontend to Vercel | William | ✅ Done | Auto-deploys on push to `main` |
-| Set `ANTHROPIC_API_KEY` in Vercel | William | 🔴 TODO | Needed for XHS War Room |
-| Set `ACCESS_CODE` in Vercel | William | 🔴 TODO | Needed for user login |
+| Set `ANTHROPIC_API_KEY` in Vercel | William | ✅ Done | XHS War Room AI calls working |
+| Set `ACCESS_CODE` in Vercel | William | ✅ Done | Needed for user login |
 | Set `RESEND_API_KEY` in Vercel | William | 🟡 TODO | Needed for email notifications |
 | Set up RDS PostgreSQL | Joanna | TODO | Sprint 2 |
 | Set up OSS bucket | Joanna | TODO | Sprint 2 |
@@ -343,7 +339,7 @@ Already built as Product Structure Agent. See Section 2C above.
 **William:**
 | Task | Status | Notes |
 |------|--------|-------|
-| Set `ANTHROPIC_API_KEY` in Vercel | 🔴 TODO | XHS War Room is the only thing that needs this — everything else works with built-in defaults |
+| Set `ANTHROPIC_API_KEY` in Vercel | ✅ Done | XHS War Room AI calls working |
 | Add ECS backend routes for admin panel (`/api/admin/*`) | TODO | So admin panel shows real applicants instead of empty |
 | Build & deploy Dify AI Intake chatflow | TODO | Bring 5-phase prompt architecture to life |
 | Validate intake agent with 3-5 mock client sessions | TODO | Refine conversation quality |
