@@ -35,12 +35,12 @@ export function useUser(): UserProfile {
     const payload = decodeJwtPayload(token);
     if (!payload.exp || (payload.exp as number) * 1000 < Date.now()) return EMPTY;
     return {
-      name: payload.name || "",
-      company: payload.company || "",
-      industry: payload.industry || "",
-      competitors: payload.competitors || "",
-      goal: payload.goal || "",
-      sub: payload.sub || "",
+      name: (payload.name as string) || "",
+      company: (payload.company as string) || "",
+      industry: (payload.industry as string) || "",
+      competitors: (payload.competitors as string) || "",
+      goal: (payload.goal as string) || "",
+      sub: (payload.sub as string) || "",
       isLoggedIn: true,
     };
   } catch {
