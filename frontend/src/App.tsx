@@ -53,7 +53,13 @@ function Nav() {
   const [isAdmin, setIsAdmin] = useState(checkIsAdmin);
   const nav = T.nav;
 
-  // Re-check auth when admin logs in from the same tab
+  // Re-check auth on every route change (catches login/logout navigations)
+  useEffect(() => {
+    setIsLoggedIn(checkAuth());
+    setIsAdmin(checkIsAdmin());
+  }, [location.pathname]);
+
+  // Also re-check when explicitly dispatched (e.g. admin login same-tab)
   useEffect(() => {
     function onAuthChange() {
       setIsLoggedIn(checkAuth());
@@ -122,8 +128,8 @@ function Nav() {
           {lang === "en" ? "中文" : "EN"}
         </button>
 
-        {/* Admin — only visible to admin users */}
-        {isAdmin && <NavLink to="/admin" label={t(nav.admin, lang)} />}
+        {/* Admin — visible when logged out (for Will/Joanna) or when logged in as admin; hidden for regular users */}
+        {(!isLoggedIn || isAdmin) && <NavLink to="/admin" label={t(nav.admin, lang)} />}
 
         {/* Login / Logout */}
         {isLoggedIn ? (

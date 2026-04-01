@@ -27,6 +27,7 @@ export default function Login() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Invalid code");
       localStorage.setItem("rebase_token", data.token);
+      window.dispatchEvent(new CustomEvent("rebase_auth_change"));
       navigate("/agents");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");

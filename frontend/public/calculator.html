@@ -550,7 +550,7 @@ function App() {
   // ─── Shared Styles ──────────────────────────────────────────────────────
   const cd = { background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 8, padding: 24, boxShadow: T.shadow };
   const inp = { width: "100%", padding: "10px 12px", borderRadius: 6, border: `1px solid ${T.inputBorder}`, background: T.inputBg, color: T.text, fontSize: 14, outline: "none", boxSizing: "border-box", transition: "border-color 0.15s" };
-  const bP = (a) => ({ flex: 1, padding: "12px 20px", borderRadius: 8, border: "none", background: a ? T.accent : T.border, color: a ? "#FFFFFF" : T.textMuted, cursor: a ? "pointer" : "not-allowed", fontSize: 15, fontWeight: 600, transition: "all 0.15s" });
+  const bP = (a) => ({ flex: 1, padding: "12px 20px", borderRadius: 8, border: "none", background: a ? T.accent : (darkMode ? "#374151" : "#E2E8F0"), color: a ? "#FFFFFF" : (darkMode ? "#9CA3AF" : "#64748B"), cursor: a ? "pointer" : "not-allowed", fontSize: 15, fontWeight: 600, transition: "all 0.15s" });
   const bB = { padding: "10px 16px", borderRadius: 8, border: `1px solid ${T.border}`, background: "transparent", color: T.textSecondary, cursor: "pointer", fontSize: 13 };
   const ct = { minHeight: "100vh", background: T.bg, color: T.text, fontFamily: "Inter, -apple-system, 'Noto Sans SC', system-ui, sans-serif", position: "relative" };
 
@@ -1196,12 +1196,15 @@ function App() {
           )}
         </div>
 
-        <div style={{ textAlign: "center", marginTop: 12 }}>
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, marginTop: 12 }}>
           <button onClick={() => {
             setStep(0); setSel([]); setDhc({}); setCs(""); setRev(""); setCap({});
             setRe({}); setExp(null); setCn(""); setInd(""); setCityTier("tier1");
             setLeadSubmitted(false); setLeadSubmitting(false); setLeadName(""); setLeadContact(""); setShowSources(false);
           }} style={{ ...bB, fontSize: 11 }}>{L.resetBtn}</button>
+          <a href="/" style={{ fontSize: 11, color: T.accent, textDecoration: "none", padding: "10px 16px", borderRadius: 8, border: `1px solid ${T.accent}40`, background: `${T.accent}08` }}>
+            {lang === "zh" ? "← 返回首页" : "← Back to Home"}
+          </a>
         </div>
         <div style={{ textAlign: "center", marginTop: 20, paddingBottom: 12, fontSize: 10, color: T.textMuted }}>
           {L.footerNote}
