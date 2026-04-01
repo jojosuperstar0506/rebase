@@ -1,6 +1,11 @@
 import { useState } from "react";
 import type { CSSProperties } from "react";
 import { Routes, Route, Link, useNavigate, useLocation } from "react-router-dom";
+
+import { AppProvider, useApp } from "./context/AppContext";
+import { T, t } from "./i18n";
+
+import Home from "./pages/Home";
 import DiagnosticDashboard from "./pages/DiagnosticDashboard";
 import WorkflowScout from "./pages/WorkflowScout";
 import AgentMonitor from "./pages/AgentMonitor";
@@ -10,58 +15,37 @@ import MarketIntelligence from "./pages/MarketIntelligence";
 import Onboarding from "./pages/Onboarding";
 import Login from "./pages/Login";
 import Admin from "./pages/Admin";
-import Home from "./pages/Home";
+import Success from "./pages/Success";
 import ProtectedRoute from "./components/ProtectedRoute";
 
-const NAV_BG = "#0c0c14";
-const NAV_BD = "#2a2a3a";
-const AC = "#06b6d4";
-const TX = "#e4e4ec";
-const T2 = "#9898a8";
-
-const navWrap: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  padding: "0 24px",
-  height: 56,
-  background: NAV_BG,
-  borderBottom: `1px solid ${NAV_BD}`,
-  fontFamily: "system-ui, sans-serif",
-  position: "sticky",
-  top: 0,
-  zIndex: 100,
-};
-
-// Hide nav on login/onboarding — those pages are full-screen
+// Pages where nav is hidden (full-screen standalone pages)
 const HIDE_NAV_ON = ["/login", "/onboarding"];
 
-function NavLink({ to, children, highlight }: { to: string; children: React.ReactNode; highlight?: boolean }) {
+function NavLink({ to, label, highlight }: { to: string; label: string; highlight?: boolean }) {
+  const { colors: C } = useApp();
   const location = useLocation();
-  const active = location.pathname === to || location.pathname.startsWith(to + "/");
+  const active = location.pathname === to || (to !== "/" && location.pathname.startsWith(to + "/"));
   return (
-    <Link
-      to={to}
-      style={{
-        textDecoration: "none",
-        fontSize: 14,
-        fontWeight: active ? 600 : 400,
-        color: highlight ? AC : active ? TX : T2,
-        padding: "6px 2px",
-        borderBottom: active ? `2px solid ${AC}` : "2px solid transparent",
-        transition: "color 0.15s",
-      }}
-    >
-      {children}
+    <Link to={to} style={{
+      textDecoration: "none", fontSize: 14,
+      fontWeight: active ? 600 : 400,
+      color: highlight ? C.ac : active ? C.tx : C.t2,
+      padding: "6px 2px",
+      borderBottom: active ? `2px solid ${C.ac}` : "2px solid transparent",
+      whiteSpace: "nowrap" as CSSProperties["whiteSpace"],
+    }}>
+      {label}
     </Link>
   );
 }
 
 function Nav() {
+  const { colors: C, theme, lang, setTheme, setLang } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
   const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem("rebase_token"));
+  const nav = T.nav;
 
-  // Don't show nav on login and onboarding — those are standalone pages
   if (HIDE_NAV_ON.includes(location.pathname)) return null;
 
   function handleLogout() {
@@ -70,49 +54,69 @@ function Nav() {
     navigate("/");
   }
 
+  const btnStyle: CSSProperties = {
+    background: C.s2, border: `1px solid ${C.bd}`, borderRadius: 6,
+    padding: "5px 11px", cursor: "pointer", color: C.t2,
+    fontSize: 12, fontWeight: 600,
+  };
+
   return (
-    <nav style={navWrap}>
+    <nav style={{
+      display: "flex", alignItems: "center", padding: "0 24px", height: 56,
+      background: C.navBg, borderBottom: `1px solid ${C.navBd}`,
+      fontFamily: "system-ui, sans-serif", position: "sticky", top: 0, zIndex: 100,
+    }}>
       {/* Logo */}
-      <Link to="/" style={{ textDecoration: "none", fontSize: 18, fontWeight: 800, color: AC, marginRight: 32, letterSpacing: -0.5 }}>
+      <Link to="/" style={{ textDecoration: "none", fontSize: 18, fontWeight: 800, color: C.ac, marginRight: 28, letterSpacing: -0.5, flexShrink: 0 }}>
         Rebase
       </Link>
 
-      {/* Left links — always visible */}
-      <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
-        <a href="/calculator.html" style={{ textDecoration: "none", fontSize: 14, fontWeight: 400, color: T2 }}>
-          Diagnostics
+      {/* Left nav links */}
+      <div style={{ display: "flex", gap: 22, alignItems: "center", overflow: "hidden" }}>
+        <a href="/calculator.html" style={{ textDecoration: "none", fontSize: 14, fontWeight: 400, color: C.t2, whiteSpace: "nowrap" }}>
+          {t(nav.diagnostics, lang)}
         </a>
-        <NavLink to="/onboarding" highlight>Request Access</NavLink>
 
-        {/* Client links — only when logged in */}
+        {!isLoggedIn && (
+          <NavLink to="/onboarding" label={t(nav.requestAccess, lang)} highlight />
+        )}
+
         {isLoggedIn && (
           <>
-            <NavLink to="/agents">Agents</NavLink>
-            <NavLink to="/costs">Costs</NavLink>
+            <NavLink to="/agents" label={t(nav.agents, lang)} />
+            <NavLink to="/workflows" label={t(nav.workflows, lang)} />
+            <NavLink to="/costs" label={t(nav.costs, lang)} />
           </>
         )}
       </div>
 
-      {/* Right side */}
-      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 16 }}>
-        {/* Admin — always visible, password protected inside */}
-        <NavLink to="/admin">Admin</NavLink>
+      {/* Right controls */}
+      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
 
+        {/* Theme toggle */}
+        <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} style={btnStyle} title="Toggle theme">
+          {theme === "dark" ? "☀️ " + t(nav.lightMode, lang) : "🌙 " + t(nav.darkMode, lang)}
+        </button>
+
+        {/* Language toggle */}
+        <button onClick={() => setLang(lang === "en" ? "zh" : "en")} style={btnStyle} title="Switch language">
+          {lang === "en" ? "中文" : "EN"}
+        </button>
+
+        {/* Admin */}
+        <NavLink to="/admin" label={t(nav.admin, lang)} />
+
+        {/* Login / Logout */}
         {isLoggedIn ? (
-          <>
-            <button
-              onClick={handleLogout}
-              style={{ background: "none", border: `1px solid ${NAV_BD}`, borderRadius: 6, padding: "5px 14px", cursor: "pointer", color: T2, fontSize: 13, fontWeight: 500 }}
-            >
-              Log out
-            </button>
-          </>
+          <button onClick={handleLogout} style={{ ...btnStyle, color: C.t2 }}>
+            {t(nav.logout, lang)}
+          </button>
         ) : (
-          <Link
-            to="/login"
-            style={{ background: AC, border: "none", borderRadius: 6, padding: "6px 16px", cursor: "pointer", color: "#000", fontSize: 13, fontWeight: 700, textDecoration: "none" }}
-          >
-            Log in
+          <Link to="/login" style={{
+            background: C.ac, borderRadius: 6, padding: "6px 14px",
+            color: "#000", fontSize: 13, fontWeight: 700, textDecoration: "none",
+          }}>
+            {t(nav.login, lang)}
           </Link>
         )}
       </div>
@@ -120,25 +124,35 @@ function Nav() {
   );
 }
 
-export default function App() {
+function AppRoutes() {
+  const { colors: C } = useApp();
   return (
-    <div style={{ background: "#0c0c14", minHeight: "100vh" }}>
+    <div style={{ background: C.bg, minHeight: "100vh" }}>
       <Nav />
       <Routes>
-        {/* Public routes */}
+        {/* Public */}
         <Route path="/" element={<Home />} />
         <Route path="/onboarding" element={<Onboarding />} />
+        <Route path="/success" element={<Success />} />
         <Route path="/login" element={<Login />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/demo" element={<DiagnosticDashboard />} />
         <Route path="/workflows" element={<WorkflowScout />} />
 
-        {/* Protected routes — require invite code login */}
+        {/* Protected — require invite code */}
         <Route path="/agents" element={<ProtectedRoute><AgentMonitor /></ProtectedRoute>} />
         <Route path="/agents/xhs-content" element={<ProtectedRoute><XhsWarroom /></ProtectedRoute>} />
         <Route path="/agents/market-intelligence" element={<ProtectedRoute><MarketIntelligence /></ProtectedRoute>} />
         <Route path="/costs" element={<ProtectedRoute><CostDashboard /></ProtectedRoute>} />
       </Routes>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AppProvider>
+      <AppRoutes />
+    </AppProvider>
   );
 }
