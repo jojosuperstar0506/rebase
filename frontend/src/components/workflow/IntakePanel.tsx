@@ -1,13 +1,6 @@
 import { useState } from "react";
 import FileUpload from "./FileUpload";
-
-// Design tokens
-const BG = "#0c0c14";
-const S1 = "#14141e";
-const BD = "#2a2a3a";
-const AC = "#06b6d4";
-const TX = "#e4e4ec";
-const T2 = "#9898a8";
+import { useApp } from "../../context/AppContext";
 
 const EXAMPLES: { label: string; text: string }[] = [
   {
@@ -33,14 +26,8 @@ interface IntakePanelProps {
   inlineError?: string | null;
 }
 
-export default function IntakePanel({
-  description,
-  files,
-  onDescriptionChange,
-  onFilesChange,
-  onSubmit,
-  inlineError,
-}: IntakePanelProps) {
+export default function IntakePanel({ description, files, onDescriptionChange, onFilesChange, onSubmit, inlineError }: IntakePanelProps) {
+  const { colors: C } = useApp();
   const [hoveredExample, setHoveredExample] = useState<number | null>(null);
   const [activeExample, setActiveExample] = useState<number | null>(null);
   const [submitHover, setSubmitHover] = useState(false);
@@ -57,16 +44,7 @@ export default function IntakePanel({
   const canSubmit = description.trim().length > 0;
 
   return (
-    <div
-      className="ip-outer"
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        padding: "48px 24px 40px",
-        minHeight: "100vh",
-      }}
-    >
+    <div className="ip-outer" style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "48px 24px 40px", minHeight: "100vh" }}>
       <style>{`
         .ip-card { width: 100%; max-width: 720px; }
         .ip-textarea { min-height: 140px; }
@@ -79,115 +57,41 @@ export default function IntakePanel({
           .ip-header h1 { font-size: 24px !important; }
         }
       `}</style>
+
       {/* Header */}
       <div className="ip-header" style={{ textAlign: "center", marginBottom: 36 }}>
-        <h1
-          style={{
-            fontSize: 28,
-            fontWeight: 700,
-            color: AC,
-            margin: 0,
-            letterSpacing: "0.02em",
-          }}
-        >
-          流程扫描
-        </h1>
-        <div
-          style={{
-            fontSize: 16,
-            color: T2,
-            marginTop: 4,
-            fontWeight: 400,
-          }}
-        >
-          Workflow Scout
-        </div>
-        <p
-          style={{
-            fontSize: 14,
-            color: T2,
-            marginTop: 12,
-            maxWidth: 560,
-            lineHeight: 1.6,
-          }}
-        >
-          描述您的业务流程，上传相关文档，获取智能优化建议
-        </p>
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: C.ac, margin: 0, letterSpacing: "0.02em" }}>流程扫描</h1>
+        <div style={{ fontSize: 16, color: C.t2, marginTop: 4, fontWeight: 400 }}>Workflow Scout</div>
+        <p style={{ fontSize: 14, color: C.t2, marginTop: 12, maxWidth: 560, lineHeight: 1.6 }}>描述您的业务流程，上传相关文档，获取智能优化建议</p>
       </div>
 
       {/* Main card */}
-      <div
-        className="ip-card"
-        style={{
-          background: S1,
-          border: `1px solid ${BD}`,
-          borderRadius: 12,
-          padding: 36,
-        }}
-      >
-        {/* Textarea section */}
+      <div className="ip-card" style={{ background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 12, padding: 36 }}>
+
+        {/* Textarea */}
         <div style={{ marginBottom: 28 }}>
           <div style={{ marginBottom: 8 }}>
-            <span
-              style={{ fontSize: 12, color: T2, fontWeight: 600 }}
-            >
-              描述您的业务流程
-            </span>
-            <span
-              style={{ fontSize: 11, color: T2, marginLeft: 8, fontWeight: 400 }}
-            >
-              Describe your business workflow
-            </span>
+            <span style={{ fontSize: 12, color: C.t2, fontWeight: 600 }}>描述您的业务流程</span>
+            <span style={{ fontSize: 11, color: C.t2, marginLeft: 8, fontWeight: 400 }}>Describe your business workflow</span>
           </div>
           <textarea
             value={description}
-            onChange={(e) => {
-              onDescriptionChange(e.target.value);
-              setActiveExample(null);
-            }}
+            onChange={(e) => { onDescriptionChange(e.target.value); setActiveExample(null); }}
             rows={6}
             placeholder="例如：每天早上，销售部从微信群收集客户订单，手动录入到Excel表格里，再发给仓库部打印拣货单..."
             className="ip-textarea"
-            style={{
-              width: "100%",
-              background: BG,
-              border: `1px solid ${inlineError ? "#ef4444" : BD}`,
-              borderRadius: 8,
-              padding: "12px 14px",
-              color: TX,
-              fontSize: 14,
-              lineHeight: 1.7,
-              resize: "vertical",
-              fontFamily: "system-ui, sans-serif",
-              outline: "none",
-              boxSizing: "border-box",
-              transition: "border-color 0.2s",
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.borderColor = AC;
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.borderColor = inlineError ? "#ef4444" : BD;
-            }}
+            style={{ width: "100%", background: C.inputBg, border: `1px solid ${inlineError ? C.danger : C.inputBd}`, borderRadius: 8, padding: "12px 14px", color: C.tx, fontSize: 14, lineHeight: 1.7, resize: "vertical", fontFamily: "system-ui, sans-serif", outline: "none", boxSizing: "border-box", transition: "border-color 0.2s" }}
+            onFocus={(e) => { e.currentTarget.style.borderColor = C.ac; }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = inlineError ? C.danger : C.inputBd; }}
           />
-          {inlineError && (
-            <div style={{ color: "#ef4444", fontSize: 12, marginTop: 6 }}>
-              ⚠ {inlineError}
-            </div>
-          )}
+          {inlineError && <div style={{ color: C.danger, fontSize: 12, marginTop: 6 }}>⚠ {inlineError}</div>}
         </div>
 
-        {/* File upload section */}
+        {/* File upload */}
         <div style={{ marginBottom: 28 }}>
           <div style={{ marginBottom: 8 }}>
-            <span style={{ fontSize: 12, color: T2, fontWeight: 600 }}>
-              上传相关文档（可选）
-            </span>
-            <span
-              style={{ fontSize: 11, color: T2, marginLeft: 8, fontWeight: 400 }}
-            >
-              Upload supporting documents (optional)
-            </span>
+            <span style={{ fontSize: 12, color: C.t2, fontWeight: 600 }}>上传相关文档（可选）</span>
+            <span style={{ fontSize: 11, color: C.t2, marginLeft: 8, fontWeight: 400 }}>Upload supporting documents (optional)</span>
           </div>
           <FileUpload files={files} onFilesChange={onFilesChange} />
         </div>
@@ -195,14 +99,8 @@ export default function IntakePanel({
         {/* Quick examples */}
         <div style={{ marginBottom: 28 }}>
           <div style={{ marginBottom: 10 }}>
-            <span style={{ fontSize: 12, color: T2, fontWeight: 600 }}>
-              快速示例
-            </span>
-            <span
-              style={{ fontSize: 11, color: T2, marginLeft: 8, fontWeight: 400 }}
-            >
-              Quick examples
-            </span>
+            <span style={{ fontSize: 12, color: C.t2, fontWeight: 600 }}>快速示例</span>
+            <span style={{ fontSize: 11, color: C.t2, marginLeft: 8, fontWeight: 400 }}>Quick examples</span>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {EXAMPLES.map((ex, i) => {
@@ -215,21 +113,7 @@ export default function IntakePanel({
                   onClick={() => handleExampleClick(i)}
                   onMouseEnter={() => setHoveredExample(i)}
                   onMouseLeave={() => setHoveredExample(null)}
-                  style={{
-                    padding: "7px 16px",
-                    borderRadius: 20,
-                    border: `1px solid ${isActive ? AC : isHovered ? AC : BD}`,
-                    background: isActive
-                      ? `${AC}18`
-                      : isHovered
-                        ? `${AC}0a`
-                        : "transparent",
-                    color: isActive ? AC : isHovered ? TX : T2,
-                    fontSize: 13,
-                    cursor: "pointer",
-                    transition: "all 0.2s",
-                    fontFamily: "system-ui, sans-serif",
-                  }}
+                  style={{ padding: "7px 16px", borderRadius: 20, border: `1px solid ${isActive || isHovered ? C.ac : C.bd}`, background: isActive ? `${C.ac}18` : isHovered ? `${C.ac}0a` : "transparent", color: isActive ? C.ac : isHovered ? C.tx : C.t2, fontSize: 13, cursor: "pointer", transition: "all 0.2s", fontFamily: "system-ui, sans-serif" }}
                 >
                   {ex.label}
                 </button>
@@ -238,44 +122,20 @@ export default function IntakePanel({
           </div>
         </div>
 
-        {/* Submit button */}
+        {/* Submit */}
         <button
           className="ip-submit"
           onClick={onSubmit}
           disabled={!canSubmit}
           onMouseEnter={() => setSubmitHover(true)}
           onMouseLeave={() => setSubmitHover(false)}
-          style={{
-            width: "100%",
-            padding: 14,
-            borderRadius: 8,
-            border: "none",
-            background: canSubmit
-              ? submitHover
-                ? "#05a3c0"
-                : AC
-              : "#2a2a3a",
-            color: canSubmit ? "#000" : "#555",
-            fontSize: 15,
-            fontWeight: 700,
-            cursor: canSubmit ? "pointer" : "not-allowed",
-            transition: "all 0.2s",
-            fontFamily: "system-ui, sans-serif",
-          }}
+          style={{ width: "100%", padding: 14, borderRadius: 8, border: "none", background: canSubmit ? (submitHover ? C.ac + "dd" : C.ac) : C.bd, color: canSubmit ? "#000" : C.t3, fontSize: 15, fontWeight: 700, cursor: canSubmit ? "pointer" : "not-allowed", transition: "all 0.2s", fontFamily: "system-ui, sans-serif" }}
         >
           开始扫描 →
         </button>
       </div>
 
-      {/* Footer */}
-      <div
-        style={{
-          marginTop: 24,
-          fontSize: 13,
-          color: T2,
-          textAlign: "center",
-        }}
-      >
+      <div style={{ marginTop: 24, fontSize: 13, color: C.t2, textAlign: "center" }}>
         Powered by Rebase · 您的数据安全且不会被存储
       </div>
     </div>

@@ -2,13 +2,39 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
+import type { ColorSet } from "../theme/colors";
 import { T, t } from "../i18n";
+
+// ── Field component lives OUTSIDE Onboarding so React never remounts it on parent re-render ──
+interface FieldProps {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  type?: string;
+  C: ColorSet;
+}
+
+function Field({ label, value, onChange, placeholder, type = "text", C }: FieldProps) {
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 6 }}>{label}</div>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{ width: "100%", padding: "10px 12px", background: C.inputBg, border: `1px solid ${C.inputBd}`, borderRadius: 6, color: C.tx, fontSize: 14, outline: "none", boxSizing: "border-box" }}
+      />
+    </div>
+  );
+}
 
 export default function Onboarding() {
   const { colors: C, lang, theme, setTheme, setLang } = useApp();
   const [form, setForm] = useState({ name: "", phone: "", company: "", industry: "", competitors: "", email: "" });
-  const [goalPreset, setGoalPreset] = useState("");   // which quick-select button is active
-  const [goalCustom, setGoalCustom] = useState("");   // free-form textarea content
+  const [goalPreset, setGoalPreset] = useState("");  // which quick-select button is active
+  const [goalCustom, setGoalCustom] = useState("");  // free-form textarea content
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const navigate = useNavigate();
@@ -40,21 +66,6 @@ export default function Onboarding() {
     }
   }
 
-  function Field({ fieldKey, type = "text" }: { fieldKey: keyof typeof s.fields; type?: string }) {
-    return (
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 6 }}>{t(s.fields[fieldKey], lang)}</div>
-        <input
-          type={type}
-          value={form[fieldKey as keyof typeof form]}
-          onChange={(e) => set(fieldKey)(e.target.value)}
-          placeholder={t(s.placeholders[fieldKey], lang)}
-          style={{ width: "100%", padding: "10px 12px", background: C.inputBg, border: `1px solid ${C.inputBd}`, borderRadius: 6, color: C.tx, fontSize: 14, outline: "none", boxSizing: "border-box" }}
-        />
-      </div>
-    );
-  }
-
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "system-ui, sans-serif" }}>
 
@@ -83,13 +94,14 @@ export default function Onboarding() {
 
           <div style={{ background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 12, padding: 36 }}>
             <form onSubmit={handleSubmit}>
-              <Field fieldKey="name" />
-              <Field fieldKey="phone" type="tel" />
-              <Field fieldKey="email" type="email" />
-              <Field fieldKey="company" />
-              <Field fieldKey="industry" />
-              <Field fieldKey="competitors" />
+              <Field label={t(s.fields.name, lang)}        value={form.name}        onChange={set("name")}        placeholder={t(s.placeholders.name, lang)}        C={C} />
+              <Field label={t(s.fields.phone, lang)}       value={form.phone}       onChange={set("phone")}       placeholder={t(s.placeholders.phone, lang)}       type="tel"   C={C} />
+              <Field label={t(s.fields.email, lang)}       value={form.email}       onChange={set("email")}       placeholder={t(s.placeholders.email, lang)}       type="email" C={C} />
+              <Field label={t(s.fields.company, lang)}     value={form.company}     onChange={set("company")}     placeholder={t(s.placeholders.company, lang)}     C={C} />
+              <Field label={t(s.fields.industry, lang)}    value={form.industry}    onChange={set("industry")}    placeholder={t(s.placeholders.industry, lang)}    C={C} />
+              <Field label={t(s.fields.competitors, lang)} value={form.competitors} onChange={set("competitors")} placeholder={t(s.placeholders.competitors, lang)} C={C} />
 
+              {/* Goal — quick-select + free-form */}
               <div style={{ marginBottom: 20 }}>
                 <div style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 6 }}>{t(s.fields.goal, lang)}</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
@@ -100,10 +112,7 @@ export default function Onboarding() {
                     <button
                       key={opt}
                       type="button"
-                      onClick={() => {
-                        setGoalPreset((prev) => (prev === opt ? "" : opt));
-                        setGoalCustom("");
-                      }}
+                      onClick={() => { setGoalPreset((prev) => (prev === opt ? "" : opt)); setGoalCustom(""); }}
                       style={{ padding: "6px 14px", borderRadius: 20, border: `1px solid ${goalPreset === opt ? C.ac : C.bd}`, background: goalPreset === opt ? C.ac + "22" : C.s2, color: goalPreset === opt ? C.ac : C.t2, fontSize: 13, cursor: "pointer" }}
                     >
                       {opt}

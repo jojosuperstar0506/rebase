@@ -15,11 +15,18 @@ export default function Home() {
         <div style={{ display: "inline-block", fontSize: 12, fontWeight: 700, letterSpacing: 3, color: C.ac, background: C.ac + "18", border: `1px solid ${C.ac}44`, borderRadius: 20, padding: "5px 16px", marginBottom: 28, textTransform: "uppercase" }}>
           {t(h.badge, lang)}
         </div>
+        <style>{`
+          .rebase-hero-grad {
+            background: linear-gradient(135deg, ${C.ac}, ${C.ac2});
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            color: transparent;
+          }
+        `}</style>
         <h1 style={{ fontSize: "clamp(36px, 6vw, 64px)", fontWeight: 800, lineHeight: 1.15, margin: "0 0 24px", letterSpacing: -1 }}>
           {t(h.heroTitle1, lang)}{" "}
-          <span style={{ background: `linear-gradient(135deg, ${C.ac}, ${C.ac2})`, WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent", display: "inline" }}>
-            {t(h.heroTitle2, lang)}
-          </span>
+          <span className="rebase-hero-grad">{t(h.heroTitle2, lang)}</span>
         </h1>
         <p style={{ fontSize: 18, color: C.t2, lineHeight: 1.7, maxWidth: 620, margin: "0 auto 40px" }}>
           {t(h.heroSubtitle, lang)}
