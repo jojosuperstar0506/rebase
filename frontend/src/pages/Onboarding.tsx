@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
@@ -40,6 +40,26 @@ export default function Onboarding() {
   const navigate = useNavigate();
   const s = T.onboarding;
   const nav = T.nav;
+
+  // Pre-fill form from calculator data saved in localStorage
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("rebase_prefill");
+      if (!raw) return;
+      const prefill = JSON.parse(raw) as Record<string, string>;
+      setForm((f) => ({
+        ...f,
+        name:        prefill.name        || f.name,
+        phone:       prefill.phone       || f.phone,
+        company:     prefill.company     || f.company,
+        industry:    prefill.industry    || f.industry,
+        competitors: prefill.competitors || f.competitors,
+        email:       prefill.email       || f.email,
+      }));
+      // Clear after reading so it doesn't re-fill on next visit
+      localStorage.removeItem("rebase_prefill");
+    } catch { /* ignore malformed data */ }
+  }, []);
 
   function set(field: string) { return (v: string) => setForm((f) => ({ ...f, [field]: v })); }
 

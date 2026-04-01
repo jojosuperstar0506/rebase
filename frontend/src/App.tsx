@@ -46,12 +46,19 @@ function Nav() {
   function checkAuth() {
     return !!localStorage.getItem("rebase_token") || !!localStorage.getItem("admin_authed");
   }
+  function checkIsAdmin() {
+    return !!localStorage.getItem("admin_authed");
+  }
   const [isLoggedIn, setIsLoggedIn] = useState(checkAuth);
+  const [isAdmin, setIsAdmin] = useState(checkIsAdmin);
   const nav = T.nav;
 
   // Re-check auth when admin logs in from the same tab
   useEffect(() => {
-    function onAuthChange() { setIsLoggedIn(checkAuth()); }
+    function onAuthChange() {
+      setIsLoggedIn(checkAuth());
+      setIsAdmin(checkIsAdmin());
+    }
     window.addEventListener("rebase_auth_change", onAuthChange);
     return () => window.removeEventListener("rebase_auth_change", onAuthChange);
   }, []);
@@ -62,6 +69,7 @@ function Nav() {
     localStorage.removeItem("rebase_token");
     localStorage.removeItem("admin_authed");
     setIsLoggedIn(false);
+    setIsAdmin(false);
     navigate("/");
   }
 
@@ -114,8 +122,8 @@ function Nav() {
           {lang === "en" ? "中文" : "EN"}
         </button>
 
-        {/* Admin */}
-        <NavLink to="/admin" label={t(nav.admin, lang)} />
+        {/* Admin — only visible to admin users */}
+        {isAdmin && <NavLink to="/admin" label={t(nav.admin, lang)} />}
 
         {/* Login / Logout */}
         {isLoggedIn ? (

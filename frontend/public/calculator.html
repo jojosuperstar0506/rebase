@@ -362,10 +362,79 @@ function TierBar({ score, theme }) {
   );
 }
 
+// ─── TRANSLATIONS ────────────────────────────────────────────────────────────
+const LANG = {
+  zh: {
+    themeLight: "浅色", themeDark: "深色",
+    badge: "2026 AI企业降本实战诊断",
+    title: "AI时代，你的企业人效达标了吗？",
+    subtitle: "5分钟深度诊断 — 看清每个部门的AI成熟度和可优化空间，精准测算人力资源释放潜力。",
+    startBtn: "开始5分钟AI诊断 →",
+    reportTitle: "这份诊断报告会告诉你：",
+    sources: "数据来源：McKinsey / Stanford/MIT / GitHub / WEF / 智联招聘/BOSS直聘",
+    statDescs: ["代码已由AI编写 (微软数据)", "AI编程助手带来的开发效率提升 (GitHub)", "各岗位已验证的AI效率提升幅度"],
+    landingChecklist: ["每个部门的AI成熟度等级 (L1-L5)", "AI工具使用现状与落地差距分析", "当前 vs AI辅助 vs 全AI三种状态对比", "基于城市薪资水平的精确资源释放额", "各部门的AI升级路径与具体建议", "可被AI优化的具体工作流清单"],
+    step1Title: "企业基本信息", step1Sub: "基于这些信息生成定制化AI诊断报告",
+    labelCompany: "公司名称（选填）", phCompany: "便于报告展示",
+    labelHC: "公司总人数 *", phHC: "例如：150",
+    labelRev: "年营收（万元）*", phRev: "例如：5000",
+    labelCity: "所在城市级别 *", salaryNote: "薪资数据将根据城市级别自动调整（来源：智联招聘/BOSS直聘）",
+    labelIndustry: "所属行业",
+    nextBtn: "下一步 →", backBtn: "←",
+    step2Title: "选择部门并填入人数", step2Sub: "勾选现有部门，我们将逐个进行AI成熟度评估",
+    deptPH: "该部门总人数", startAssessBtn: "开始AI成熟度评估 →",
+    step4NextBtn: "下一个部门 →", step4DoneBtn: "生成完整报告 →",
+    nextDeptPrefix: "下一个：",
+    ctaTitle: "让Rebase帮你把诊断变成落地方案",
+    ctaDesc: "每个部门的AI升级路径不同。我们提供1v1指导，帮你的团队真正用起来。",
+    ctaNamePH: "您的称呼", ctaContactPH: "微信号 / 手机号",
+    ctaBtn: "预约1v1 AI转型咨询", ctaSubmitting: "提交中...",
+    ctaFeatures: ["✓ 60分钟深度诊断", "✓ 定制落地方案", "✓ 工具选型清单", "✓ 人才转型路线图"],
+    ctaOk: "提交成功", ctaOkDesc: "AI转型顾问将在 24小时内 通过微信联系你。",
+    earlyTitle: "申请早期体验 Rebase 平台", earlyDesc: "您的诊断数据已保存。点击下方按钮，跳转至申请页面，信息将自动预填。",
+    earlyBtn: "申请早期体验 →",
+    resetBtn: "重新诊断",
+    footerNote: "AI Workforce Intelligence / McKinsey / Stanford/MIT / GitHub / WEF / 2026",
+  },
+  en: {
+    themeLight: "Light", themeDark: "Dark",
+    badge: "2026 AI Cost Reduction Diagnosis",
+    title: "Is Your Business Ready for the AI Era?",
+    subtitle: "5-min deep diagnosis — understand AI maturity across every department and measure your headcount optimization potential.",
+    startBtn: "Start 5-min AI Diagnosis →",
+    reportTitle: "This report will show you:",
+    sources: "Sources: McKinsey / Stanford/MIT / GitHub / WEF / Zhilian/BOSS Zhipin",
+    statDescs: ["of code is AI-generated (Microsoft)", "productivity gain from AI coding tools (GitHub)", "verified AI efficiency gains across job roles"],
+    landingChecklist: ["AI maturity score per department (L1–L5)", "Gap analysis: current vs. industry best practice", "Current vs. AI-assisted vs. Full-AI headcount comparison", "Precise savings estimate based on your city's salary data", "AI upgrade roadmap & recommendations per department", "Specific workflows that can be optimized with AI"],
+    step1Title: "Company Information", step1Sub: "Used to generate your customized AI diagnosis report",
+    labelCompany: "Company Name (optional)", phCompany: "For report display",
+    labelHC: "Total Headcount *", phHC: "e.g. 150",
+    labelRev: "Annual Revenue (¥10K) *", phRev: "e.g. 5000",
+    labelCity: "City Tier *", salaryNote: "Salary benchmarks auto-adjusted by city tier (source: Zhilian/BOSS Zhipin)",
+    labelIndustry: "Industry",
+    nextBtn: "Next →", backBtn: "←",
+    step2Title: "Select Departments & Enter Headcount", step2Sub: "Select your departments — we'll assess AI maturity for each one",
+    deptPH: "Dept. headcount", startAssessBtn: "Start AI Maturity Assessment →",
+    step4NextBtn: "Next Dept. →", step4DoneBtn: "Generate Full Report →",
+    nextDeptPrefix: "Next: ",
+    ctaTitle: "Let Rebase turn your diagnosis into an action plan",
+    ctaDesc: "Each department has a different AI upgrade path. We offer 1-on-1 guidance to help your team actually use AI.",
+    ctaNamePH: "Your name", ctaContactPH: "WeChat ID / Phone",
+    ctaBtn: "Book 1-on-1 AI Transformation Consult", ctaSubmitting: "Submitting...",
+    ctaFeatures: ["✓ 60-min deep diagnosis", "✓ Custom action plan", "✓ Tool selection guide", "✓ Talent transition roadmap"],
+    ctaOk: "Submitted Successfully", ctaOkDesc: "An AI transformation consultant will contact you within 24 hours.",
+    earlyTitle: "Request Early Access to Rebase Platform", earlyDesc: "Your diagnosis is complete. Click below to apply — your info will be pre-filled automatically.",
+    earlyBtn: "Request Early Access →",
+    resetBtn: "Restart Diagnosis",
+    footerNote: "AI Workforce Intelligence / McKinsey / Stanford/MIT / GitHub / WEF / 2026",
+  },
+};
+
 // ─── MAIN ───────────────────────────────────────────────────────────────────
 function App() {
   const [step, setStep] = useState(0);
   const [darkMode, setDarkMode] = useState(false);
+  const [lang, setLang] = useState("zh");
   const [cn, setCn] = useState(""); const [cs, setCs] = useState(""); const [rev, setRev] = useState(""); const [ind, setInd] = useState("");
   const [cityTier, setCityTier] = useState("tier1");
   const [sel, setSel] = useState([]); const [dhc, setDhc] = useState({});
@@ -432,6 +501,7 @@ function App() {
   }, [step]);
 
   const T = getTheme(darkMode);
+  const L = LANG[lang] || LANG.zh;
   const te = parseInt(cs) || 0; const rv = parseInt(rev) || 0;
   const ad = DEPARTMENTS.filter(d => sel.includes(d.id));
 
@@ -497,16 +567,24 @@ function App() {
     </div>
   );
 
-  // Theme toggle button
+  // Theme + Language toggle buttons (fixed top-right)
   const ThemeToggle = () => (
-    <button onClick={() => setDarkMode(!darkMode)} style={{
-      position: "fixed", top: 16, right: 16, zIndex: 100,
-      padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 500,
-      border: `1px solid ${T.border}`, background: T.cardBg, color: T.textSecondary,
-      cursor: "pointer", boxShadow: T.shadow, transition: "all 0.2s",
-    }}>
-      {darkMode ? "浅色" : "深色"}
-    </button>
+    <div style={{ position: "fixed", top: 16, right: 16, zIndex: 100, display: "flex", gap: 6 }}>
+      <button onClick={() => setLang(lang === "zh" ? "en" : "zh")} style={{
+        padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 500,
+        border: `1px solid ${T.border}`, background: T.cardBg, color: T.textSecondary,
+        cursor: "pointer", boxShadow: T.shadow, transition: "all 0.2s",
+      }}>
+        {lang === "zh" ? "EN" : "中文"}
+      </button>
+      <button onClick={() => setDarkMode(!darkMode)} style={{
+        padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 500,
+        border: `1px solid ${T.border}`, background: T.cardBg, color: T.textSecondary,
+        cursor: "pointer", boxShadow: T.shadow, transition: "all 0.2s",
+      }}>
+        {darkMode ? L.themeLight : L.themeDark}
+      </button>
+    </div>
   );
 
   // ═══════ STEP 0 — LANDING ═══════
@@ -515,15 +593,15 @@ function App() {
       <ThemeToggle />
       <div style={{ maxWidth: 720, margin: "0 auto", padding: "60px 20px" }}>
         <div style={{ textAlign: "center", marginBottom: 40 }}>
-          <div style={{ display: "inline-block", padding: "4px 12px", borderRadius: 4, fontSize: 12, fontWeight: 600, background: T.accentSoft, color: T.accent, marginBottom: 16, letterSpacing: 0.5 }}>2026 AI企业降本实战诊断</div>
-          <h1 style={{ fontSize: "clamp(24px, 4.5vw, 38px)", fontWeight: 700, lineHeight: 1.2, margin: "0 0 14px", color: T.text }}>AI时代，你的企业人效达标了吗？</h1>
-          <p style={{ fontSize: 16, color: T.textSecondary, maxWidth: 500, margin: "0 auto", lineHeight: 1.7 }}>5分钟深度诊断 — 看清每个部门的AI成熟度和可优化空间，<br/>精准测算人力资源释放潜力。</p>
+          <div style={{ display: "inline-block", padding: "4px 12px", borderRadius: 4, fontSize: 12, fontWeight: 600, background: T.accentSoft, color: T.accent, marginBottom: 16, letterSpacing: 0.5 }}>{L.badge}</div>
+          <h1 style={{ fontSize: "clamp(24px, 4.5vw, 38px)", fontWeight: 700, lineHeight: 1.2, margin: "0 0 14px", color: T.text }}>{L.title}</h1>
+          <p style={{ fontSize: 16, color: T.textSecondary, maxWidth: 500, margin: "0 auto", lineHeight: 1.7 }}>{L.subtitle}</p>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 32 }}>
           {[
-            { n: "30%", d: "代码已由AI编写 (微软数据)", c: T.accent },
-            { n: "55%", d: "AI编程助手带来的开发效率提升 (GitHub)", c: T.positive },
-            { n: "14-40%", d: "各岗位已验证的AI效率提升幅度", c: T.warning },
+            { n: "30%", d: L.statDescs[0], c: T.accent },
+            { n: "55%", d: L.statDescs[1], c: T.positive },
+            { n: "14-40%", d: L.statDescs[2], c: T.warning },
           ].map((s, i) => (
             <div key={i} style={{ ...cd, padding: "16px 14px", textAlign: "center" }}>
               <div style={{ fontSize: 22, fontWeight: 700, color: s.c, marginBottom: 4 }}>{s.n}</div>
@@ -532,11 +610,11 @@ function App() {
           ))}
         </div>
         <div style={{ ...cd, padding: 20, marginBottom: 32 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: T.textSecondary, marginBottom: 12 }}>这份诊断报告会告诉你：</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: T.textSecondary, marginBottom: 12 }}>{L.reportTitle}</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            {["每个部门的AI成熟度等级 (L1-L5)", "AI工具使用现状与落地差距分析", "当前 vs AI辅助 vs 全AI三种状态对比", "基于城市薪资水平的精确资源释放额", "各部门的AI升级路径与具体建议", "可被AI优化的具体工作流清单"].map((t, i) => (
+            {L.landingChecklist.map((item, i) => (
               <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 6, fontSize: 13, color: T.textSecondary, lineHeight: 1.5 }}>
-                <span style={{ color: T.accent, marginTop: 2, fontSize: 10 }}>✓</span>{t}
+                <span style={{ color: T.accent, marginTop: 2, fontSize: 10 }}>✓</span>{item}
               </div>
             ))}
           </div>
@@ -547,9 +625,9 @@ function App() {
             border: "none", background: T.accent, color: "#FFFFFF", cursor: "pointer",
             boxShadow: T.shadowLg, transition: "all 0.15s",
           }}>
-            开始5分钟AI诊断 →
+            {L.startBtn}
           </button>
-          <p style={{ fontSize: 11, color: T.textMuted, marginTop: 14 }}>数据来源：McKinsey / Stanford/MIT / GitHub / WEF / 智联招聘/BOSS直聘</p>
+          <p style={{ fontSize: 11, color: T.textMuted, marginTop: 14 }}>{L.sources}</p>
         </div>
       </div>
     </div>
@@ -560,15 +638,15 @@ function App() {
     const ok = cs && rev;
     return (<div style={ct}><ThemeToggle /><div style={{ maxWidth: 540, margin: "0 auto", padding: "48px 20px" }}>
       <SI c={1} t={5} />
-      <h2 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 4px", color: T.text }}>企业基本信息</h2>
-      <p style={{ color: T.textMuted, marginBottom: 24, fontSize: 13 }}>基于这些信息生成定制化AI诊断报告</p>
+      <h2 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 4px", color: T.text }}>{L.step1Title}</h2>
+      <p style={{ color: T.textMuted, marginBottom: 24, fontSize: 13 }}>{L.step1Sub}</p>
       <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-        <div><label style={{ fontSize: 12, color: T.textMuted, display: "block", marginBottom: 4, fontWeight: 500 }}>公司名称（选填）</label><input placeholder="便于报告展示" value={cn} onChange={e => setCn(e.target.value)} style={inp} /></div>
+        <div><label style={{ fontSize: 12, color: T.textMuted, display: "block", marginBottom: 4, fontWeight: 500 }}>{L.labelCompany}</label><input placeholder={L.phCompany} value={cn} onChange={e => setCn(e.target.value)} style={inp} /></div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <div><label style={{ fontSize: 12, color: T.textMuted, display: "block", marginBottom: 4, fontWeight: 500 }}>公司总人数 *</label><input type="number" placeholder="例如：150" value={cs} onChange={e => setCs(e.target.value)} style={inp} /></div>
-          <div><label style={{ fontSize: 12, color: T.textMuted, display: "block", marginBottom: 4, fontWeight: 500 }}>年营收（万元）*</label><input type="number" placeholder="例如：5000" value={rev} onChange={e => setRev(e.target.value)} style={inp} /></div>
+          <div><label style={{ fontSize: 12, color: T.textMuted, display: "block", marginBottom: 4, fontWeight: 500 }}>{L.labelHC}</label><input type="number" placeholder={L.phHC} value={cs} onChange={e => setCs(e.target.value)} style={inp} /></div>
+          <div><label style={{ fontSize: 12, color: T.textMuted, display: "block", marginBottom: 4, fontWeight: 500 }}>{L.labelRev}</label><input type="number" placeholder={L.phRev} value={rev} onChange={e => setRev(e.target.value)} style={inp} /></div>
         </div>
-        <div><label style={{ fontSize: 12, color: T.textMuted, display: "block", marginBottom: 4, fontWeight: 500 }}>所在城市级别 *</label>
+        <div><label style={{ fontSize: 12, color: T.textMuted, display: "block", marginBottom: 4, fontWeight: 500 }}>{L.labelCity}</label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>{CITY_TIERS.map(t => (
             <button key={t.id} onClick={() => setCityTier(t.id)} style={{
               padding: "8px 14px", borderRadius: 6, fontSize: 13, cursor: "pointer", textAlign: "left",
@@ -579,9 +657,9 @@ function App() {
               <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>{t.desc}</div>
             </button>
           ))}</div>
-          <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>薪资数据将根据城市级别自动调整（来源：智联招聘/BOSS直聘）</div>
+          <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>{L.salaryNote}</div>
         </div>
-        <div><label style={{ fontSize: 12, color: T.textMuted, display: "block", marginBottom: 4, fontWeight: 500 }}>所属行业</label>
+        <div><label style={{ fontSize: 12, color: T.textMuted, display: "block", marginBottom: 4, fontWeight: 500 }}>{L.labelIndustry}</label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{["电商/零售", "SaaS/科技", "教育/培训", "金融/保险", "制造业", "医疗健康", "专业服务", "其他"].map(x => (
             <button key={x} onClick={() => setInd(x)} style={{
               padding: "6px 12px", borderRadius: 6, fontSize: 13, cursor: "pointer",
@@ -592,8 +670,8 @@ function App() {
         </div>
       </div>
       <div style={{ display: "flex", gap: 10, marginTop: 28 }}>
-        <button onClick={() => setStep(0)} style={bB}>←</button>
-        <button onClick={() => ok && setStep(2)} disabled={!ok} style={bP(ok)}>下一步 →</button>
+        <button onClick={() => setStep(0)} style={bB}>{L.backBtn}</button>
+        <button onClick={() => ok && setStep(2)} disabled={!ok} style={bP(ok)}>{L.nextBtn}</button>
       </div>
     </div></div>);
   }
@@ -603,16 +681,16 @@ function App() {
     const ok = sel.length > 0 && sel.every(id => dhc[id] > 0);
     return (<div style={ct}><ThemeToggle /><div style={{ maxWidth: 640, margin: "0 auto", padding: "48px 20px" }}>
       <SI c={2} t={5} />
-      <h2 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 4px", color: T.text }}>选择部门并填入人数</h2>
-      <p style={{ color: T.textMuted, marginBottom: 20, fontSize: 13 }}>勾选现有部门，我们将逐个进行AI成熟度评估</p>
+      <h2 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 4px", color: T.text }}>{L.step2Title}</h2>
+      <p style={{ color: T.textMuted, marginBottom: 20, fontSize: 13 }}>{L.step2Sub}</p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10 }}>
         {DEPARTMENTS.map(d => { const s = sel.includes(d.id); return (
           <div key={d.id} style={{ ...cd, padding: 14, cursor: "pointer", borderColor: s ? T.accent : T.border, background: s ? T.accentSoft : T.cardBg }}
             onClick={() => setSel(p => p.includes(d.id) ? p.filter(x => x !== d.id) : [...p, d.id])}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{d.name}</div>
-                <div style={{ fontSize: 11, color: T.textMuted }}>{d.nameEn}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{lang === "en" ? d.nameEn : d.name}</div>
+                <div style={{ fontSize: 11, color: T.textMuted }}>{lang === "en" ? d.name : d.nameEn}</div>
               </div>
               <div style={{
                 width: 20, height: 20, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center",
@@ -620,13 +698,13 @@ function App() {
               }}>{s && <span style={{ color: "#fff", fontSize: 12, fontWeight: 700 }}>✓</span>}</div>
             </div>
             {s && <div onClick={e => e.stopPropagation()} style={{ marginTop: 10 }}>
-              <input type="number" placeholder="该部门总人数" value={dhc[d.id] || ""} onChange={e => setDhc(p => ({ ...p, [d.id]: parseInt(e.target.value) || 0 }))} style={{ ...inp, fontSize: 13, padding: "8px 10px" }} />
+              <input type="number" placeholder={L.deptPH} value={dhc[d.id] || ""} onChange={e => setDhc(p => ({ ...p, [d.id]: parseInt(e.target.value) || 0 }))} style={{ ...inp, fontSize: 13, padding: "8px 10px" }} />
             </div>}
           </div>); })}
       </div>
       <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
-        <button onClick={() => setStep(1)} style={bB}>←</button>
-        <button onClick={() => { if (ok) { setCcd(0); setStep(3); } }} disabled={!ok} style={bP(ok)}>开始AI成熟度评估 →</button>
+        <button onClick={() => setStep(1)} style={bB}>{L.backBtn}</button>
+        <button onClick={() => { if (ok) { setCcd(0); setStep(3); } }} disabled={!ok} style={bP(ok)}>{L.startAssessBtn}</button>
       </div>
     </div></div>);
   }
@@ -678,9 +756,9 @@ function App() {
       </div>
 
       <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
-        <button onClick={() => ccd > 0 ? setCcd(p => p - 1) : setStep(2)} style={bB}>←</button>
+        <button onClick={() => ccd > 0 ? setCcd(p => p - 1) : setStep(2)} style={bB}>{L.backBtn}</button>
         <button onClick={() => { if (!allA) return; if (isL) { initRC(); setCrd(0); setStep(4); } else setCcd(p => p + 1); }} disabled={!allA} style={bP(allA)}>
-          {isL ? "进入岗位配置 →" : `下一个：${ad[ccd + 1]?.name} →`}
+          {isL ? L.step3DoneBtn : `${L.nextDeptPrefix}${lang === "en" ? (ad[ccd + 1]?.nameEn || ad[ccd + 1]?.name) : ad[ccd + 1]?.name} →`}
         </button>
       </div>
     </div></div>);
@@ -738,8 +816,8 @@ function App() {
         })}
       </div>
       <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
-        <button onClick={() => crd > 0 ? setCrd(p => p - 1) : setStep(3)} style={bB}>←</button>
-        <button onClick={() => isL ? setStep(5) : setCrd(p => p + 1)} style={bP(true)}>{isL ? "生成完整报告 →" : "下一个部门 →"}</button>
+        <button onClick={() => crd > 0 ? setCrd(p => p - 1) : setStep(3)} style={bB}>{L.backBtn}</button>
+        <button onClick={() => isL ? setStep(5) : setCrd(p => p + 1)} style={bP(true)}>{isL ? L.step4DoneBtn : L.step4NextBtn}</button>
       </div>
     </div></div>);
   }
@@ -1052,15 +1130,34 @@ function App() {
           )}
         </div>
 
-        {/* CTA */}
-        <div id="rebase-cta-form" style={{ ...cd, marginTop: 12, textAlign: "center", borderTop: `3px solid ${T.accent}` }}>
-          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4, color: T.text }}>让Rebase帮你把诊断变成落地方案</div>
-          <p style={{ fontSize: 12, color: T.textSecondary, marginBottom: 14, lineHeight: 1.6 }}>每个部门的AI升级路径不同。我们提供1v1指导，帮你的团队真正用起来。</p>
+        {/* Early Access CTA */}
+        <div style={{ ...cd, marginTop: 12, textAlign: "center", borderTop: `3px solid ${T.accent}`, background: `${T.accent}08` }}>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4, color: T.text }}>{L.earlyTitle}</div>
+          <p style={{ fontSize: 12, color: T.textSecondary, marginBottom: 14, lineHeight: 1.6 }}>{L.earlyDesc}</p>
+          <button onClick={() => {
+            try {
+              localStorage.setItem("rebase_prefill", JSON.stringify({
+                name: leadName || "", phone: leadContact || "",
+                company: cn || "", industry: ind || "",
+              }));
+            } catch(e) {}
+            window.location.href = "/onboarding";
+          }} style={{
+            display: "inline-block", padding: "12px 32px", fontSize: 15, fontWeight: 700, borderRadius: 8,
+            border: "none", background: T.accent, color: "#FFFFFF", cursor: "pointer",
+            boxShadow: T.shadowLg, transition: "all 0.15s",
+          }}>{L.earlyBtn}</button>
+        </div>
+
+        {/* Consult CTA */}
+        <div id="rebase-cta-form" style={{ ...cd, marginTop: 12, textAlign: "center", borderTop: `3px solid ${T.positive}` }}>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4, color: T.text }}>{L.ctaTitle}</div>
+          <p style={{ fontSize: 12, color: T.textSecondary, marginBottom: 14, lineHeight: 1.6 }}>{L.ctaDesc}</p>
           {!leadSubmitted ? (
             <div style={{ maxWidth: 380, margin: "0 auto" }}>
               <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                <input placeholder="您的称呼" value={leadName} onChange={e => setLeadName(e.target.value)} style={{ ...inp, flex: 1, fontSize: 12, padding: "8px 10px" }} />
-                <input placeholder="微信号 / 手机号" value={leadContact} onChange={e => setLeadContact(e.target.value)} style={{ ...inp, flex: 1.3, fontSize: 12, padding: "8px 10px" }} />
+                <input placeholder={L.ctaNamePH} value={leadName} onChange={e => setLeadName(e.target.value)} style={{ ...inp, flex: 1, fontSize: 12, padding: "8px 10px" }} />
+                <input placeholder={L.ctaContactPH} value={leadContact} onChange={e => setLeadContact(e.target.value)} style={{ ...inp, flex: 1.3, fontSize: 12, padding: "8px 10px" }} />
               </div>
               <button onClick={async () => {
                 if (!leadName || !leadContact || leadSubmitting) return;
@@ -1083,18 +1180,18 @@ function App() {
                 setLeadSubmitted(true);
               }} disabled={!leadName || !leadContact || leadSubmitting} style={{
                 width: "100%", padding: "12px 40px", fontSize: 15, fontWeight: 600, borderRadius: 8,
-                border: "none", background: leadName && leadContact && !leadSubmitting ? T.accent : T.border,
+                border: "none", background: leadName && leadContact && !leadSubmitting ? T.positive : T.border,
                 color: leadName && leadContact && !leadSubmitting ? "#FFFFFF" : T.textMuted,
                 cursor: leadName && leadContact && !leadSubmitting ? "pointer" : "not-allowed",
-              }}>{leadSubmitting ? "提交中..." : "预约1v1 AI转型咨询"}</button>
+              }}>{leadSubmitting ? L.ctaSubmitting : L.ctaBtn}</button>
               <div style={{ fontSize: 10, color: T.textMuted, marginTop: 8, display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
-                <span>✓ 60分钟深度诊断</span><span>✓ 定制落地方案</span><span>✓ 工具选型清单</span><span>✓ 人才转型路线图</span>
+                {L.ctaFeatures.map((f, i) => <span key={i}>{f}</span>)}
               </div>
             </div>
           ) : (
             <div style={{ padding: "16px 0" }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: T.positive, marginBottom: 4 }}>提交成功</div>
-              <div style={{ fontSize: 12, color: T.textSecondary, lineHeight: 1.6 }}>AI转型顾问将在 <span style={{ color: T.accent, fontWeight: 600 }}>24小时内</span> 通过微信联系你。</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: T.positive, marginBottom: 4 }}>{L.ctaOk}</div>
+              <div style={{ fontSize: 12, color: T.textSecondary, lineHeight: 1.6 }}>{L.ctaOkDesc}</div>
             </div>
           )}
         </div>
@@ -1104,10 +1201,10 @@ function App() {
             setStep(0); setSel([]); setDhc({}); setCs(""); setRev(""); setCap({});
             setRe({}); setExp(null); setCn(""); setInd(""); setCityTier("tier1");
             setLeadSubmitted(false); setLeadSubmitting(false); setLeadName(""); setLeadContact(""); setShowSources(false);
-          }} style={{ ...bB, fontSize: 11 }}>重新诊断</button>
+          }} style={{ ...bB, fontSize: 11 }}>{L.resetBtn}</button>
         </div>
         <div style={{ textAlign: "center", marginTop: 20, paddingBottom: 12, fontSize: 10, color: T.textMuted }}>
-          AI Workforce Intelligence / McKinsey / Stanford/MIT / GitHub / WEF / 2026
+          {L.footerNote}
         </div>
       </div>
     </div>
