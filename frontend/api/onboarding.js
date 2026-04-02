@@ -15,6 +15,9 @@ export default async function handler(req, res) {
 
     const now = new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" });
 
+    // DEBUG: confirm env vars are present at runtime
+    console.log("[onboarding] env check — RESEND_KEY:", !!process.env.RESEND_API_KEY, "| NOTIFY_EMAIL:", process.env.NOTIFICATION_EMAIL || "NOT SET");
+
     const results = [];
 
     // ── 1. Forward to ECS backend for persistent storage (admin panel reads from there) ──
@@ -64,7 +67,13 @@ export default async function handler(req, res) {
             html,
           }),
         });
-        results.push({ channel: "email", ok: emailRes.ok });
+        const resendBody = await emailRes.text();
+        if (emailRes.ok) {
+          results.push({ channel: "email", ok: true });
+        } else {
+          console.error("[onboarding] Resend error:", emailRes.status, resendBody);
+          results.push({ channel: "email", ok: false, status: emailRes.status, error: resendBody });
+        }
       } catch (e) {
         console.warn("Resend failed:", e.message);
         results.push({ channel: "email", ok: false });
