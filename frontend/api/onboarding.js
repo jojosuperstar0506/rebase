@@ -108,7 +108,14 @@ export default async function handler(req, res) {
     }
 
     console.log("Onboarding submission results:", JSON.stringify(results));
-    return res.status(200).json({ ok: true });
+    return res.status(200).json({
+      ok: true,
+      results,
+      _debug: {
+        resendKeyPresent: !!process.env.RESEND_API_KEY,
+        notifyEmailPresent: !!process.env.NOTIFICATION_EMAIL,
+      },
+    });
   } catch (err) {
     console.error("Onboarding handler error:", err);
     return res.status(500).json({ error: "Internal server error" });
