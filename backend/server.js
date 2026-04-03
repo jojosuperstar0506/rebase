@@ -247,6 +247,51 @@ async function notifyNewApplicant(applicant) {
   });
 }
 
+// Save survey — stores diagnosis result from the calculator
+// Called automatically when user completes the 5-step calculator
+app.post("/api/save-survey", async (req, res) => {
+  try {
+    const { sessionId, company, industry, employees, revenue, cityTier, tier, tierLevel, score, savings, departments, deptResults, capAnswers, deptHeadcounts, roleHeadcounts } = req.body;
+    const surveysDir = path.join(__dirname, "config/surveys");
+    fs.mkdirSync(surveysDir, { recursive: true });
+    const filename = `${Date.now()}-${(sessionId || "anon").replace(/[^a-z0-9]/gi, "_")}.json`;
+    const survey = {
+      sessionId, company, industry, employees, revenue, cityTier, tier, tierLevel,
+      score, savings, departments, deptResults, capAnswers, deptHeadcounts, roleHeadcounts,
+      submittedAt: new Date().toISOString(),
+    };
+    fs.writeFileSync(path.join(surveysDir, filename), JSON.stringify(survey, null, 2));
+    console.log(`[Survey] Saved diagnosis for ${company || "anonymous"} — tier L${tierLevel}, savings ¥${savings}万`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[Survey] Save error:", err.message);
+    res.status(500).json({ error: "Failed to save survey" });
+  }
+});
+
+// Submit lead — stores calculator lead (name + contact) linked to their diagnosis session
+// Called when user fills in their contact info on the calculator results page
+app.post("/api/submit-lead", async (req, res) => {
+  try {
+    const { sessionId, name, contact, company, employees, tier, tierLevel, score, savings, departments, cityTier } = req.body;
+    const leadsDir = path.join(__dirname, "config/leads");
+    fs.mkdirSync(leadsDir, { recursive: true });
+    const filename = `${Date.now()}-${(name || "lead").replace(/[^a-z0-9]/gi, "_")}.json`;
+    const lead = {
+      sessionId, name, contact, company, employees, tier, tierLevel,
+      score, savings, departments, cityTier,
+      submittedAt: new Date().toISOString(),
+      status: "new",
+    };
+    fs.writeFileSync(path.join(leadsDir, filename), JSON.stringify(lead, null, 2));
+    console.log(`[Lead] New lead: ${name} / ${company} — ¥${savings}万 potential`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[Lead] Save error:", err.message);
+    res.status(500).json({ error: "Failed to save lead" });
+  }
+});
+
 // Manual trigger for intelligence report (for testing)
 app.post("/api/competitor-report/run", async (req, res) => {
   try {
@@ -478,7 +523,7 @@ app.post("/api/admin/approve", (req, res) => {
   fs.writeFileSync(path.join(dir, matchFile), JSON.stringify(applicant, null, 2));
 
   console.log(`[Admin] Approved ${applicant.name} → invite code: ${inviteCode}`);
-  res.json({ success: true, inviteCode, user: applicant.name, company: applicant.company });
+  res.json({ success: true, inviteCode, user: applicant.name, company: applicant.company, email: applicant.email || "" });
 });
 
 // ── Start server ────────────────────────────────────────────────────────────
