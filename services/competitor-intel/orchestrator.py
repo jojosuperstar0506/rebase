@@ -336,10 +336,26 @@ class CompetitorIntelOrchestrator:
             # Save files first
             self.save_json(output)
 
+            # Also export enriched JSON (with scores + narratives) for Vercel static fallback
+            try:
+                from .storage import init_db, export_dashboard_json
+                conn = init_db()
+                vercel_json_path = os.path.join(
+                    os.path.dirname(__file__), "..", "..",
+                    "frontend", "public", "data", "competitors",
+                    "competitors_latest.json",
+                )
+                export_dashboard_json(conn, vercel_json_path)
+                conn.close()
+                logger.info(f"Exported enriched Vercel JSON: {vercel_json_path}")
+            except Exception as e:
+                logger.warning(f"Failed to export enriched JSON: {e}")
+
             date_str = datetime.now().strftime("%Y-%m-%d")
             files_to_add = [
                 f"{DATA_DIR}/competitors_{date_str}.json",
                 f"{DATA_DIR}/competitors_latest.json",
+                "frontend/public/data/competitors/competitors_latest.json",
             ]
 
             # Git operations

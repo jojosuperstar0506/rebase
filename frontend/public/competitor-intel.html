@@ -1875,9 +1875,10 @@
         let dataSource = null; // 'api' | 'static' | null
 
         // Determine API base URL: same origin if served by api_server, else localhost:8080
-        const API_BASE = window.location.port === '8080'
-            ? ''
-            : 'http://localhost:8080';
+        const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const API_BASE = isLocalDev
+            ? (window.location.port === '8080' ? '' : 'http://localhost:8080')
+            : '';
 
         // Static JSON fallback path (served by Vercel or any static host)
         const STATIC_JSON_PATH = '/data/competitors/competitors_latest.json';
