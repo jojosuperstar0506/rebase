@@ -1,0 +1,1115 @@
+import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { useApp } from "../context/AppContext";
+
+// ─── DATA ───────────────────────────────────────────────────────────────────
+const SALARY_TABLE: Record<string, Record<string, number>> = {
+  content_editor:   { tier1: 9000,  newTier1: 7000,  tier2: 5500 },
+  video_editor:     { tier1: 12000, newTier1: 9000,  tier2: 7000 },
+  graphic_designer: { tier1: 9000,  newTier1: 7000,  tier2: 5500 },
+  data_ops:         { tier1: 14000, newTier1: 10000, tier2: 8000 },
+  cs_rep:           { tier1: 7000,  newTier1: 5500,  tier2: 4500 },
+  cs_qa:            { tier1: 7500,  newTier1: 6000,  tier2: 5000 },
+  sdr:              { tier1: 10000, newTier1: 7500,  tier2: 6000 },
+  sales_ae:         { tier1: 18000, newTier1: 13000, tier2: 10000 },
+  bookkeeper:       { tier1: 7000,  newTier1: 5500,  tier2: 4500 },
+  accountant:       { tier1: 10000, newTier1: 8000,  tier2: 6500 },
+  recruiter:        { tier1: 10000, newTier1: 7500,  tier2: 6000 },
+  payroll:          { tier1: 9000,  newTier1: 7000,  tier2: 5500 },
+  admin_asst:       { tier1: 7000,  newTier1: 5500,  tier2: 4500 },
+  procurement:      { tier1: 8500,  newTier1: 6500,  tier2: 5500 },
+  legal_asst:       { tier1: 12000, newTier1: 9000,  tier2: 7000 },
+  dev_junior:       { tier1: 22000, newTier1: 16000, tier2: 12000 },
+  qa_test:          { tier1: 15000, newTier1: 11000, tier2: 9000 },
+};
+
+const PRODUCTIVITY_GAINS: Record<string, { withAI: number; fullAI: number; source: string }> = {
+  media:            { withAI: 40, fullAI: 65, source: "MIT/Stanford" },
+  customer_service: { withAI: 14, fullAI: 25, source: "Stanford/MIT" },
+  sales:            { withAI: 20, fullAI: 35, source: "HBR/Salesforce" },
+  finance:          { withAI: 25, fullAI: 45, source: "Deloitte" },
+  hr:               { withAI: 18, fullAI: 30, source: "LinkedIn/SHRM" },
+  admin:            { withAI: 20, fullAI: 35, source: "综合研究" },
+  legal:            { withAI: 30, fullAI: 50, source: "LegalTech" },
+  it:               { withAI: 55, fullAI: 80, source: "Microsoft/GitHub" },
+};
+
+const CITY_TIERS = [
+  { id: "tier1",    label: "一线城市",   desc: "北京 / 上海 / 广州 / 深圳" },
+  { id: "newTier1", label: "新一线城市", desc: "成都 / 杭州 / 武汉 / 南京 / 苏州等" },
+  { id: "tier2",    label: "二线城市",   desc: "昆明 / 福州 / 中山 / 珠海等" },
+];
+
+const getSalary = (roleKey: string, cityTier: string) =>
+  SALARY_TABLE[roleKey]?.[cityTier] || SALARY_TABLE[roleKey]?.tier1 || 8000;
+
+// ─── 5-TIER MATURITY MODEL ─────────────────────────────────────────────────
+const TIER_DEFS = [
+  { level: 1, name: "没有起步", desc: "尚未部署任何AI工具",           range: [0, 15],   color: "#9CA3AF", bg: "#F3F4F6", bgDark: "#374151" },
+  { level: 2, name: "买了没用", desc: "工具已采购但使用率低",         range: [16, 35],  color: "#D97706", bg: "#FEF3C7", bgDark: "#78350F" },
+  { level: 3, name: "局部试点", desc: "部分团队在特定任务使用AI",     range: [36, 55],  color: "#2563EB", bg: "#DBEAFE", bgDark: "#1E3A5F" },
+  { level: 4, name: "流程嵌入", desc: "AI已融入日常工作流程",         range: [56, 80],  color: "#059669", bg: "#D1FAE5", bgDark: "#064E3B" },
+  { level: 5, name: "数据驱动", desc: "AI决策有数据闭环持续优化",     range: [81, 100], color: "#7C3AED", bg: "#EDE9FE", bgDark: "#4C1D95" },
+];
+
+const getTier = (score: number) => {
+  if (score <= 15) return TIER_DEFS[0];
+  if (score <= 35) return TIER_DEFS[1];
+  if (score <= 55) return TIER_DEFS[2];
+  if (score <= 80) return TIER_DEFS[3];
+  return TIER_DEFS[4];
+};
+
+const NEXT_STEPS: Record<number, { action: string; detail: string }> = {
+  1: { action: "先选一个部门试点", detail: "不要全面铺开，找一个痛点最明显的部门，先跑通一个AI工具" },
+  2: { action: "解锁'买了没用'问题", detail: "工具买了不等于用了。需要专业指导找到正确切入点，才能让团队真正用起来" },
+  3: { action: "从试点到标准化", detail: "将成功的AI用法写成SOP，在部门内推广为默认流程" },
+  4: { action: "建立数据反馈闭环", detail: "用AI产出的数据优化AI输入，形成持续改进循环" },
+  5: { action: "持续优化", detail: "对标行业最佳实践，探索AI+业务创新的新场景" },
+};
+
+const TIER_TARGETS: Record<number, string> = {
+  1: "选定试点部门，完成首个AI工具部署",
+  2: "关键部门开始规模化使用AI，形成可复制经验",
+  3: "成功做法标准化，推广为部门默认流程",
+  4: "AI嵌入核心业务流程，用数据衡量ROI",
+  5: "AI驱动持续优化，探索业务创新场景",
+};
+
+const USAGE_OPTIONS = [
+  { label: "完全没有", short: "无",   score: 0   },
+  { label: "买了没用", short: "闲置", score: 0.5 },
+  { label: "少数人在用", short: "少数", score: 1 },
+  { label: "多数人日常使用", short: "多数", score: 2 },
+  { label: "已嵌入流程", short: "嵌入", score: 3 },
+];
+
+// ─── DEPARTMENTS ────────────────────────────────────────────────────────────
+const DEPARTMENTS = [
+  {
+    id: "media", name: "内容/媒体部", nameEn: "Content & Media", aiLevel: 35,
+    capQuestions: [
+      { q: "你们用AI写文案/文章吗？", key: "copywriting" },
+      { q: "视频剪辑有用AI辅助工具吗？", key: "video_ai" },
+      { q: "设计素材会用AI生成或辅助吗？", key: "design_ai" },
+      { q: "数据分析/报表有AI工具吗？", key: "data_ai" },
+    ],
+    roles: [
+      { title: "内容编辑/撰稿", key: "content_editor", withAI: { ratio: 0.55, note: "1人+AI可提升2倍产出效率" }, fullAI: { ratio: 0.30, note: "保留内容总监+AI执行全部生产" } },
+      { title: "短视频编导/剪辑", key: "video_editor", withAI: { ratio: 0.60, note: "AI脚本+自动剪辑，人负责创意把控" }, fullAI: { ratio: 0.35, note: "保留创意总监+AI执行全部生产" } },
+      { title: "平面设计/美工", key: "graphic_designer", withAI: { ratio: 0.50, note: "AI出图+人微调，效率提升2倍" }, fullAI: { ratio: 0.25, note: "1名设计总监管理AI设计流水线" } },
+      { title: "数据运营/分析", key: "data_ops", withAI: { ratio: 0.60, note: "AI自动出报表，人做战略决策" }, fullAI: { ratio: 0.35, note: "AI全自动数据追踪+异常告警" } },
+    ],
+    insight: "AI工具可显著提升内容产出效率（MIT研究显示写作效率提升约40%），但创意方向和品牌把控仍需人类主导。",
+    futureVision: "精简团队 + AI工具链 = 以更少人力实现更高产出。",
+  },
+  {
+    id: "customer_service", name: "客服部门", nameEn: "Customer Service", aiLevel: 22,
+    capQuestions: [
+      { q: "有部署AI客服机器人吗？", key: "chatbot" },
+      { q: "工单分类/路由有用AI吗？", key: "ticket_routing" },
+      { q: "客服质检有AI辅助吗？", key: "qa_monitoring" },
+    ],
+    roles: [
+      { title: "一线客服专员", key: "cs_rep", withAI: { ratio: 0.50, note: "AI处理常规咨询，人处理复杂问题" }, fullAI: { ratio: 0.25, note: "保留VIP服务和危机处理团队" } },
+      { title: "工单/质检专员", key: "cs_qa", withAI: { ratio: 0.45, note: "AI自动分类+提升质检覆盖率" }, fullAI: { ratio: 0.20, note: "AI全自动质检+人工抽审" } },
+    ],
+    insight: "Stanford/MIT研究显示AI客服可提升约14%的问题解决效率。AI在处理标准化问题上表现突出，但复杂客诉仍需人类判断。",
+    futureVision: "精简客服团队 + AI = 提升响应速度和覆盖时长。",
+  },
+  {
+    id: "sales", name: "销售部门", nameEn: "Sales", aiLevel: 25,
+    capQuestions: [
+      { q: "线索获取/筛选有用AI吗？", key: "lead_gen" },
+      { q: "销售跟进有AI辅助（话术、邮件等）？", key: "follow_up" },
+      { q: "客户画像/CRM有AI分析功能吗？", key: "crm_ai" },
+    ],
+    roles: [
+      { title: "SDR/获客专员", key: "sdr", withAI: { ratio: 0.50, note: "AI辅助挖线索+初触达" }, fullAI: { ratio: 0.25, note: "AI全自动培育+人做关键转化" } },
+      { title: "销售代表/AE", key: "sales_ae", withAI: { ratio: 0.75, note: "AI做准备和分析，人做关系" }, fullAI: { ratio: 0.55, note: "标准产品可AI自动报价+跟进" } },
+    ],
+    insight: "HBR研究显示AI可提升约20%的销售转化率。AI最适合自动化销售准备工作，但关系建立和复杂谈判仍依赖人类。",
+    futureVision: "AI增强型销售团队 = 更高的人均产出和客户覆盖。",
+  },
+  {
+    id: "finance", name: "财务部门", nameEn: "Finance & Accounting", aiLevel: 20,
+    capQuestions: [
+      { q: "记账/凭证处理有AI辅助吗？", key: "bookkeeping_ai" },
+      { q: "发票识别/报销有自动化吗？", key: "invoice_ai" },
+      { q: "财务报表分析有AI工具吗？", key: "reporting_ai" },
+    ],
+    roles: [
+      { title: "记账/数据录入", key: "bookkeeper", withAI: { ratio: 0.40, note: "AI处理大部分录入，人做审核" }, fullAI: { ratio: 0.15, note: "OCR+AI大幅减少人工录入" } },
+      { title: "会计/报表编制", key: "accountant", withAI: { ratio: 0.60, note: "AI自动出报表，人做分析判断" }, fullAI: { ratio: 0.35, note: "保留高级会计做战略分析" } },
+    ],
+    insight: "Deloitte研究显示AI可提升财务处理吞吐量约25%。OCR和自动对账技术较成熟，但税务判断和战略分析仍需专业人士。",
+    futureVision: "精简财务团队 + AI工具 = 更快的结账和更精准的预测。",
+  },
+  {
+    id: "hr", name: "人力资源部", nameEn: "Human Resources", aiLevel: 18,
+    capQuestions: [
+      { q: "简历筛选有用AI吗？", key: "resume_ai" },
+      { q: "薪资/考勤计算有自动化吗？", key: "payroll_ai" },
+      { q: "员工服务有AI助手吗？", key: "hr_bot" },
+    ],
+    roles: [
+      { title: "招聘专员", key: "recruiter", withAI: { ratio: 0.55, note: "AI筛简历+初评，人做终面决策" }, fullAI: { ratio: 0.30, note: "AI全流程筛选，人做终面" } },
+      { title: "薪酬/员工服务", key: "payroll", withAI: { ratio: 0.50, note: "AI自动算薪+问答机器人" }, fullAI: { ratio: 0.25, note: "全自动化+AI服务台" } },
+    ],
+    insight: "LinkedIn/SHRM研究显示AI可提升约18%的招聘效率。AI擅长筛选和匹配，但文化适配和最终录用决策仍需人类判断。",
+    futureVision: "CHRO + 精简HR团队 + AI = 更高效的人才管理。",
+  },
+  {
+    id: "admin", name: "行政/运营部", nameEn: "Admin & Operations", aiLevel: 15,
+    capQuestions: [
+      { q: "日常办公有AI辅助工具吗？", key: "office_ai" },
+      { q: "采购/供应商管理有系统化吗？", key: "procurement_ai" },
+      { q: "文档/合同管理有AI功能吗？", key: "doc_ai" },
+    ],
+    roles: [
+      { title: "行政助理/前台", key: "admin_asst", withAI: { ratio: 0.55, note: "AI处理日程/文档/预约" }, fullAI: { ratio: 0.30, note: "AI接待+智能办公系统" } },
+      { title: "采购/资产管理", key: "procurement", withAI: { ratio: 0.55, note: "AI比价+库存预测" }, fullAI: { ratio: 0.30, note: "AI辅助采购决策+自动下单" } },
+    ],
+    insight: "智能办公系统可提升约20%的行政流程效率。文档归档和采购比价最适合自动化，但供应商关系管理仍需人工。",
+    futureVision: "精简行政团队 + AI = 更高效的办公运营。",
+  },
+  {
+    id: "legal", name: "法务/合规部", nameEn: "Legal & Compliance", aiLevel: 12,
+    capQuestions: [
+      { q: "合同审查有AI辅助吗？", key: "contract_ai" },
+      { q: "法规检索有用AI工具吗？", key: "legal_search" },
+    ],
+    roles: [
+      { title: "合同审查/法律助理", key: "legal_asst", withAI: { ratio: 0.55, note: "AI预审+人终审" }, fullAI: { ratio: 0.30, note: "标准合同AI自动处理，人审复杂条款" } },
+    ],
+    insight: "LegalTech研究显示AI合同审查效率可提升约30%。标准合同审查最适合AI，但复杂条款和合规判断仍需专业律师。",
+    futureVision: "法务总监 + AI = 更快的合同周转和更全面的风险覆盖。",
+  },
+  {
+    id: "it", name: "IT/技术部", nameEn: "IT & Engineering", aiLevel: 45,
+    capQuestions: [
+      { q: "开发人员有用AI编程助手吗？", key: "coding_ai" },
+      { q: "代码审查/测试有AI辅助吗？", key: "testing_ai" },
+      { q: "IT运维有AI监控/自动化吗？", key: "ops_ai" },
+    ],
+    roles: [
+      { title: "初/中级开发", key: "dev_junior", withAI: { ratio: 0.65, note: "AI辅助编码，人做架构设计" }, fullAI: { ratio: 0.45, note: "AI Agent辅助开发，人做设计和Review" } },
+      { title: "QA/测试", key: "qa_test", withAI: { ratio: 0.55, note: "AI自动生成用例+执行" }, fullAI: { ratio: 0.30, note: "AI自动化测试流水线+人做策略" } },
+    ],
+    insight: "Microsoft/GitHub研究显示AI编程助手可提升约55%的开发效率。IT是目前AI工具采纳率最高的部门。",
+    futureVision: "架构师 + AI开发工具链 = 更高的开发效率和代码质量。",
+  },
+];
+
+// ─── THEME ──────────────────────────────────────────────────────────────────
+const getTheme = (dark: boolean) => dark ? {
+  bg: "#0F172A", cardBg: "#1E293B", cardBgAlt: "#162032",
+  border: "#334155", borderLight: "#475569",
+  text: "#F1F5F9", textSecondary: "#94A3B8", textMuted: "#64748B",
+  inputBg: "#1E293B", inputBorder: "#475569",
+  accent: "#3B82F6", accentSoft: "rgba(59,130,246,0.15)",
+  positive: "#10B981", positiveSoft: "rgba(16,185,129,0.15)",
+  warning: "#F59E0B", warningSoft: "rgba(245,158,11,0.15)",
+  negative: "#EF4444", negativeSoft: "rgba(239,68,68,0.15)",
+  shadow: "0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2)",
+  shadowLg: "0 4px 6px rgba(0,0,0,0.3)",
+} : {
+  bg: "#F8FAFC", cardBg: "#FFFFFF", cardBgAlt: "#F1F5F9",
+  border: "#E2E8F0", borderLight: "#CBD5E1",
+  text: "#1E293B", textSecondary: "#475569", textMuted: "#94A3B8",
+  inputBg: "#FFFFFF", inputBorder: "#CBD5E1",
+  accent: "#2563EB", accentSoft: "rgba(37,99,235,0.08)",
+  positive: "#059669", positiveSoft: "rgba(5,150,105,0.08)",
+  warning: "#D97706", warningSoft: "rgba(217,119,6,0.08)",
+  negative: "#DC2626", negativeSoft: "rgba(220,38,38,0.08)",
+  shadow: "0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)",
+  shadowLg: "0 4px 6px rgba(0,0,0,0.07)",
+};
+
+// ─── TRANSLATIONS ────────────────────────────────────────────────────────────
+const LANG = {
+  zh: {
+    badge: "2026 AI企业降本实战诊断",
+    title: "AI时代，你的企业人效达标了吗？",
+    subtitle: "5分钟深度诊断 — 看清每个部门的AI成熟度和可优化空间，精准测算人力资源释放潜力。",
+    startBtn: "开始5分钟AI诊断 →",
+    reportTitle: "这份诊断报告会告诉你：",
+    sources: "数据来源：McKinsey / Stanford/MIT / GitHub / WEF / 智联招聘/BOSS直聘",
+    statDescs: ["代码已由AI编写 (微软数据)", "AI编程助手带来的开发效率提升 (GitHub)", "各岗位已验证的AI效率提升幅度"],
+    landingChecklist: ["每个部门的AI成熟度等级 (L1-L5)", "AI工具使用现状与落地差距分析", "当前 vs AI辅助 vs 全AI三种状态对比", "基于城市薪资水平的精确资源释放额", "各部门的AI升级路径与具体建议", "可被AI优化的具体工作流清单"],
+    step1Title: "企业基本信息", step1Sub: "基于这些信息生成定制化AI诊断报告",
+    labelCompany: "公司名称（选填）", phCompany: "便于报告展示",
+    labelHC: "公司总人数 *", phHC: "例如：150",
+    labelRev: "年营收（万元）*", phRev: "例如：5000",
+    labelCity: "所在城市级别 *", salaryNote: "薪资数据将根据城市级别自动调整（来源：智联招聘/BOSS直聘）",
+    labelIndustry: "所属行业",
+    nextBtn: "下一步 →", backBtn: "←",
+    step2Title: "选择部门并填入人数", step2Sub: "勾选现有部门，我们将逐个进行AI成熟度评估",
+    deptPH: "该部门总人数", startAssessBtn: "开始AI成熟度评估 →",
+    step4NextBtn: "下一个部门 →", step4DoneBtn: "生成完整报告 →",
+    nextDeptPrefix: "下一个：",
+    ctaTitle: "让Rebase帮你把诊断变成落地方案",
+    ctaDesc: "每个部门的AI升级路径不同。我们提供1v1指导，帮你的团队真正用起来。",
+    ctaNamePH: "您的称呼", ctaContactPH: "微信号 / 手机号",
+    ctaBtn: "预约1v1 AI转型咨询", ctaSubmitting: "提交中...",
+    ctaFeatures: ["✓ 60分钟深度诊断", "✓ 定制落地方案", "✓ 工具选型清单", "✓ 人才转型路线图"],
+    ctaOk: "提交成功", ctaOkDesc: "AI转型顾问将在 24小时内 通过微信联系你。",
+    earlyTitle: "申请早期体验 Rebase 平台", earlyDesc: "您的诊断数据已保存。点击下方按钮，跳转至申请页面，信息将自动预填。",
+    earlyBtn: "申请早期体验 →",
+    resetBtn: "重新诊断",
+    footerNote: "AI Workforce Intelligence / McKinsey / Stanford/MIT / GitHub / WEF / 2026",
+  },
+  en: {
+    badge: "2026 AI Cost Reduction Diagnosis",
+    title: "Is Your Business Ready for the AI Era?",
+    subtitle: "5-min deep diagnosis — understand AI maturity across every department and measure your headcount optimization potential.",
+    startBtn: "Start 5-min AI Diagnosis →",
+    reportTitle: "This report will show you:",
+    sources: "Sources: McKinsey / Stanford/MIT / GitHub / WEF / Zhilian/BOSS Zhipin",
+    statDescs: ["of code is AI-generated (Microsoft)", "productivity gain from AI coding tools (GitHub)", "verified AI efficiency gains across job roles"],
+    landingChecklist: ["AI maturity score per department (L1–L5)", "Gap analysis: current vs. industry best practice", "Current vs. AI-assisted vs. Full-AI headcount comparison", "Precise savings estimate based on your city's salary data", "AI upgrade roadmap & recommendations per department", "Specific workflows that can be optimized with AI"],
+    step1Title: "Company Information", step1Sub: "Used to generate your customized AI diagnosis report",
+    labelCompany: "Company Name (optional)", phCompany: "For report display",
+    labelHC: "Total Headcount *", phHC: "e.g. 150",
+    labelRev: "Annual Revenue (¥10K) *", phRev: "e.g. 5000",
+    labelCity: "City Tier *", salaryNote: "Salary benchmarks auto-adjusted by city tier (source: Zhilian/BOSS Zhipin)",
+    labelIndustry: "Industry",
+    nextBtn: "Next →", backBtn: "←",
+    step2Title: "Select Departments & Enter Headcount", step2Sub: "Select your departments — we'll assess AI maturity for each one",
+    deptPH: "Dept. headcount", startAssessBtn: "Start AI Maturity Assessment →",
+    step4NextBtn: "Next Dept. →", step4DoneBtn: "Generate Full Report →",
+    nextDeptPrefix: "Next: ",
+    ctaTitle: "Let Rebase turn your diagnosis into an action plan",
+    ctaDesc: "Each department has a different AI upgrade path. We offer 1-on-1 guidance to help your team actually use AI.",
+    ctaNamePH: "Your name", ctaContactPH: "WeChat ID / Phone",
+    ctaBtn: "Book 1-on-1 AI Transformation Consult", ctaSubmitting: "Submitting...",
+    ctaFeatures: ["✓ 60-min deep diagnosis", "✓ Custom action plan", "✓ Tool selection guide", "✓ Talent transition roadmap"],
+    ctaOk: "Submitted Successfully", ctaOkDesc: "An AI transformation consultant will contact you within 24 hours.",
+    earlyTitle: "Request Early Access to Rebase Platform", earlyDesc: "Your diagnosis is complete. Click below to apply — your info will be pre-filled automatically.",
+    earlyBtn: "Request Early Access →",
+    resetBtn: "Restart Diagnosis",
+    footerNote: "AI Workforce Intelligence / McKinsey / Stanford/MIT / GitHub / WEF / 2026",
+  },
+} as const;
+
+// ─── SUB-COMPONENTS ──────────────────────────────────────────────────────────
+function PB({ pct, color = "#2563EB", delay = 0, h = 6, bg = "#E2E8F0" }: { pct: number; color?: string; delay?: number; h?: number; bg?: string }) {
+  const [w, setW] = useState(0);
+  useEffect(() => { const t = setTimeout(() => setW(pct), delay + 100); return () => clearTimeout(t); }, [pct, delay]);
+  return (
+    <div style={{ width: "100%", height: h, borderRadius: h / 2, background: bg, overflow: "hidden" }}>
+      <div style={{ width: `${w}%`, height: "100%", borderRadius: h / 2, background: color, transition: "width 0.8s ease-out" }} />
+    </div>
+  );
+}
+
+function AN({ value, suffix = "", prefix = "" }: { value: number; suffix?: string; prefix?: string }) {
+  const [d, setD] = useState(0);
+  useEffect(() => {
+    if (!value) { setD(0); return; }
+    let c = 0; const i = value / 40;
+    const t = setInterval(() => { c += i; if (c >= value) { setD(value); clearInterval(t); } else setD(c); }, 25);
+    return () => clearInterval(t);
+  }, [value]);
+  return <span>{prefix}{Math.round(d).toLocaleString()}{suffix}</span>;
+}
+
+function TierBadge({ score, size = "sm" }: { score: number; size?: "sm" | "lg" }) {
+  const tier = getTier(score);
+  const isSm = size === "sm";
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: isSm ? 4 : 6,
+      padding: isSm ? "2px 8px" : "4px 12px",
+      borderRadius: 4, fontSize: isSm ? 11 : 14, fontWeight: 600,
+      background: `${tier.color}18`, color: tier.color, border: `1px solid ${tier.color}30`,
+      whiteSpace: "nowrap",
+    }}>
+      <span style={{ fontSize: isSm ? 10 : 12, opacity: 0.7 }}>L{tier.level}</span>
+      {tier.name}
+    </span>
+  );
+}
+
+function TierBar({ score, theme: T }: { score: number; theme: ReturnType<typeof getTheme> }) {
+  const tier = getTier(score);
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 2, height: 6, marginBottom: 4 }}>
+        {TIER_DEFS.map((t, i) => (
+          <div key={i} style={{
+            flex: 1, height: "100%", borderRadius: 3,
+            background: tier.level >= t.level ? t.color : T.border,
+            opacity: tier.level === t.level ? 1 : (tier.level > t.level ? 0.5 : 0.2),
+            transition: "all 0.5s ease",
+          }} />
+        ))}
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between" }}>
+        {TIER_DEFS.map((t, i) => (
+          <span key={i} style={{ fontSize: 9, color: tier.level === t.level ? t.color : T.textMuted, fontWeight: tier.level === t.level ? 600 : 400, textAlign: "center", flex: 1 }}>
+            L{t.level}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
+export default function Calculator() {
+  const { theme, lang } = useApp();
+  const navigate = useNavigate();
+  const ctaFormRef = useRef<HTMLDivElement>(null);
+
+  const T = getTheme(theme === "dark");
+  const L = LANG[lang as keyof typeof LANG] || LANG.zh;
+  const dark = theme === "dark";
+
+  // State
+  const [step, setStep] = useState(0);
+  const [cn, setCn] = useState("");
+  const [cs, setCs] = useState("");
+  const [rev, setRev] = useState("");
+  const [ind, setInd] = useState("");
+  const [cityTier, setCityTier] = useState("tier1");
+  const [sel, setSel] = useState<string[]>([]);
+  const [dhc, setDhc] = useState<Record<string, number>>({});
+  const [cap, setCap] = useState<Record<string, number>>({});
+  const [ccd, setCcd] = useState(0);
+  const [re, setRe] = useState<Record<string, number>>({});
+  const [crd, setCrd] = useState(0);
+  const [exp, setExp] = useState<string | null>(null);
+  const [showSources, setShowSources] = useState(false);
+  const [leadName, setLeadName] = useState("");
+  const [leadContact, setLeadContact] = useState("");
+  const [leadSubmitted, setLeadSubmitted] = useState(false);
+  const [leadSubmitting, setLeadSubmitting] = useState(false);
+  const [sessionId] = useState(() => Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+  const [surveyAutoSaved, setSurveyAutoSaved] = useState(false);
+
+  // Auto-save survey when user reaches results page (step 5)
+  useEffect(() => {
+    if (surveyAutoSaved || step < 5) return;
+    setSurveyAutoSaved(true);
+    const ad_ = DEPARTMENTS.filter(d => sel.includes(d.id));
+    const te_ = parseInt(cs) || 0;
+    const rv_ = parseInt(rev) || 0;
+    const tierLabel_ = CITY_TIERS.find(t => t.id === cityTier)?.label || "一线城市";
+    const getQScore_ = (deptId: string, cq: { key: string }) => {
+      const idx = cap[`${deptId}_${cq.key}`];
+      if (idx === undefined) return 0;
+      return USAGE_OPTIONS[idx].score;
+    };
+    const results_ = ad_.map(dept => {
+      const rr = dept.roles.map((role, i) => {
+        const cc = re[`${dept.id}_${i}`] ?? 0;
+        const salary = getSalary(role.key, cityTier);
+        const wa = Math.max(cc > 0 ? 1 : 0, Math.round(cc * role.withAI.ratio));
+        const fa = Math.max(cc > 0 ? 1 : 0, Math.round(cc * role.fullAI.ratio));
+        return { role, cc, wa, fa, salary, cwAI: (cc - wa) * salary * 14, cfAI: (cc - fa) * salary * 14 };
+      });
+      const tc = rr.reduce((s, r) => s + r.cc, 0);
+      const twAI = rr.reduce((s, r) => s + r.wa, 0);
+      const tfAI = rr.reduce((s, r) => s + r.fa, 0);
+      const tcwAI = rr.reduce((s, r) => s + r.cwAI, 0);
+      const tcfAI = rr.reduce((s, r) => s + r.cfAI, 0);
+      const totalQScore = dept.capQuestions.reduce((s, cq) => s + getQScore_(dept.id, cq), 0);
+      const maxQScore = dept.capQuestions.length * 3;
+      const capP = maxQScore > 0 ? Math.round((totalQScore / maxQScore) * 100) : 0;
+      return { dept, rr, tc, twAI, tfAI, tcwAI, tcfAI, capP };
+    });
+    const gtc_ = results_.reduce((s, r) => s + r.tc, 0);
+    const gcf_ = results_.reduce((s, r) => s + r.tcfAI, 0);
+    const totalWeightedScore_ = results_.reduce((s, r) => s + r.capP * r.tc, 0);
+    const avgCap_ = gtc_ > 0 ? Math.round(totalWeightedScore_ / gtc_) : (results_.length > 0 ? Math.round(results_.reduce((s, r) => s + r.capP, 0) / results_.length) : 0);
+    const overallTier_ = getTier(avgCap_);
+    fetch("/api/save-survey", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId, company: cn, industry: ind, employees: te_, revenue: rv_,
+        cityTier: tierLabel_, cityTierRaw: cityTier,
+        tier: overallTier_.name, tierLevel: overallTier_.level,
+        score: avgCap_, savings: Math.round(gcf_ / 10000),
+        departments: ad_.map(d => d.name).join("、"),
+        selectedDepts: sel, deptHeadcounts: dhc, capAnswers: cap, roleHeadcounts: re,
+        deptResults: results_.map(r => ({
+          id: r.dept.id, name: r.dept.name,
+          totalHC: r.tc, withAI_HC: r.twAI, fullAI_HC: r.tfAI,
+          savingsWithAI: Math.round(r.tcwAI / 10000),
+          savingsFullAI: Math.round(r.tcfAI / 10000),
+          maturityScore: r.capP, maturityTier: getTier(r.capP).name,
+        })),
+      }),
+    }).catch(() => {});
+  }, [step]);
+
+  const te = parseInt(cs) || 0;
+  const rv = parseInt(rev) || 0;
+  const ad = DEPARTMENTS.filter(d => sel.includes(d.id));
+
+  const selectOption = (deptId: string, key: string, optIdx: number) => {
+    setCap(prev => ({ ...prev, [`${deptId}_${key}`]: optIdx }));
+  };
+  const getSelectedIdx = (deptId: string, key: string) => cap[`${deptId}_${key}`];
+  const isAnswered = (deptId: string, key: string) => cap[`${deptId}_${key}`] !== undefined;
+
+  const getQScore = (deptId: string, cq: { key: string }) => {
+    const idx = getSelectedIdx(deptId, cq.key);
+    if (idx === undefined) return 0;
+    return USAGE_OPTIONS[idx].score;
+  };
+
+  const src = (did: string, i: number, v: string) => setRe(p => ({ ...p, [`${did}_${i}`]: parseInt(v) || 0 }));
+  const grc = (did: string, i: number) => re[`${did}_${i}`] ?? 0;
+
+  const initRC = () => {
+    const e: Record<string, number> = {};
+    ad.forEach(d => {
+      const h = dhc[d.id] || 0;
+      const pr = Math.max(1, Math.floor(h / d.roles.length));
+      let rem = h;
+      d.roles.forEach((_, i) => {
+        const c = i === d.roles.length - 1 ? rem : Math.min(pr, rem);
+        e[`${d.id}_${i}`] = c;
+        rem -= c;
+      });
+    });
+    setRe(e);
+  };
+
+  const calc = () => ad.map(dept => {
+    const rr = dept.roles.map((role, i) => {
+      const cc = grc(dept.id, i);
+      const salary = getSalary(role.key, cityTier);
+      const wa = Math.max(cc > 0 ? 1 : 0, Math.round(cc * role.withAI.ratio));
+      const fa = Math.max(cc > 0 ? 1 : 0, Math.round(cc * role.fullAI.ratio));
+      return { role, cc, wa, fa, salary, cwAI: (cc - wa) * salary * 14, cfAI: (cc - fa) * salary * 14 };
+    });
+    const tc = rr.reduce((s, r) => s + r.cc, 0);
+    const twAI = rr.reduce((s, r) => s + r.wa, 0);
+    const tfAI = rr.reduce((s, r) => s + r.fa, 0);
+    const tcwAI = rr.reduce((s, r) => s + r.cwAI, 0);
+    const tcfAI = rr.reduce((s, r) => s + r.cfAI, 0);
+    const totalQScore = dept.capQuestions.reduce((s, cq) => s + getQScore(dept.id, cq), 0);
+    const maxQScore = dept.capQuestions.length * 3;
+    const capP = maxQScore > 0 ? Math.round((totalQScore / maxQScore) * 100) : 0;
+    return { dept, rr, tc, twAI, tfAI, tcwAI, tcfAI, capP };
+  });
+
+  // ── Shared Styles ──
+  const cd = { background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 8, padding: 24, boxShadow: T.shadow };
+  const inp: React.CSSProperties = { width: "100%", padding: "10px 12px", borderRadius: 6, border: `1px solid ${T.inputBorder}`, background: T.inputBg, color: T.text, fontSize: 14, outline: "none", boxSizing: "border-box", transition: "border-color 0.15s" };
+  const bP = (a: boolean): React.CSSProperties => ({ flex: 1, padding: "12px 20px", borderRadius: 8, border: "none", background: a ? T.accent : (dark ? "#374151" : "#E2E8F0"), color: a ? "#FFFFFF" : (dark ? "#9CA3AF" : "#64748B"), cursor: a ? "pointer" : "not-allowed", fontSize: 15, fontWeight: 600, transition: "all 0.15s" });
+  const bB: React.CSSProperties = { padding: "10px 16px", borderRadius: 8, border: `1px solid ${T.border}`, background: "transparent", color: T.textSecondary, cursor: "pointer", fontSize: 13 };
+  const ct: React.CSSProperties = { minHeight: "100vh", background: T.bg, color: T.text, fontFamily: "Inter, -apple-system, 'Noto Sans SC', system-ui, sans-serif" };
+
+  const SI = ({ c, t }: { c: number; t: number }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 20 }}>
+      {Array.from({ length: t }, (_, i) => (
+        <div key={i} style={{
+          width: i + 1 === c ? 24 : 8, height: 8, borderRadius: 4,
+          background: i + 1 < c ? T.accent : i + 1 === c ? T.accent : T.border,
+          opacity: i + 1 <= c ? 1 : 0.4, transition: "all 0.3s",
+        }} />
+      ))}
+      <span style={{ marginLeft: 8, fontSize: 11, color: T.textMuted, fontWeight: 500 }}>步骤 {c}/{t}</span>
+    </div>
+  );
+
+  // ═══════ STEP 0 — LANDING ═══════
+  if (step === 0) return (
+    <div style={ct}>
+      <div style={{ maxWidth: 720, margin: "0 auto", padding: "60px 20px" }}>
+        <div style={{ textAlign: "center", marginBottom: 40 }}>
+          <div style={{ display: "inline-block", padding: "4px 12px", borderRadius: 4, fontSize: 12, fontWeight: 600, background: T.accentSoft, color: T.accent, marginBottom: 16, letterSpacing: 0.5 }}>{L.badge}</div>
+          <h1 style={{ fontSize: "clamp(24px, 4.5vw, 38px)", fontWeight: 700, lineHeight: 1.2, margin: "0 0 14px", color: T.text }}>{L.title}</h1>
+          <p style={{ fontSize: 16, color: T.textSecondary, maxWidth: 500, margin: "0 auto", lineHeight: 1.7 }}>{L.subtitle}</p>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 32 }}>
+          {[
+            { n: "30%", d: L.statDescs[0], c: T.accent },
+            { n: "55%", d: L.statDescs[1], c: T.positive },
+            { n: "14-40%", d: L.statDescs[2], c: T.warning },
+          ].map((s, i) => (
+            <div key={i} style={{ ...cd, padding: "16px 14px", textAlign: "center" }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: s.c, marginBottom: 4 }}>{s.n}</div>
+              <div style={{ fontSize: 11, color: T.textMuted, lineHeight: 1.5 }}>{s.d}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ ...cd, padding: 20, marginBottom: 32 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: T.textSecondary, marginBottom: 12 }}>{L.reportTitle}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            {L.landingChecklist.map((item, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 6, fontSize: 13, color: T.textSecondary, lineHeight: 1.5 }}>
+                <span style={{ color: T.accent, marginTop: 2, fontSize: 10 }}>✓</span>{item}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ textAlign: "center" }}>
+          <button onClick={() => setStep(1)} style={{ padding: "14px 48px", fontSize: 16, fontWeight: 600, borderRadius: 8, border: "none", background: T.accent, color: "#FFFFFF", cursor: "pointer", boxShadow: T.shadowLg, transition: "all 0.15s" }}>
+            {L.startBtn}
+          </button>
+          <p style={{ fontSize: 11, color: T.textMuted, marginTop: 14 }}>{L.sources}</p>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ═══════ STEP 1 — INFO ═══════
+  if (step === 1) {
+    const ok = !!(cs && rev);
+    return (
+      <div style={ct}>
+        <div style={{ maxWidth: 540, margin: "0 auto", padding: "48px 20px" }}>
+          <SI c={1} t={5} />
+          <h2 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 4px", color: T.text }}>{L.step1Title}</h2>
+          <p style={{ color: T.textMuted, marginBottom: 24, fontSize: 13 }}>{L.step1Sub}</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            <div>
+              <label style={{ fontSize: 12, color: T.textMuted, display: "block", marginBottom: 4, fontWeight: 500 }}>{L.labelCompany}</label>
+              <input placeholder={L.phCompany} value={cn} onChange={e => setCn(e.target.value)} style={inp} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 12, color: T.textMuted, display: "block", marginBottom: 4, fontWeight: 500 }}>{L.labelHC}</label>
+                <input type="number" placeholder={L.phHC} value={cs} onChange={e => setCs(e.target.value)} style={inp} />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: T.textMuted, display: "block", marginBottom: 4, fontWeight: 500 }}>{L.labelRev}</label>
+                <input type="number" placeholder={L.phRev} value={rev} onChange={e => setRev(e.target.value)} style={inp} />
+              </div>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, color: T.textMuted, display: "block", marginBottom: 4, fontWeight: 500 }}>{L.labelCity}</label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {CITY_TIERS.map(t => (
+                  <button key={t.id} onClick={() => setCityTier(t.id)} style={{ padding: "8px 14px", borderRadius: 6, fontSize: 13, cursor: "pointer", textAlign: "left", border: cityTier === t.id ? `1px solid ${T.accent}` : `1px solid ${T.border}`, background: cityTier === t.id ? T.accentSoft : T.cardBg, color: cityTier === t.id ? T.accent : T.textSecondary }}>
+                    <div style={{ fontWeight: 600 }}>{t.label}</div>
+                    <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>{t.desc}</div>
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>{L.salaryNote}</div>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, color: T.textMuted, display: "block", marginBottom: 4, fontWeight: 500 }}>{L.labelIndustry}</label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {["电商/零售", "SaaS/科技", "教育/培训", "金融/保险", "制造业", "医疗健康", "专业服务", "其他"].map(x => (
+                  <button key={x} onClick={() => setInd(x)} style={{ padding: "6px 12px", borderRadius: 6, fontSize: 13, cursor: "pointer", border: ind === x ? `1px solid ${T.accent}` : `1px solid ${T.border}`, background: ind === x ? T.accentSoft : T.cardBg, color: ind === x ? T.accent : T.textSecondary }}>{x}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 28 }}>
+            <button onClick={() => setStep(0)} style={bB}>{L.backBtn}</button>
+            <button onClick={() => ok && setStep(2)} disabled={!ok} style={bP(ok)}>{L.nextBtn}</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ═══════ STEP 2 — DEPTS ═══════
+  if (step === 2) {
+    const ok = sel.length > 0 && sel.every(id => dhc[id] > 0);
+    return (
+      <div style={ct}>
+        <div style={{ maxWidth: 640, margin: "0 auto", padding: "48px 20px" }}>
+          <SI c={2} t={5} />
+          <h2 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 4px", color: T.text }}>{L.step2Title}</h2>
+          <p style={{ color: T.textMuted, marginBottom: 20, fontSize: 13 }}>{L.step2Sub}</p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10 }}>
+            {DEPARTMENTS.map(d => {
+              const s = sel.includes(d.id);
+              return (
+                <div key={d.id} style={{ ...cd, padding: 14, cursor: "pointer", borderColor: s ? T.accent : T.border, background: s ? T.accentSoft : T.cardBg }} onClick={() => setSel(p => p.includes(d.id) ? p.filter(x => x !== d.id) : [...p, d.id])}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{lang === "en" ? d.nameEn : d.name}</div>
+                      <div style={{ fontSize: 11, color: T.textMuted }}>{lang === "en" ? d.name : d.nameEn}</div>
+                    </div>
+                    <div style={{ width: 20, height: 20, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${s ? T.accent : T.border}`, background: s ? T.accent : "transparent" }}>
+                      {s && <span style={{ color: "#fff", fontSize: 12, fontWeight: 700 }}>✓</span>}
+                    </div>
+                  </div>
+                  {s && (
+                    <div onClick={e => e.stopPropagation()} style={{ marginTop: 10 }}>
+                      <input type="number" placeholder={L.deptPH} value={dhc[d.id] || ""} onChange={e => setDhc(p => ({ ...p, [d.id]: parseInt(e.target.value) || 0 }))} style={{ ...inp, fontSize: 13, padding: "8px 10px" }} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
+            <button onClick={() => setStep(1)} style={bB}>{L.backBtn}</button>
+            <button onClick={() => { if (ok) { setCcd(0); setStep(3); } }} disabled={!ok} style={bP(ok)}>{L.startAssessBtn}</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ═══════ STEP 3 — USAGE-REALITY ASSESSMENT ═══════
+  if (step === 3) {
+    const dept = ad[ccd];
+    if (!dept) { setStep(4); initRC(); setCrd(0); return null; }
+    const allA = dept.capQuestions.every(cq => isAnswered(dept.id, cq.key));
+    const isL = ccd === ad.length - 1;
+
+    return (
+      <div style={ct}>
+        <div style={{ maxWidth: 620, margin: "0 auto", padding: "48px 20px" }}>
+          <SI c={3} t={5} />
+          <div style={{ marginBottom: 4 }}>
+            <div style={{ fontSize: 11, color: T.textMuted, fontWeight: 500 }}>部门 {ccd + 1} / {ad.length}</div>
+            <h2 style={{ fontSize: 20, fontWeight: 700, margin: "2px 0 0", color: T.text }}>{dept.name} — AI使用现状评估</h2>
+          </div>
+          <p style={{ color: T.textMuted, fontSize: 12, marginBottom: 20, lineHeight: 1.6 }}>请为每个问题选择最符合当前实际情况的选项。越诚实，报告越精准。</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {dept.capQuestions.map((cq, qi) => {
+              const selIdx = getSelectedIdx(dept.id, cq.key);
+              return (
+                <div key={cq.key} style={{ ...cd, padding: "16px" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: T.text, marginBottom: 12, lineHeight: 1.5 }}>
+                    <span style={{ color: T.accent, marginRight: 6 }}>Q{qi + 1}.</span>{cq.q}
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {USAGE_OPTIONS.map((opt, oi) => {
+                      const isSel = selIdx === oi;
+                      const optTier = getTier(Math.round((opt.score / 3) * 100));
+                      return (
+                        <button key={oi} onClick={() => selectOption(dept.id, cq.key, oi)} style={{ padding: "8px 14px", borderRadius: 6, fontSize: 12, cursor: "pointer", border: isSel ? `2px solid ${optTier.color}` : `1px solid ${T.border}`, background: isSel ? `${optTier.color}15` : T.cardBg, color: isSel ? optTier.color : T.textSecondary, fontWeight: isSel ? 600 : 400, transition: "all 0.15s", flex: "1 1 auto", minWidth: "fit-content", textAlign: "center" }}>
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+            <button onClick={() => ccd > 0 ? setCcd(p => p - 1) : setStep(2)} style={bB}>{L.backBtn}</button>
+            <button onClick={() => { if (!allA) return; if (isL) { initRC(); setCrd(0); setStep(4); } else setCcd(p => p + 1); }} disabled={!allA} style={bP(allA)}>
+              {isL ? L.step4DoneBtn : `${L.nextDeptPrefix}${lang === "en" ? (ad[ccd + 1]?.nameEn || ad[ccd + 1]?.name) : ad[ccd + 1]?.name} →`}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ═══════ STEP 4 — ROLE HEADCOUNT ═══════
+  if (step === 4) {
+    const dept = ad[crd];
+    if (!dept) { setStep(5); return null; }
+    const isL = crd === ad.length - 1;
+    const ta = dept.roles.reduce((s, _, i) => s + grc(dept.id, i), 0);
+    const dh = dhc[dept.id] || 0;
+    const tierLabel = CITY_TIERS.find(t => t.id === cityTier)?.label || "一线城市";
+
+    return (
+      <div style={ct}>
+        <div style={{ maxWidth: 640, margin: "0 auto", padding: "48px 20px" }}>
+          <SI c={4} t={5} />
+          <div style={{ marginBottom: 4 }}>
+            <div style={{ fontSize: 11, color: T.textMuted, fontWeight: 500 }}>部门 {crd + 1} / {ad.length}</div>
+            <h2 style={{ fontSize: 20, fontWeight: 700, margin: "2px 0 0", color: T.text }}>{dept.name} — 岗位人数配置</h2>
+          </div>
+          <p style={{ color: T.textMuted, fontSize: 12, marginBottom: 4 }}>确认各岗位当前人数（已按 <span style={{ color: T.accent, fontWeight: 600 }}>{dh}人</span> 初始分配） / 薪资基于{tierLabel}水平</p>
+          <div style={{ fontSize: 11, color: ta === dh ? T.textMuted : T.negative, marginBottom: 16, fontWeight: 500 }}>已分配：{ta}/{dh}人</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {dept.roles.map((role, i) => {
+              const c = grc(dept.id, i);
+              const salary = getSalary(role.key, cityTier);
+              const wa = Math.max(c > 0 ? 1 : 0, Math.round(c * role.withAI.ratio));
+              const fa = Math.max(c > 0 ? 1 : 0, Math.round(c * role.fullAI.ratio));
+              return (
+                <div key={i} style={{ ...cd, padding: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: c > 0 ? 10 : 0 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{role.title}</div>
+                      <div style={{ fontSize: 11, color: T.textMuted }}>月薪 ¥{salary.toLocaleString()} ({tierLabel})</div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 11, color: T.textMuted }}>当前</span>
+                      <input type="number" min={0} value={c} onChange={e => src(dept.id, i, e.target.value)} style={{ ...inp, width: 64, textAlign: "center", padding: 6, fontSize: 15, fontWeight: 600 }} />
+                      <span style={{ fontSize: 11, color: T.textMuted }}>人</span>
+                    </div>
+                  </div>
+                  {c > 0 && (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      <div style={{ background: T.positiveSoft, borderRadius: 6, padding: "8px 10px", border: `1px solid ${T.positive}20` }}>
+                        <div style={{ fontSize: 10, color: T.textMuted, fontWeight: 500 }}>人+AI协作</div>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: T.positive }}>{wa}人</div>
+                        <div style={{ fontSize: 10, color: T.textMuted }}>{role.withAI.note}</div>
+                      </div>
+                      <div style={{ background: T.accentSoft, borderRadius: 6, padding: "8px 10px", border: `1px solid ${T.accent}20` }}>
+                        <div style={{ fontSize: 10, color: T.textMuted, fontWeight: 500 }}>全AI管理</div>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: T.accent }}>{fa}人</div>
+                        <div style={{ fontSize: 10, color: T.textMuted }}>{role.fullAI.note}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+            <button onClick={() => crd > 0 ? setCrd(p => p - 1) : setStep(3)} style={bB}>{L.backBtn}</button>
+            <button onClick={() => isL ? setStep(5) : setCrd(p => p + 1)} style={bP(true)}>{isL ? L.step4DoneBtn : L.step4NextBtn}</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ═══════ STEP 5 — RESULTS ═══════
+  const results = calc();
+  const gtc = results.reduce((s, r) => s + r.tc, 0);
+  const gwa = results.reduce((s, r) => s + r.twAI, 0);
+  const gfa = results.reduce((s, r) => s + r.tfAI, 0);
+  const gcw = results.reduce((s, r) => s + r.tcwAI, 0);
+  const gcf = results.reduce((s, r) => s + r.tcfAI, 0);
+
+  const totalWeightedScore = results.reduce((s, r) => s + r.capP * r.tc, 0);
+  const avgCap = gtc > 0 ? Math.round(totalWeightedScore / gtc) : (results.length > 0 ? Math.round(results.reduce((s, r) => s + r.capP, 0) / results.length) : 0);
+  const overallTier = getTier(avgCap);
+
+  const tierCounts: Record<number, number> = {};
+  results.forEach(r => { const t = getTier(r.capP); tierCounts[t.level] = (tierCounts[t.level] || 0) + 1; });
+  const mostCommonTier = Object.entries(tierCounts).sort((a, b) => Number(b[1]) - Number(a[1]))[0];
+
+  const totalHC = gtc || 1;
+  const outputGrowthA = Math.round(results.reduce((s, r) => s + (PRODUCTIVITY_GAINS[r.dept.id]?.withAI || 20) * r.tc, 0) / totalHC);
+  const outputGrowthB = Math.round(results.reduce((s, r) => s + (PRODUCTIVITY_GAINS[r.dept.id]?.fullAI || 35) * r.tc, 0) / totalHC);
+  const prodPerCapitaA = gwa > 0 ? Math.round(((gtc / gwa) - 1) * 100) : 0;
+  const prodPerCapitaB = gfa > 0 ? Math.round(((gtc / gfa) - 1) * 100) : 0;
+  const tierLabel = CITY_TIERS.find(t => t.id === cityTier)?.label || "一线城市";
+
+  const currentLevel = overallTier.level;
+  const target6mo = Math.min(currentLevel + 1, 5);
+  const target18mo = Math.min(currentLevel + 2, 5);
+  const tier6mo = TIER_DEFS[target6mo - 1];
+  const tier18mo = TIER_DEFS[target18mo - 1];
+  const currentAnnualCost = results.reduce((s, r) => s + r.rr.reduce((rs, role) => rs + role.salary * role.cc * 14, 0), 0);
+
+  const journeyStages = [
+    { id: "now", label: "现在", tierDef: overallTier, headcount: gtc, annualCost: currentAnnualCost, savings: 0, outputGrowth: 0, prodGrowth: 0, desc: `${te}人企业 / ${tierLabel} / 年营收${rv.toLocaleString()}万` },
+    { id: "6mo", label: "3-6个月目标", tierDef: tier6mo, headcount: gwa, annualCost: currentAnnualCost - gcw, savings: Math.round(gcw / 10000), outputGrowth: outputGrowthA, prodGrowth: prodPerCapitaA, desc: TIER_TARGETS[target6mo] },
+    { id: "18mo", label: "12-18个月目标", tierDef: tier18mo, headcount: gfa, annualCost: currentAnnualCost - gcf, savings: Math.round(gcf / 10000), outputGrowth: outputGrowthB, prodGrowth: prodPerCapitaB, desc: TIER_TARGETS[target18mo] },
+  ];
+
+  const journeyCard = (stage: typeof journeyStages[0]) => {
+    const isNow = stage.id === "now";
+    const c = stage.tierDef.color;
+    return (
+      <div style={{ ...cd, padding: "16px 14px", flex: 1, position: "relative", overflow: "hidden", opacity: isNow ? 0.85 : 1 }}>
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: c }} />
+        <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 6, fontWeight: 500, letterSpacing: 0.5 }}>{stage.label}</div>
+        <div style={{ marginBottom: 8 }}>
+          <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 4, fontSize: 12, fontWeight: 700, color: c, background: dark ? stage.tierDef.bgDark : stage.tierDef.bg }}>
+            L{stage.tierDef.level} {stage.tierDef.name}
+          </span>
+        </div>
+        <div style={{ fontSize: 11, color: T.textSecondary, lineHeight: 1.5, marginBottom: 12, minHeight: 32 }}>{stage.desc}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {isNow ? (
+            <>
+              <div style={{ background: T.cardBgAlt, borderRadius: 6, padding: "8px 10px" }}>
+                <div style={{ fontSize: 10, color: T.textMuted }}>年度人力成本</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: T.text }}>¥{Math.round(currentAnnualCost / 10000).toLocaleString()}万</div>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: T.textMuted, paddingTop: 6, borderTop: `1px solid ${T.border}` }}>
+                <span>团队规模</span><span style={{ fontWeight: 600, color: T.text }}>{stage.headcount}人</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ background: T.cardBgAlt, borderRadius: 6, padding: "8px 10px" }}>
+                <div style={{ fontSize: 10, color: T.textMuted }}>年度可释放资源</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: c }}><AN value={stage.savings} prefix="¥" suffix="万" /></div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                <div style={{ background: T.cardBgAlt, borderRadius: 6, padding: "6px 8px" }}>
+                  <div style={{ fontSize: 10, color: T.textMuted }}>产出增长</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: c }}>+{stage.outputGrowth}%</div>
+                </div>
+                <div style={{ background: T.cardBgAlt, borderRadius: 6, padding: "6px 8px" }}>
+                  <div style={{ fontSize: 10, color: T.textMuted }}>人效提升</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: c }}>+{stage.prodGrowth}%</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: T.textMuted, paddingTop: 6, borderTop: `1px solid ${T.border}` }}>
+                <span>团队规模</span><span style={{ fontWeight: 600, color: c }}>{stage.headcount}人</span>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div style={ct}>
+      <div style={{ maxWidth: 820, margin: "0 auto", padding: "36px 20px" }}>
+
+        {/* ═══ OVERALL TIER HEADER ═══ */}
+        <div style={{ ...cd, textAlign: "center", marginBottom: 20, padding: "28px 24px", borderTop: `3px solid ${overallTier.color}` }}>
+          <div style={{ marginBottom: 8 }}><TierBadge score={avgCap} size="lg" /></div>
+          <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 6px", color: T.text }}>{cn || "贵公司"} / AI成熟度诊断报告</h2>
+          <p style={{ fontSize: 13, color: T.textSecondary, margin: "0 0 12px", lineHeight: 1.6 }}>您的企业整体AI应用处于第{overallTier.level}级：{overallTier.desc}</p>
+          <div style={{ maxWidth: 400, margin: "0 auto", marginBottom: 12 }}><TierBar score={avgCap} theme={T} /></div>
+          {mostCommonTier && (
+            <div style={{ fontSize: 12, color: T.textSecondary, background: T.cardBgAlt, display: "inline-block", padding: "6px 14px", borderRadius: 6, lineHeight: 1.5 }}>
+              {mostCommonTier[1]}个部门处于「{getTier(TIER_DEFS[parseInt(mostCommonTier[0]) - 1].range[0]).name}」阶段
+              {parseInt(mostCommonTier[0]) <= 2 && " — 需要重点推动AI使用落地"}
+              {parseInt(mostCommonTier[0]) === 3 && " — 建议从试点走向标准化"}
+              {parseInt(mostCommonTier[0]) >= 4 && " — 表现优秀，持续优化"}
+            </div>
+          )}
+          <div style={{ fontSize: 11, color: T.textMuted, marginTop: 8 }}>{te}人 / 年营收{rv.toLocaleString()}万 / {ind || "综合"} / {tierLabel}</div>
+        </div>
+
+        {/* ═══ NEXT STEP RECOMMENDATION ═══ */}
+        <div style={{ ...cd, marginBottom: 20, padding: "16px 20px", background: `${overallTier.color}08`, borderColor: `${overallTier.color}25` }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: overallTier.color, marginBottom: 4 }}>下一步行动：{NEXT_STEPS[overallTier.level]?.action}</div>
+          <div style={{ fontSize: 12, color: T.textSecondary, lineHeight: 1.6 }}>{NEXT_STEPS[overallTier.level]?.detail}</div>
+        </div>
+
+        {/* ═══ TIER PROGRESSION ROADMAP ═══ */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 10, textAlign: "center" }}>AI成熟度升级路径</div>
+          <div style={{ display: "flex", gap: 6, alignItems: "stretch" }}>
+            {journeyStages.map((stage, idx) => (
+              <div key={stage.id} style={{ display: "flex", flex: 1, alignItems: "stretch" }}>
+                {journeyCard(stage)}
+                {idx < journeyStages.length - 1 && (
+                  <div style={{ display: "flex", alignItems: "center", padding: "0 2px", color: journeyStages[idx + 1].tierDef.color, fontSize: 18, fontWeight: 700 }}>→</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ═══ DEPARTMENT CARDS ═══ */}
+        <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 10 }}>各部门详细分析</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {results.map(({ dept, rr, tc, twAI, tfAI, tcwAI, tcfAI, capP }) => {
+            const isE = exp === dept.id;
+            const deptTier = getTier(capP);
+            const industryTier = getTier(dept.aiLevel);
+            const prodGain = PRODUCTIVITY_GAINS[dept.id];
+            const gapScore = dept.aiLevel - capP;
+
+            return (
+              <div key={dept.id} style={{ ...cd, padding: 0, overflow: "hidden" }}>
+                <div onClick={() => setExp(isE ? null : dept.id)} style={{ padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{dept.name}</span>
+                      <TierBadge score={capP} size="sm" />
+                    </div>
+                    <TierBar score={capP} theme={T} />
+                    <div style={{ display: "flex", gap: 12, marginTop: 4, fontSize: 10, color: T.textMuted }}>
+                      <span>你：{capP}分</span>
+                      <span>行业可达：L{industryTier.level} {industryTier.name}</span>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right", minWidth: 80 }}>
+                    <div style={{ fontSize: 12, color: T.textSecondary }}>{tc}人 → <span style={{ color: T.positive }}>{twAI}</span> → <span style={{ color: T.accent }}>{tfAI}人</span></div>
+                    <div style={{ fontSize: 10, color: T.textMuted }}>可释放 ¥{(tcwAI / 10000).toFixed(0)}~{(tcfAI / 10000).toFixed(0)}万/年</div>
+                  </div>
+                  <span style={{ color: T.textMuted, fontSize: 10, transition: "transform 0.3s", display: "inline-block", transform: isE ? "rotate(180deg)" : "none" }}>▼</span>
+                </div>
+
+                {isE && (
+                  <div style={{ padding: "0 16px 16px", borderTop: `1px solid ${T.border}` }}>
+                    {/* Section 1: Current Diagnosis */}
+                    <div style={{ margin: "12px 0", background: T.cardBgAlt, borderRadius: 6, padding: "12px 14px" }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: T.text, marginBottom: 6 }}>现状诊断</div>
+                      <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+                        <div style={{ flex: 1, minWidth: 120, background: dark ? "#1a1a2e" : "#F9FAFB", borderRadius: 4, padding: "8px 10px", border: `1px solid ${T.border}` }}>
+                          <div style={{ fontSize: 10, color: T.textMuted }}>当前水平</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: deptTier.color }}>L{deptTier.level} {deptTier.name}</div>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 120, background: dark ? "#1a1a2e" : "#F9FAFB", borderRadius: 4, padding: "8px 10px", border: `1px solid ${T.border}` }}>
+                          <div style={{ fontSize: 10, color: T.textMuted }}>行业可达</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: industryTier.color }}>L{industryTier.level} {industryTier.name}</div>
+                        </div>
+                        {gapScore > 0 && (
+                          <div style={{ flex: 1, minWidth: 120, background: dark ? "#1a1a2e" : "#FEF2F2", borderRadius: 4, padding: "8px 10px", border: `1px solid ${T.negative}20` }}>
+                            <div style={{ fontSize: 10, color: T.textMuted }}>差距</div>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: T.negative }}>{gapScore}分</div>
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, color: T.textSecondary, lineHeight: 1.6 }}>{dept.insight}</div>
+                    </div>
+
+                    {/* Section 2: What's Possible */}
+                    <div style={{ margin: "10px 0", background: T.cardBgAlt, borderRadius: 6, padding: "12px 14px" }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: T.text, marginBottom: 8 }}>升级可能性</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 8 }}>
+                        <div style={{ textAlign: "center", padding: "8px 4px", borderRadius: 4, background: dark ? "#1a1a2e" : "#F9FAFB", border: `1px solid ${T.border}` }}>
+                          <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 2 }}>当前团队</div>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: T.text }}>{tc}人</div>
+                        </div>
+                        <div style={{ textAlign: "center", padding: "8px 4px", borderRadius: 4, background: T.positiveSoft, border: `1px solid ${T.positive}20` }}>
+                          <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 2 }}>AI辅助后</div>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: T.positive }}>{twAI}人</div>
+                        </div>
+                        <div style={{ textAlign: "center", padding: "8px 4px", borderRadius: 4, background: T.accentSoft, border: `1px solid ${T.accent}20` }}>
+                          <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 2 }}>全AI管理</div>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: T.accent }}>{tfAI}人</div>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <div style={{ flex: 1, background: dark ? "#1a1a2e" : "#F0FDF4", borderRadius: 4, padding: "6px 10px", border: `1px solid ${T.positive}20` }}>
+                          <div style={{ fontSize: 10, color: T.textMuted }}>年度可释放资源</div>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: T.positive }}>¥{(tcwAI / 10000).toFixed(0)}~{(tcfAI / 10000).toFixed(0)}万</div>
+                        </div>
+                        <div style={{ flex: 1, background: dark ? "#1a1a2e" : "#F0FDF4", borderRadius: 4, padding: "6px 10px", border: `1px solid ${T.positive}20` }}>
+                          <div style={{ fontSize: 10, color: T.textMuted }}>效率提升预期</div>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: T.positive }}>+{prodGain?.withAI || 20}%~{prodGain?.fullAI || 35}%</div>
+                          <div style={{ fontSize: 9, color: T.textMuted }}>来源: {prodGain?.source || "综合研究"}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Section 3: Rebase CTA */}
+                    <div style={{ margin: "10px 0", background: `${T.accent}08`, borderRadius: 8, padding: "16px", border: `1px solid ${T.accent}30`, position: "relative", overflow: "hidden" }}>
+                      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: T.accent }} />
+                      <div style={{ fontSize: 13, fontWeight: 700, color: T.accent, marginBottom: 10 }}>解锁「{dept.name}」完整AI升级方案</div>
+                      <div style={{ fontSize: 12, color: T.textSecondary, lineHeight: 1.8, marginBottom: 12 }}>Rebase顾问将为您的团队量身定制：</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 14 }}>
+                        {[
+                          { icon: "01", title: "工作流诊断", desc: "找到最适合AI切入的环节" },
+                          { icon: "02", title: "工具选型", desc: "基于团队实际情况推荐方案" },
+                          { icon: "03", title: "落地陪跑", desc: "1v1指导，确保团队真正用起来" },
+                          { icon: "04", title: "ROI追踪", desc: "量化AI带来的效率提升" },
+                        ].map((item, i) => (
+                          <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                            <div style={{ minWidth: 22, height: 22, borderRadius: 4, background: T.accent, color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{item.icon}</div>
+                            <div>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: T.text }}>{item.title}</div>
+                              <div style={{ fontSize: 11, color: T.textMuted, lineHeight: 1.4 }}>{item.desc}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => ctaFormRef.current?.scrollIntoView({ behavior: "smooth" })}
+                        style={{ width: "100%", padding: "10px 20px", fontSize: 13, fontWeight: 600, borderRadius: 6, border: "none", background: T.accent, color: "#FFFFFF", cursor: "pointer" }}
+                      >预约免费诊断 →</button>
+                      <div style={{ fontSize: 11, color: T.textMuted, marginTop: 10, lineHeight: 1.6, fontStyle: "italic", textAlign: "center" }}>
+                        "强制员工用AI只会产出垃圾。我们帮你找到AI真正能提效的工作流，再手把手带团队跑通。"
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Sources */}
+        <div style={{ ...cd, marginTop: 12, padding: 0, overflow: "hidden" }}>
+          <div onClick={() => setShowSources(!showSources)} style={{ padding: "12px 16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted }}>数据来源与研究方法</div>
+            <span style={{ color: T.textMuted, fontSize: 10, transition: "transform 0.3s", display: "inline-block", transform: showSources ? "rotate(180deg)" : "none" }}>▼</span>
+          </div>
+          {showSources && (
+            <div style={{ padding: "0 16px 14px", borderTop: `1px solid ${T.border}` }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
+                {[
+                  { title: "薪资数据", text: "基于智联招聘、BOSS直聘、Michael Page 2025-2026年度薪酬报告，按城市级别分层。年薪按14个月计算（含年终奖）。" },
+                  { title: "人员配比模型", text: "基于McKinsey Global Institute (2024)、Goldman Sachs (2024)、WEF (2025) 研究报告校准。采用保守估计。" },
+                  { title: "效率提升数据", text: "基于Stanford/MIT（客服+14%）、Microsoft/GitHub（开发+55%）、HBR、Deloitte等已发表研究。" },
+                  { title: "AI成熟度基准", text: "反映当前中国中小企业AI实际部署水平。参考中国信通院、IDC中国等报告。" },
+                ].map((s, i) => (
+                  <div key={i} style={{ fontSize: 11, color: T.textMuted, lineHeight: 1.6 }}>
+                    <span style={{ color: T.accent, fontWeight: 600 }}>{s.title}：</span>{s.text}
+                  </div>
+                ))}
+                <div style={{ background: T.cardBgAlt, borderRadius: 6, padding: "8px 12px", marginTop: 2 }}>
+                  <div style={{ fontSize: 10, color: T.textMuted, lineHeight: 1.6 }}>免责声明：以上数据基于公开研究报告和行业薪资平台，仅供参考。实际效果因企业具体情况、行业特征、团队能力等因素而异。本报告不构成投资或经营决策建议。</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Early Access CTA */}
+        <div style={{ ...cd, marginTop: 12, textAlign: "center", borderTop: `3px solid ${T.accent}`, background: `${T.accent}08` }}>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4, color: T.text }}>{L.earlyTitle}</div>
+          <p style={{ fontSize: 12, color: T.textSecondary, marginBottom: 14, lineHeight: 1.6 }}>{L.earlyDesc}</p>
+          <button onClick={() => {
+            try {
+              localStorage.setItem("rebase_prefill", JSON.stringify({ name: leadName || "", phone: leadContact || "", company: cn || "", industry: ind || "" }));
+            } catch (e) {}
+            navigate("/onboarding");
+          }} style={{ display: "inline-block", padding: "12px 32px", fontSize: 15, fontWeight: 700, borderRadius: 8, border: "none", background: T.accent, color: "#FFFFFF", cursor: "pointer", boxShadow: T.shadowLg }}>
+            {L.earlyBtn}
+          </button>
+        </div>
+
+        {/* Consult CTA */}
+        <div ref={ctaFormRef} style={{ ...cd, marginTop: 12, textAlign: "center", borderTop: `3px solid ${T.positive}` }}>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4, color: T.text }}>{L.ctaTitle}</div>
+          <p style={{ fontSize: 12, color: T.textSecondary, marginBottom: 14, lineHeight: 1.6 }}>{L.ctaDesc}</p>
+          {!leadSubmitted ? (
+            <div style={{ maxWidth: 380, margin: "0 auto" }}>
+              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                <input placeholder={L.ctaNamePH} value={leadName} onChange={e => setLeadName(e.target.value)} style={{ ...inp, flex: 1, fontSize: 12, padding: "8px 10px" }} />
+                <input placeholder={L.ctaContactPH} value={leadContact} onChange={e => setLeadContact(e.target.value)} style={{ ...inp, flex: 1.3, fontSize: 12, padding: "8px 10px" }} />
+              </div>
+              <button onClick={async () => {
+                if (!leadName || !leadContact || leadSubmitting) return;
+                setLeadSubmitting(true);
+                try {
+                  await fetch("/api/submit-lead", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ sessionId, name: leadName, contact: leadContact, company: cn, employees: te, tier: overallTier.name, tierLevel: overallTier.level, score: avgCap, savings: Math.round(gcf / 10000), departments: ad.map(d => d.name).join("、"), cityTier: tierLabel }),
+                  });
+                } catch (e) { /* silently continue */ }
+                setLeadSubmitting(false);
+                setLeadSubmitted(true);
+              }} disabled={!leadName || !leadContact || leadSubmitting} style={{ width: "100%", padding: "12px 40px", fontSize: 15, fontWeight: 600, borderRadius: 8, border: "none", background: leadName && leadContact && !leadSubmitting ? T.positive : T.border, color: leadName && leadContact && !leadSubmitting ? "#FFFFFF" : T.textMuted, cursor: leadName && leadContact && !leadSubmitting ? "pointer" : "not-allowed" }}>
+                {leadSubmitting ? L.ctaSubmitting : L.ctaBtn}
+              </button>
+              <div style={{ fontSize: 10, color: T.textMuted, marginTop: 8, display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
+                {L.ctaFeatures.map((f, i) => <span key={i}>{f}</span>)}
+              </div>
+            </div>
+          ) : (
+            <div style={{ padding: "16px 0" }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: T.positive, marginBottom: 4 }}>{L.ctaOk}</div>
+              <div style={{ fontSize: 12, color: T.textSecondary, lineHeight: 1.6 }}>{L.ctaOkDesc}</div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer actions */}
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, marginTop: 12 }}>
+          <button onClick={() => {
+            setStep(0); setSel([]); setDhc({}); setCs(""); setRev(""); setCap({});
+            setRe({}); setExp(null); setCn(""); setInd(""); setCityTier("tier1");
+            setLeadSubmitted(false); setLeadSubmitting(false); setLeadName(""); setLeadContact(""); setShowSources(false);
+            setSurveyAutoSaved(false);
+          }} style={{ ...bB, fontSize: 11 }}>{L.resetBtn}</button>
+          <button onClick={() => navigate("/")} style={{ fontSize: 11, color: T.accent, cursor: "pointer", padding: "10px 16px", borderRadius: 8, border: `1px solid ${T.accent}40`, background: `${T.accent}08` }}>
+            {lang === "en" ? "← Back to Home" : "← 返回首页"}
+          </button>
+        </div>
+        <div style={{ textAlign: "center", marginTop: 20, paddingBottom: 12, fontSize: 10, color: T.textMuted }}>{L.footerNote}</div>
+      </div>
+    </div>
+  );
+}

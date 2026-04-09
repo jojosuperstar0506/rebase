@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import type { CSSProperties } from "react";
 import { Routes, Route, Link, useNavigate, useLocation } from "react-router-dom";
 
@@ -17,6 +17,8 @@ import Login from "./pages/Login";
 import Admin from "./pages/Admin";
 import Success from "./pages/Success";
 import ProtectedRoute from "./components/ProtectedRoute";
+
+const Calculator = lazy(() => import("./pages/Calculator"));
 
 // Pages where nav is hidden (full-screen standalone pages)
 const HIDE_NAV_ON = ["/login", "/onboarding"];
@@ -98,9 +100,7 @@ function Nav() {
 
       {/* Left nav links */}
       <div style={{ display: "flex", gap: 22, alignItems: "center", overflow: "hidden" }}>
-        <a href="/calculator.html" style={{ textDecoration: "none", fontSize: 14, fontWeight: 400, color: C.t2, whiteSpace: "nowrap" }}>
-          {t(nav.diagnostics, lang)}
-        </a>
+        <NavLink to="/calculator" label={t(nav.diagnostics, lang)} />
 
         {!isLoggedIn && (
           <NavLink to="/onboarding" label={t(nav.requestAccess, lang)} highlight />
@@ -162,6 +162,7 @@ function AppRoutes() {
         <Route path="/login" element={<Login />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/demo" element={<DiagnosticDashboard />} />
+        <Route path="/calculator" element={<Suspense fallback={<div style={{ padding: 40, textAlign: "center" }}>加载中...</div>}><Calculator /></Suspense>} />
         <Route path="/workflows" element={<ProtectedRoute><WorkflowScout /></ProtectedRoute>} />
 
         {/* Protected — require invite code */}
