@@ -922,5 +922,100 @@
         "conversion_index": "4.8%"
       }
     }
+  },
+  "scores": {
+    "date": "2026-03-28",
+    "brands": {
+      "Cnolés蔻一": {
+        "momentum_score": 61.4,
+        "threat_index": 55.8,
+        "data_completeness": 82,
+        "gtm_signals": [
+          { "signal": "小红书笔记量激增" },
+          { "signal": "KOL矩阵扩张" }
+        ]
+      },
+      "Songmont": {
+        "momentum_score": 62.3,
+        "threat_index": 45.2,
+        "data_completeness": 90,
+        "gtm_signals": [
+          { "signal": "高端内容质量领先" }
+        ]
+      },
+      "小CK": {
+        "momentum_score": 58.1,
+        "threat_index": 38.6,
+        "data_completeness": 88,
+        "gtm_signals": [
+          { "signal": "大促清库存折扣" }
+        ]
+      },
+      "CASSILE": {
+        "momentum_score": 55.7,
+        "threat_index": 52.4,
+        "data_completeness": 85,
+        "gtm_signals": [
+          { "signal": "抖音直播带货扩张" },
+          { "signal": "秋季新品密集上新" }
+        ]
+      },
+      "La Festin": {
+        "momentum_score": 51.4,
+        "threat_index": 32.5,
+        "data_completeness": 78,
+        "gtm_signals": [
+          { "signal": "线下快闪店布局" }
+        ]
+      }
+    }
+  },
+  "narratives": {
+    "date": "2026-03-28",
+    "strategic_summary": "本周竞品格局整体呈现「双强领跑」态势。Songmont以62.3分动量得分领跑，凭借高端轻奢定位和优质内容策略维持品牌势能；Cnolés蔻一紧随其后（61.4分），小红书笔记量大幅增长，KOL矩阵持续扩张，是本周上升最快的竞品。\n\n从渠道维度看，抖音电商正在成为竞争焦点。CASSILE在测试品牌自播+达人矩阵的组合模式，直播GMV环比增长28%。小CK和La Festin在抖音渠道表现薄弱，错失短视频电商红利。OMI应抓住抖音渠道的结构性机会，在竞品尚未完全建立优势前抢占用户心智。\n\n价格竞争方面，200-500元价格带竞争最为激烈，Cnolés蔻一和CASSILE的持续上新直接冲击该区间。500-800元区间竞争相对温和，OMI可考虑通过产品升级策略向上拓展，避开低价红海。小CK的促销折扣可能引发短期价格扰动，需做好应对预案。\n\n综合建议：OMI应重点关注Cnolés蔻一的小红书内容策略和CASSILE的直播打法，在保持核心价格带竞争力的同时，加速抖音渠道建设，并在小红书提升KOL合作层级。",
+    "action_items": [
+      {
+        "action": "分析Cnolés蔻一近期小红书高赞笔记，总结内容模板并快速复用到OMI账号",
+        "department": "市场部",
+        "urgency": "本周",
+        "rationale": "Cnolés蔻一小红书笔记量激增，内容策略值得借鉴，直接复用可快速提升曝光"
+      },
+      {
+        "action": "加速抖音品牌自播间搭建，目标两周内实现日播，并储备3-5位达人合作资源",
+        "department": "电商部",
+        "urgency": "本周",
+        "rationale": "CASSILE抖音直播GMV环比增长28%，OMI需尽快跟进该渠道，避免进一步落后"
+      },
+      {
+        "action": "小红书KOL合作升级，本月签约2位50万粉以上的时尚博主进行深度种草",
+        "department": "市场部",
+        "urgency": "本月",
+        "rationale": "Songmont在小红书内容质量上领先，OMI需提升KOL层级以保持竞争力"
+      },
+      {
+        "action": "准备大促防御性定价方案，预设小CK发起价格战时的应对策略",
+        "department": "运营部",
+        "urgency": "本月",
+        "rationale": "小CK正在清库存折扣，大促期间可能引发价格扰动，需提前准备应对预案"
+      },
+      {
+        "action": "规划500-800元「轻奢升级」产品线，Q3推出首批SKU拓展高端区间",
+        "department": "产品部",
+        "urgency": "本季度",
+        "rationale": "该价格带竞争相对温和，是OMI向上拓展、避开低价红海的战略机会"
+      },
+      {
+        "action": "建立竞品抖音直播监控机制，每周输出CASSILE、Cnolés蔻一直播数据周报",
+        "department": "数据部",
+        "urgency": "本季度",
+        "rationale": "持续跟踪竞品直播策略演变，为OMI直播间运营提供数据支撑"
+      },
+      {
+        "action": "关注La Festin线下快闪店效果，评估OMI线下体验营销的可行性",
+        "department": "品牌部",
+        "urgency": "本季度",
+        "rationale": "线下体验店可提升品牌调性认知，La Festin的尝试值得关注和借鉴"
+      }
+    ]
   }
 }
