@@ -1776,7 +1776,8 @@
             const fallbackEl = document.getElementById(channel === 'tmall' ? 'tmallRankingFallback' : 'douyinRankingFallback');
 
             try {
-                const resp = await fetch('/api/rankings?source=' + source + '&limit=100');
+                const apiBase = window.location.port === '8080' ? '' : 'http://localhost:8080';
+                const resp = await fetch(apiBase + '/api/rankings?source=' + source + '&limit=100');
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
                 const data = await resp.json();
                 if (!data.products || data.products.length === 0) throw new Error('No ranking data');
@@ -1873,9 +1874,11 @@
         // Data source tracking
         let dataSource = null; // 'api' | 'static' | null
 
-        // API not available on Vercel (static hosting only) — use same-origin so 404 is instant
-        // and the static JSON fallback loads without waiting for a cross-origin timeout.
-        const API_BASE = '';
+        // Determine API base URL: same origin if served by api_server, else localhost:8080
+        const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const API_BASE = isLocalDev
+            ? (window.location.port === '8080' ? '' : 'http://localhost:8080')
+            : '';
 
         // Static JSON fallback path (served by Vercel or any static host)
         const STATIC_JSON_PATH = '/data/competitors/competitors_latest.json';
