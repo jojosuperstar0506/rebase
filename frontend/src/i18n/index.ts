@@ -113,6 +113,21 @@ export const T = {
     group: { en: "Group", zh: "分组" },
     addedOn: { en: "Added", zh: "添加时间" },
     via: { en: "via", zh: "来源" },
+    // ── TASK-11: loading / sync / welcome ───────────────────────────
+    loading: { en: "Loading intelligence...", zh: "加载情报数据..." },
+    liveDataFrom: { en: "Live data from Rebase backend", zh: "来自Rebase后端的实时数据" },
+    localOnly: { en: "Local data · Backend connection pending", zh: "本地数据 · 后端连接中" },
+    connectionIssue: { en: "Connection issue · Showing cached data", zh: "连接异常 · 显示缓存数据" },
+    refresh: { en: "Refresh", zh: "刷新" },
+    welcomeTitle: { en: "Welcome to Competitive Intelligence", zh: "欢迎使用竞品情报" },
+    welcomeDesc: { en: "Set up your brand profile to get started. We'll help you track and analyze your competitors across Chinese ecommerce platforms.", zh: "设置品牌资料以开始使用，我们将帮助你在中国电商平台上追踪和分析竞品。" },
+    setupMyBrand: { en: "Set Up My Brand →", zh: "设置我的品牌 →" },
+    unsyncedData: { en: "You have local data that hasn't been synced to the cloud.", zh: "您有未同步到云端的本地数据。" },
+    syncNow: { en: "Sync Now", zh: "立即同步" },
+    syncing: { en: "Syncing...", zh: "同步中..." },
+    syncComplete: { en: "Data synced successfully", zh: "数据同步成功" },
+    somethingWrong: { en: "Something went wrong", zh: "出了点问题" },
+    tryRefresh: { en: "Try refreshing the page.", zh: "请尝试刷新页面。" },
   },
 
   // ── Home ────────────────────────────────────────────────────────

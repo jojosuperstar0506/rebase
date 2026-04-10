@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { t, T } from '../../i18n';
 import CISubNav from '../../components/ci/CISubNav';
+import { CISettingsSkeleton } from '../../components/ci/CISkeleton';
 import {
   getCIWorkspace, saveCIWorkspace,
   getCICompetitors, saveCICompetitors,
@@ -573,6 +574,11 @@ function ConnectionsSection({ C, lang }: { C: ReturnType<typeof useApp>['colors'
 export default function CISettings() {
   const { colors: C, lang } = useApp();
   const [competitors, setCompetitors] = useState<CICompetitor[]>(getCICompetitors());
+  // Brief skeleton on first mount so the page feels consistent with other CI pages
+  const [ready, setReady] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setReady(true), 200); return () => clearTimeout(t); }, []);
+
+  if (!ready) return <CISettingsSkeleton />;
 
   function handleAddCompetitor(c: CICompetitor) {
     const updated = [...competitors, c];

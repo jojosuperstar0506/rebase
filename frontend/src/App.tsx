@@ -23,6 +23,7 @@ import CIDashboard from "./pages/ci/CIDashboard";
 import CILandscape from "./pages/ci/CILandscape";
 import CICompetitors from "./pages/ci/CICompetitors";
 import CISettings from "./pages/ci/CISettings";
+import { CIErrorBoundary } from "./components/ci/CIErrorBoundary";
 
 const Calculator = lazy(() => import("./pages/Calculator"));
 
@@ -186,10 +187,10 @@ function AppRoutes() {
         <Route path="/intelligence" element={<ProtectedRoute><AppDashboard /></ProtectedRoute>} />
 
         {/* CI vFinal — new competitive intelligence tab */}
-        <Route path="/ci" element={<ProtectedRoute><CIDashboard /></ProtectedRoute>} />
-        <Route path="/ci/landscape" element={<ProtectedRoute><CILandscape /></ProtectedRoute>} />
-        <Route path="/ci/competitors" element={<ProtectedRoute><CICompetitors /></ProtectedRoute>} />
-        <Route path="/ci/settings" element={<ProtectedRoute><CISettings /></ProtectedRoute>} />
+        <Route path="/ci" element={<ProtectedRoute><CIErrorBoundary><CIDashboard /></CIErrorBoundary></ProtectedRoute>} />
+        <Route path="/ci/landscape" element={<ProtectedRoute><CIErrorBoundary><CILandscape /></CIErrorBoundary></ProtectedRoute>} />
+        <Route path="/ci/competitors" element={<ProtectedRoute><CIErrorBoundary><CICompetitors /></CIErrorBoundary></ProtectedRoute>} />
+        <Route path="/ci/settings" element={<ProtectedRoute><CIErrorBoundary><CISettings /></CIErrorBoundary></ProtectedRoute>} />
       </Routes>
     </div>
   );
