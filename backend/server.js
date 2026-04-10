@@ -773,25 +773,103 @@ app.get('/api/ci/connections', async (req, res) => {
   }
 });
 
+// --- Cookie encryption helpers (AES-256-CBC, PBKDF2 key derivation) ---
+const COOKIE_KEY = process.env.COOKIE_ENCRYPTION_KEY || 'dev-key-change-in-production';
+const COOKIE_SALT = 'rebase-ci-cookie-salt';
+
+function encryptCookie(plaintext) {
+  const key = crypto.pbkdf2Sync(COOKIE_KEY, COOKIE_SALT, 100000, 32, 'sha256');
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+  let encrypted = cipher.update(plaintext, 'utf8', 'base64');
+  encrypted += cipher.final('base64');
+  return iv.toString('base64') + ':' + encrypted;
+}
+
+function decryptCookie(stored) {
+  const key = crypto.pbkdf2Sync(COOKIE_KEY, COOKIE_SALT, 100000, 32, 'sha256');
+  const [ivB64, encB64] = stored.split(':');
+  const iv = Buffer.from(ivB64, 'base64');
+  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+  let decrypted = decipher.update(encB64, 'base64', 'utf8');
+  decrypted += decipher.final('utf8');
+  return decrypted;
+}
+
 // POST /api/ci/connections — connect a platform (store encrypted cookies)
 app.post('/api/ci/connections', async (req, res) => {
   try {
     const { workspace_id, platform, cookies } = req.body;
+    if (!workspace_id || !platform || !cookies) {
+      return res.status(400).json({ error: 'Missing workspace_id, platform, or cookies' });
+    }
 
-    // TODO TASK-10: Implement AES-256-GCM encryption for cookies
-    // For now, store as-is (TEMPORARY — must encrypt before production)
+    const encrypted = encryptCookie(cookies);
+
     const { rows } = await pool.query(
-      `INSERT INTO platform_connections (workspace_id, platform, cookies_encrypted, status)
-       VALUES ($1, $2, $3, 'active')
-       ON CONFLICT (workspace_id, platform) DO UPDATE SET cookies_encrypted = $3, status = 'active', updated_at = NOW()
-       RETURNING id, workspace_id, platform, status, created_at`,
-      [workspace_id, platform, cookies]
+      `INSERT INTO platform_connections (workspace_id, platform, cookies_encrypted, status, expires_at)
+       VALUES ($1, $2, $3, 'active', NOW() + INTERVAL '24 hours')
+       ON CONFLICT (workspace_id, platform) DO UPDATE
+         SET cookies_encrypted = $3, status = 'active', updated_at = NOW(),
+             expires_at = NOW() + INTERVAL '24 hours'
+       RETURNING id, workspace_id, platform, status, expires_at, created_at`,
+      [workspace_id, platform, encrypted]
     );
 
+    console.log(`[CI] Cookies saved for ${platform} (workspace ${workspace_id})`);
     res.status(201).json(rows[0]);
   } catch (err) {
     console.error('[CI] POST connections error:', err.message);
     res.status(500).json({ error: 'Failed to save connection' });
+  }
+});
+
+// POST /api/ci/connections/check — check if cookies are still valid
+app.post('/api/ci/connections/check', async (req, res) => {
+  try {
+    const { workspace_id, platform } = req.body;
+    if (!workspace_id || !platform) {
+      return res.status(400).json({ error: 'Missing workspace_id or platform' });
+    }
+
+    const { rows } = await pool.query(
+      'SELECT * FROM platform_connections WHERE workspace_id = $1 AND platform = $2',
+      [workspace_id, platform]
+    );
+
+    if (rows.length === 0) return res.json({ status: 'not_connected' });
+
+    const conn = rows[0];
+
+    // Check expiry
+    if (conn.expires_at && new Date(conn.expires_at) < new Date()) {
+      await pool.query(
+        "UPDATE platform_connections SET status = 'expired' WHERE id = $1",
+        [conn.id]
+      );
+      return res.json({ status: 'expired', expired_at: conn.expires_at });
+    }
+
+    // Check if approaching expiry (within 6 hours)
+    if (conn.expires_at) {
+      const hoursLeft = (new Date(conn.expires_at) - new Date()) / (1000 * 60 * 60);
+      if (hoursLeft < 6) {
+        await pool.query(
+          "UPDATE platform_connections SET status = 'expiring' WHERE id = $1",
+          [conn.id]
+        );
+        return res.json({ status: 'expiring', hours_left: Math.round(hoursLeft) });
+      }
+    }
+
+    res.json({
+      status: conn.status,
+      last_scrape: conn.last_successful_scrape,
+      expires_at: conn.expires_at,
+    });
+  } catch (err) {
+    console.error('[CI] POST connections/check error:', err.message);
+    res.status(500).json({ error: 'Failed to check connection' });
   }
 });
 
