@@ -58,6 +58,16 @@ app.use(express.json());
 app.use('/api', apiLimiter);
 app.use('/api', requireSecret);
 
+// CI endpoints get a higher rate limit (dashboard loads 4-5 calls at once)
+const ciRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: { error: 'Too many requests. Please try again in a minute.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/ci/', ciRateLimit);
+
 // ── Anthropic client ────────────────────────────────────────────────────────
 const anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 

@@ -244,6 +244,25 @@ All config is region-agnostic via environment variables. See `.env.example`.
 
 ---
 
+## Competitive Intelligence (CI vFinal)
+
+Track, analyze, and outmaneuver competitors across Chinese ecommerce platforms.
+
+**Features:**
+- Dashboard with bubble chart (threat x momentum), rankings, AI narratives
+- Market landscape map with 20+ reference brands
+- Competitor cards with side-by-side comparison
+- Deep dive: 7-dimension competitive profile per brand
+- Score trend charts (30/90 day history)
+- Alert feed for significant score changes
+- AI-powered competitor suggestions
+- Export to CSV/PDF
+- Mobile responsive, bilingual (EN/ZH)
+
+**CI tab:** `/ci` (requires login)
+
+---
+
 ## Quick Start
 
 ### Prerequisites
