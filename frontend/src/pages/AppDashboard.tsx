@@ -138,34 +138,40 @@ export default function AppDashboard() {
 
   useEffect(() => {
     (async () => {
-      // 1. Try live API (works once ECS backend is deployed)
+      // Try the live API first (JSON response = backend is deployed and ready).
+      // If it returns non-JSON or fails, fall back to the static file.
+      // Once the ECS backend is set up, this automatically switches to live data.
+      let usedApi = false;
       try {
         const token = localStorage.getItem("rebase_token") || "";
         const res = await fetch("/api/v2/dashboard?industry=bag", {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
-          signal: AbortSignal.timeout(4000), // don't wait long if backend is down
         });
         if (res.ok) {
-          setData(await res.json());
-          setLoading(false);
-          return;
+          const contentType = res.headers.get("content-type") || "";
+          if (contentType.includes("application/json")) {
+            setData(await res.json());
+            usedApi = true;
+          }
         }
       } catch {
-        // Backend not reachable — fall through to static fallback
+        // Network error or backend not reachable — fall through
       }
 
-      // 2. Fallback: read directly from the static JSON Vercel already serves.
-      //    This works immediately, no backend needed.
-      try {
-        const res = await fetch("/data/competitors/competitors_latest.json");
-        if (!res.ok) throw new Error("static file missing");
-        const raw = await res.json();
-        setData(mapStaticJson(raw));
-      } catch {
-        setError("Unable to load data. Please try again later.");
-      } finally {
-        setLoading(false);
+      if (!usedApi) {
+        // Static fallback: the competitors_latest.json Vercel serves directly.
+        // This is the primary data source until the backend is deployed.
+        try {
+          const res = await fetch("/data/competitors/competitors_latest.json");
+          if (!res.ok) throw new Error("static file not found");
+          const raw = await res.json();
+          setData(mapStaticJson(raw));
+        } catch {
+          setError("Unable to load intelligence data. Please try refreshing.");
+        }
       }
+
+      setLoading(false);
     })();
   }, []);
 
