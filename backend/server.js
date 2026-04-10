@@ -873,6 +873,31 @@ app.post('/api/ci/connections/check', async (req, res) => {
   }
 });
 
+// GET /api/ci/pipeline/status — last pipeline run status
+app.get('/api/ci/pipeline/status', async (req, res) => {
+  const statusFile = '/tmp/rebase-pipeline-status.json';
+
+  try {
+    if (fs.existsSync(statusFile)) {
+      const raw = fs.readFileSync(statusFile, 'utf8');
+      const status = JSON.parse(raw);
+      res.json(status);
+    } else {
+      // Check database for last analysis timestamp
+      const { rows } = await pool.query(
+        'SELECT MAX(analyzed_at) as last_run FROM analysis_results'
+      );
+      res.json({
+        status: 'unknown',
+        last_analysis: rows[0]?.last_run || null,
+        message: 'No pipeline status file found. Pipeline may not have run yet.',
+      });
+    }
+  } catch (err) {
+    res.json({ status: 'error', message: err.message });
+  }
+});
+
 // POST /api/ci/scrape — trigger a scrape for a specific brand (background process)
 app.post('/api/ci/scrape', async (req, res) => {
   const { brand_name, platform, tier } = req.body;
