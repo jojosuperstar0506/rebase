@@ -56,22 +56,55 @@ class CompetitorIntelOrchestrator:
         sycm_cookies: Optional[str] = None,
         proxy: Optional[str] = None,
         playwright_browser=None,
+        profile_dir: Optional[str] = None,
     ):
         """
         Args:
             mode: 'browser' (Cowork/Playwright) or 'api' (Aliyun)
-            xhs_cookies: XHS session cookies
-            douyin_cookies: Douyin session cookies
-            sycm_cookies: 生意参谋 session cookies
+            xhs_cookies: XHS session cookies (optional if profile_dir is set)
+            douyin_cookies: Douyin session cookies (optional if profile_dir is set)
+            sycm_cookies: 生意参谋 session cookies (optional if profile_dir is set)
             proxy: Proxy URL for API mode
-            playwright_browser: Playwright Browser instance (browser mode)
+            playwright_browser: Playwright Browser instance (browser mode, e.g. Cowork)
+            profile_dir: Path to persistent Chrome profile directory. When set,
+                         the scraper reuses an existing logged-in Chrome session —
+                         no cookie extraction needed. Run setup_profiles.py once to
+                         log in and save the profile.
         """
         self.mode = mode
         self.xhs_scraper = XhsScraper(mode=mode, cookies=xhs_cookies, proxy=proxy)
         self.douyin_scraper = DouyinScraper(mode=mode, cookies=douyin_cookies, proxy=proxy)
         self.sycm_scraper = SycmScraper(mode=mode, cookies=sycm_cookies)
         self.browser = playwright_browser
+        self.profile_dir = profile_dir
+        self._playwright = None  # held open for cleanup when using profile_dir
         self.results: Dict[str, dict] = {}
+
+    async def _launch_persistent_browser(self):
+        """
+        Launch Chrome using a saved profile directory.
+
+        The profile retains login sessions for XHS, Douyin, and SYCM so no
+        cookie strings are needed. The browser window is visible (headless=False)
+        to appear more human-like and avoid bot detection.
+
+        Call setup_profiles.py once to create and populate the profile.
+        """
+        from playwright.async_api import async_playwright
+
+        logger.info(f"Launching persistent browser from profile: {self.profile_dir}")
+        self._playwright = await async_playwright().start()
+        context = await self._playwright.chromium.launch_persistent_context(
+            user_data_dir=self.profile_dir,
+            headless=False,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-first-run",
+                "--no-default-browser-check",
+            ],
+            viewport={"width": 1280, "height": 800},
+        )
+        return context
 
     async def run_full_scrape(
         self,
@@ -101,8 +134,15 @@ class CompetitorIntelOrchestrator:
         logger.info(f"Starting scrape: {len(all_brands)} brands, platforms: {platforms}")
 
         page = None
-        if self.mode == "browser" and self.browser:
-            page = await self.browser.new_page()
+        context = None
+        if self.mode == "browser":
+            if self.browser:
+                # Externally provided browser (Cowork / Claude for Chrome)
+                page = await self.browser.new_page()
+            elif self.profile_dir:
+                # Persistent profile mode (Joanna's laptop — no cookies needed)
+                context = await self._launch_persistent_browser()
+                page = context.pages[0] if context.pages else await context.new_page()
 
         for i, brand in enumerate(all_brands):
             logger.info(f"[{i+1}/{len(all_brands)}] Scraping {brand['name']}...")
@@ -111,6 +151,11 @@ class CompetitorIntelOrchestrator:
 
         if page:
             await page.close()
+        if context:
+            await context.close()
+        if self._playwright:
+            await self._playwright.stop()
+            self._playwright = None
 
         # Assemble final output
         output = self._assemble_output()
@@ -127,14 +172,24 @@ class CompetitorIntelOrchestrator:
         platforms = platforms or ["xhs", "douyin", "sycm"]
 
         page = None
-        if self.mode == "browser" and self.browser:
-            page = await self.browser.new_page()
+        context = None
+        if self.mode == "browser":
+            if self.browser:
+                page = await self.browser.new_page()
+            elif self.profile_dir:
+                context = await self._launch_persistent_browser()
+                page = context.pages[0] if context.pages else await context.new_page()
 
         brand_data = await self._scrape_single_brand(brand, platforms, page)
         self.results[brand_name] = brand_data
 
         if page:
             await page.close()
+        if context:
+            await context.close()
+        if self._playwright:
+            await self._playwright.stop()
+            self._playwright = None
 
         return brand_data
 
@@ -392,17 +447,32 @@ async def main():
     parser.add_argument("--sycm-cookies", type=str, help="SYCM cookie string")
     parser.add_argument("--proxy", type=str, help="Proxy URL for API mode")
     parser.add_argument("--push", action="store_true", help="Push to GitHub after scrape")
+    parser.add_argument(
+        "--profile-dir", type=str,
+        help="Path to persistent Chrome profile directory (no cookies needed). "
+             "Run setup_profiles.py once to create it. Also reads SCRAPER_PROFILE_DIR from .env.",
+    )
 
     args = parser.parse_args()
 
     platforms = args.platform.split(",") if args.platform else None
 
+    # Resolve profile dir — CLI flag takes precedence over .env
+    profile_dir = args.profile_dir or os.environ.get("SCRAPER_PROFILE_DIR", "")
+
+    # Auto-switch to browser mode when a profile dir is configured
+    mode = args.mode
+    if profile_dir and mode == "api":
+        mode = "browser"
+        logger.info(f"SCRAPER_PROFILE_DIR detected — switching to browser mode automatically")
+
     orchestrator = CompetitorIntelOrchestrator(
-        mode=args.mode,
+        mode=mode,
         xhs_cookies=args.xhs_cookies or os.environ.get("XHS_COOKIES", ""),
         douyin_cookies=args.douyin_cookies or os.environ.get("DOUYIN_COOKIES", ""),
         sycm_cookies=args.sycm_cookies or os.environ.get("SYCM_COOKIES", ""),
         proxy=args.proxy or os.environ.get("SCRAPER_PROXY", ""),
+        profile_dir=profile_dir or None,
     )
 
     if args.brand:
@@ -419,6 +489,25 @@ async def main():
         orchestrator.save_json(output, args.output_dir)
         if args.push:
             await orchestrator.push_to_github(output)
+
+        # Push to PostgreSQL for the live SaaS dashboard
+        # Non-fatal: if DB push fails, JSON files are still written
+        try:
+            from .db_push import push_scrape_results_sync
+            # Load scores and narratives from the enriched Vercel JSON if available
+            import json as _json
+            from pathlib import Path
+            vercel_json = Path(__file__).parent.parent.parent / "frontend" / "public" / "data" / "competitors" / "competitors_latest.json"
+            scores = None
+            narratives = None
+            if vercel_json.exists():
+                with open(vercel_json, encoding="utf-8") as f:
+                    enriched = _json.load(f)
+                scores = enriched.get("scores")
+                narratives = enriched.get("narratives")
+            push_scrape_results_sync(output, scores=scores, narratives=narratives)
+        except Exception as e:
+            logger.warning(f"PostgreSQL push skipped: {e}")
     else:
         print(json.dumps(output, ensure_ascii=False, indent=2))
 

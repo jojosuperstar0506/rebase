@@ -17,6 +17,11 @@ once the package structure is finalized.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .routers.auth_v2 import router as auth_v2_router
+from .routers.customers import router as customers_router
+from .routers.dashboard_v2 import router as dashboard_v2_router
+from .db import get_pool, close_pool
+
 # ---------------------------------------------------------------------------
 # Service router imports (placeholder — adjust paths to match actual layout)
 # ---------------------------------------------------------------------------
@@ -32,6 +37,20 @@ app = FastAPI(
     version="0.1.0",
     description="Unified gateway for Rebase platform services",
 )
+
+
+@app.on_event("startup")
+async def startup():
+    try:
+        await get_pool()
+    except Exception as e:
+        import logging
+        logging.warning(f"DB pool init failed (non-fatal): {e}")
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    await close_pool()
 
 # ---------------------------------------------------------------------------
 # Middleware
@@ -61,3 +80,9 @@ app.add_middleware(
 @app.get("/health", tags=["infra"])
 async def health_check():
     return {"status": "ok"}
+
+
+# v2 routes — self-serve SaaS layer
+app.include_router(auth_v2_router)
+app.include_router(customers_router)
+app.include_router(dashboard_v2_router)

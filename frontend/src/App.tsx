@@ -17,11 +17,13 @@ import Login from "./pages/Login";
 import Admin from "./pages/Admin";
 import Success from "./pages/Success";
 import ProtectedRoute from "./components/ProtectedRoute";
+import Signup from "./pages/Signup";
+import AppDashboard from "./pages/AppDashboard";
 
 const Calculator = lazy(() => import("./pages/Calculator"));
 
 // Pages where nav is hidden (full-screen standalone pages)
-const HIDE_NAV_ON = ["/login", "/onboarding"];
+const HIDE_NAV_ON = ["/login", "/onboarding", "/signup"];
 
 function NavLink({ to, label, highlight }: { to: string; label: string; highlight?: boolean }) {
   const { colors: C } = useApp();
@@ -108,6 +110,7 @@ function Nav() {
 
         {isLoggedIn && (
           <>
+            <NavLink to="/intelligence" label="竞品分析" />
             <NavLink to="/agents" label={t(nav.agents, lang)} />
             <NavLink to="/workflows" label={t(nav.workflows, lang)} />
             <NavLink to="/costs" label={t(nav.costs, lang)} />
@@ -170,6 +173,12 @@ function AppRoutes() {
         <Route path="/agents/xhs-content" element={<ProtectedRoute><XhsWarroom /></ProtectedRoute>} />
         <Route path="/agents/market-intelligence" element={<ProtectedRoute><MarketIntelligence /></ProtectedRoute>} />
         <Route path="/costs" element={<ProtectedRoute><CostDashboard /></ProtectedRoute>} />
+
+        {/* Self-serve signup (public — customer applies for access) */}
+        <Route path="/signup" element={<Signup />} />
+
+        {/* Intelligence dashboard — tab inside the authenticated shell */}
+        <Route path="/intelligence" element={<ProtectedRoute><AppDashboard /></ProtectedRoute>} />
       </Routes>
     </div>
   );
