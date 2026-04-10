@@ -8,6 +8,7 @@ import { useCIData } from '../../hooks/useCIData';
 import { CIDashboardSkeleton } from '../../components/ci/CISkeleton';
 import CIWelcomeBanner from '../../components/ci/CIWelcomeBanner';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
+import { exportDashboardCSV, exportDashboardPDF, showExportToast } from '../../utils/ciExport';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -146,6 +147,16 @@ export default function CIDashboard() {
     setTimeout(() => setSyncDone(false), 3000);
   }
 
+  function handleExportCSV() {
+    exportDashboardCSV(data.brands);
+    showExportToast(t(T.ci.csvExported, lang), C as unknown as Record<string, string>);
+  }
+
+  function handleExportPDF() {
+    showExportToast(t(T.ci.openingPrint, lang), C as unknown as Record<string, string>);
+    setTimeout(() => exportDashboardPDF(), 400);
+  }
+
   // Quick stats
   const watchlistBrands = data.brands.filter(b => b.tier === 'watchlist');
   const avgThreat = watchlistBrands.length
@@ -228,90 +239,145 @@ export default function CIDashboard() {
     );
   }
 
+  // Shared export button style
+  const exportBtnStyle: CSSProperties = {
+    background: 'transparent',
+    border: `1px solid ${C.bd}`,
+    color: C.t2,
+    padding: isMobile ? '8px 12px' : '6px 14px',
+    borderRadius: 6,
+    fontSize: 12,
+    cursor: 'pointer',
+    minHeight: isMobile ? 44 : 32,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 5,
+    whiteSpace: 'nowrap' as CSSProperties['whiteSpace'],
+  };
+
   return (
     <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: isMobile ? '16px 12px' : '32px 24px', fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-        <CISubNav />
-
-        {/* Header */}
-        <div style={{ marginBottom: isMobile ? 16 : 24 }}>
-          <h1 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, marginBottom: 6, marginTop: 0 }}>
-            {t(T.ci.title, lang)}
-          </h1>
-          <p style={{ color: C.t2, fontSize: 14, margin: 0 }}>{t(T.ci.subtitle, lang)}</p>
+        {/* Sub-nav is outside the print area */}
+        <div data-no-print>
+          <CISubNav />
         </div>
 
-        {/* First-visit welcome banner */}
-        <CIWelcomeBanner />
+        {/* Print area — everything inside here is exported to PDF */}
+        <div id="ci-print-area">
 
-        {/* Sync banner */}
-        {needsSync && !syncDone && (
-          <div style={{
-            background: `${C.ac}15`, border: `1px solid ${C.ac}44`, borderRadius: 10,
-            padding: '10px 20px', marginBottom: 12,
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            fontSize: 13,
-          }}>
-            <span style={{ color: C.t2 }}>{t(T.ci.unsyncedData, lang)}</span>
-            <button
-              onClick={handleSync}
-              disabled={syncing}
-              style={{
-                background: C.ac, border: 'none', borderRadius: 6,
-                padding: '5px 14px', color: '#fff', fontSize: 12, fontWeight: 600,
-                cursor: syncing ? 'default' : 'pointer', opacity: syncing ? 0.7 : 1, flexShrink: 0, marginLeft: 12,
-              }}
-            >
-              {syncing ? t(T.ci.syncing, lang) : t(T.ci.syncNow, lang)}
-            </button>
+          {/* Print-only report header (hidden on screen) */}
+          <div data-print-only style={{ display: 'none', marginBottom: 20 }}>
+            <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4, marginTop: 0 }}>
+              {t(T.ci.reportTitle, lang)}
+            </h1>
+            <p style={{ fontSize: 12, color: '#666', marginBottom: 0 }}>
+              {workspace?.brand_name ? `${workspace.brand_name} · ` : ''}{t(T.ci.generatedOn, lang)} {new Date().toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US')} · Rebase
+            </p>
           </div>
-        )}
-        {syncDone && (
-          <div style={{
-            background: `${C.success}15`, border: `1px solid ${C.success}44`, borderRadius: 10,
-            padding: '10px 20px', marginBottom: 12, fontSize: 13, color: C.success,
-          }}>
-            ✓ {t(T.ci.syncComplete, lang)}
-          </div>
-        )}
 
-        {/* Status banner */}
-        <div style={{
-          background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 10,
-          padding: '10px 20px', marginBottom: 24,
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          fontSize: 13, color: C.t2,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: bannerColor, display: 'inline-block', flexShrink: 0 }} />
-            <span>{bannerText}</span>
-            {source === 'local' && (
-              <span style={{ color: C.t3, fontSize: 11 }}>· {lang === 'zh' ? '数据仅保存在本设备' : 'Data saved on this device only'}</span>
+          {/* Header */}
+          <div style={{ marginBottom: isMobile ? 16 : 24 }}>
+            <h1 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, marginBottom: 6, marginTop: 0 }}>
+              {t(T.ci.title, lang)}
+            </h1>
+            <p style={{ color: C.t2, fontSize: 14, margin: 0 }}>{t(T.ci.subtitle, lang)}</p>
+          </div>
+
+          {/* First-visit welcome banner (no-print) */}
+          <div data-no-print>
+            <CIWelcomeBanner />
+          </div>
+
+          {/* Sync banner (no-print) */}
+          <div data-no-print>
+            {needsSync && !syncDone && (
+              <div style={{
+                background: `${C.ac}15`, border: `1px solid ${C.ac}44`, borderRadius: 10,
+                padding: '10px 20px', marginBottom: 12,
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                fontSize: 13,
+              }}>
+                <span style={{ color: C.t2 }}>{t(T.ci.unsyncedData, lang)}</span>
+                <button
+                  onClick={handleSync}
+                  disabled={syncing}
+                  style={{
+                    background: C.ac, border: 'none', borderRadius: 6,
+                    padding: '5px 14px', color: '#fff', fontSize: 12, fontWeight: 600,
+                    cursor: syncing ? 'default' : 'pointer', opacity: syncing ? 0.7 : 1, flexShrink: 0, marginLeft: 12,
+                  }}
+                >
+                  {syncing ? t(T.ci.syncing, lang) : t(T.ci.syncNow, lang)}
+                </button>
+              </div>
+            )}
+            {syncDone && (
+              <div style={{
+                background: `${C.success}15`, border: `1px solid ${C.success}44`, borderRadius: 10,
+                padding: '10px 20px', marginBottom: 12, fontSize: 13, color: C.success,
+              }}>
+                ✓ {t(T.ci.syncComplete, lang)}
+              </div>
             )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-            <span style={{ color: C.t3, fontSize: 12 }}>
-              {t(T.ci.lastUpdated, lang)}: {new Date(data.last_updated).toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-US')}
-            </span>
-            {/* Refresh button — SVG circular arrow */}
-            <button
-              onClick={() => refresh()}
-              title={t(T.ci.refresh, lang)}
-              style={{
-                background: 'none', border: `1px solid ${C.bd}`, borderRadius: '50%',
-                width: 28, height: 28, cursor: 'pointer', display: 'flex',
-                alignItems: 'center', justifyContent: 'center', padding: 0, color: C.t2,
-                flexShrink: 0,
-              }}
-            >
-              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="23 4 23 10 17 10" />
-                <polyline points="1 20 1 14 7 14" />
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+
+          {/* Status banner */}
+          <div style={{
+            background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 10,
+            padding: '10px 20px', marginBottom: 12,
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            fontSize: 13, color: C.t2,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: bannerColor, display: 'inline-block', flexShrink: 0 }} />
+              <span>{bannerText}</span>
+              {source === 'local' && (
+                <span style={{ color: C.t3, fontSize: 11 }}>· {lang === 'zh' ? '数据仅保存在本设备' : 'Data saved on this device only'}</span>
+              )}
+            </div>
+            <div data-no-print style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+              <span style={{ color: C.t3, fontSize: 12 }}>
+                {t(T.ci.lastUpdated, lang)}: {new Date(data.last_updated).toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-US')}
+              </span>
+              {/* Refresh button — SVG circular arrow */}
+              <button
+                onClick={() => refresh()}
+                title={t(T.ci.refresh, lang)}
+                style={{
+                  background: 'none', border: `1px solid ${C.bd}`, borderRadius: '50%',
+                  width: 28, height: 28, cursor: 'pointer', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', padding: 0, color: C.t2,
+                  flexShrink: 0,
+                }}
+              >
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="23 4 23 10 17 10" />
+                  <polyline points="1 20 1 14 7 14" />
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Export bar (no-print) */}
+          <div data-no-print style={{
+            display: 'flex', gap: 8, marginBottom: 24,
+            flexWrap: 'wrap' as CSSProperties['flexWrap'],
+          }}>
+            <button onClick={handleExportCSV} style={exportBtnStyle} title={t(T.ci.exportCSV, lang)}>
+              <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
               </svg>
+              {t(T.ci.exportCSV, lang)}
+            </button>
+            <button onClick={handleExportPDF} style={exportBtnStyle} title={t(T.ci.exportPDF, lang)}>
+              <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" />
+              </svg>
+              {t(T.ci.exportPDF, lang)}
             </button>
           </div>
-        </div>
 
         {/* Quick stats row — 2x2 grid on mobile, 4-in-a-row on desktop */}
         <div style={{
@@ -595,6 +661,7 @@ export default function CIDashboard() {
           </div>
         )}
 
+        </div>{/* end ci-print-area */}
       </div>
     </div>
   );

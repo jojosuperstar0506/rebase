@@ -136,6 +136,13 @@ export const T = {
     gotIt: { en: "Got it", zh: "知道了" },
     newUpdates: { en: "New updates available", zh: "有新的更新" },
     tryNew: { en: "Try our new Competitive Intelligence tool", zh: "试试全新的竞品情报工具" },
+    // ── TASK-14: export ──────────────────────────────────────────
+    exportPDF: { en: "Export PDF", zh: "导出PDF" },
+    exportCSV: { en: "Export CSV", zh: "导出CSV" },
+    csvExported: { en: "CSV downloaded", zh: "CSV已下载" },
+    openingPrint: { en: "Opening print dialog...", zh: "正在打开打印对话框..." },
+    reportTitle: { en: "Competitive Intelligence Report", zh: "竞品情报报告" },
+    generatedOn: { en: "Generated", zh: "生成于" },
   },
 
   // ── Home ────────────────────────────────────────────────────────
