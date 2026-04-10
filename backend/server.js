@@ -787,7 +787,8 @@ app.post('/api/ci/scrape', async (req, res) => {
   ];
 
   const repoRoot = path.resolve(__dirname, '..');
-  const proc = spawn('python3', args, {
+  const pythonBin = process.env.PYTHON_BIN || 'python3.9';
+  const proc = spawn(pythonBin, args, {
     cwd: repoRoot,
     env: { ...process.env },
     detached: true,
