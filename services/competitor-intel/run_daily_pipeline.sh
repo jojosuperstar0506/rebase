@@ -25,8 +25,8 @@ $PYTHON -m services.competitor_intel.scrape_runner --platform douyin --tier watc
 echo "[$(date)] Step 2: Computing scores..."
 $PYTHON -m services.competitor_intel.scoring_pipeline --all || true
 
-# Step 3: (Future) Generate AI narratives
-# echo "[$(date)] Step 3: Generating narratives..."
-# $PYTHON -m services.competitor_intel.narrative_pipeline --all || true
+# Step 3: Generate AI narratives
+echo "[$(date)] Step 3: Generating narratives..."
+$PYTHON -m services.competitor_intel.narrative_pipeline --all || true
 
 echo "[$(date)] Daily CI pipeline complete"

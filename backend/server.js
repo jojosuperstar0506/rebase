@@ -739,11 +739,17 @@ app.get('/api/ci/dashboard', async (req, res) => {
       };
     });
 
+    const narrative = narratives[0]?.narrative || '';
+    let actionItems = narratives[0]?.action_items || [];
+    if (typeof actionItems === 'string') {
+      try { actionItems = JSON.parse(actionItems); } catch {}
+    }
+
     res.json({
-      narrative: narratives[0]?.narrative || '',
+      narrative,
       last_updated: narratives[0]?.analyzed_at || new Date().toISOString(),
       brands,
-      action_items: narratives[0]?.action_items || [],
+      action_items: actionItems,
     });
   } catch (err) {
     console.error('[CI] GET dashboard error:', err.message);
