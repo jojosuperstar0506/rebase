@@ -772,6 +772,37 @@ app.post('/api/ci/connections', async (req, res) => {
   }
 });
 
+// POST /api/ci/scrape — trigger a scrape for a specific brand (background process)
+app.post('/api/ci/scrape', async (req, res) => {
+  const { brand_name, platform, tier } = req.body;
+  if (!brand_name || !platform) {
+    return res.status(400).json({ error: 'Missing brand_name or platform' });
+  }
+
+  const { spawn } = require('child_process');
+  const args = [
+    '-m', 'services.competitor-intel.scrape_runner',
+    '--platform', platform,
+    '--brand', brand_name,
+  ];
+
+  const repoRoot = path.resolve(__dirname, '..');
+  const proc = spawn('python3', args, {
+    cwd: repoRoot,
+    env: { ...process.env },
+    detached: true,
+    stdio: 'ignore',
+  });
+  proc.unref();
+
+  console.log(`[CI] Spawned scraper: ${platform} / ${brand_name} (pid ${proc.pid})`);
+  res.json({
+    status: 'started',
+    message: `Scraping ${brand_name} on ${platform}`,
+    pid: proc.pid,
+  });
+});
+
 // ── Start server ────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
