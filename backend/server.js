@@ -930,6 +930,148 @@ app.post('/api/ci/scrape', async (req, res) => {
   });
 });
 
+// POST /api/ci/ingest — receive scraped data from local agents or server scrapers
+app.post('/api/ci/ingest', async (req, res) => {
+  const {
+    platform,
+    brand_name,
+    scrape_tier,
+    agent_id,
+    brand_profile,
+    products,
+    raw_dimensions,
+  } = req.body;
+
+  if (!platform || !brand_name) {
+    return res.status(400).json({ error: 'Missing platform or brand_name' });
+  }
+
+  try {
+    // Save brand profile
+    if (brand_profile && Object.keys(brand_profile).length > 0) {
+      await pool.query(`
+        INSERT INTO scraped_brand_profiles
+          (platform, brand_name, follower_count, total_products, avg_price,
+           price_range, engagement_metrics, content_metrics, scrape_tier, raw_dimensions)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `, [
+        platform, brand_name,
+        brand_profile.follower_count || null,
+        brand_profile.total_products || null,
+        brand_profile.avg_price || null,
+        JSON.stringify(brand_profile.price_range || null),
+        JSON.stringify(brand_profile.engagement_metrics || null),
+        JSON.stringify(brand_profile.content_metrics || null),
+        scrape_tier || 'watchlist',
+        JSON.stringify(raw_dimensions || null),
+      ]);
+    }
+
+    // Save products
+    let productsSaved = 0;
+    if (products && products.length > 0) {
+      for (const p of products) {
+        await pool.query(`
+          INSERT INTO scraped_products
+            (platform, brand_name, product_id, product_name, price, original_price,
+             sales_volume, review_count, rating, category, material_tags,
+             image_urls, product_url, scrape_tier, data_confidence)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          ON CONFLICT (platform, product_id, scraped_date)
+          DO UPDATE SET price = EXCLUDED.price, sales_volume = EXCLUDED.sales_volume,
+                        review_count = EXCLUDED.review_count, scraped_at = NOW()
+        `, [
+          platform, brand_name,
+          p.product_id || `${brand_name}-${Date.now()}-${productsSaved}`,
+          p.product_name || '',
+          p.price || null, p.original_price || null,
+          p.sales_volume || null, p.review_count || null, p.rating || null,
+          p.category || null, p.material_tags || [],
+          p.image_urls || [], p.product_url || '',
+          scrape_tier || 'watchlist', 'direct_scrape',
+        ]);
+        productsSaved++;
+      }
+    }
+
+    console.log(`[INGEST] ${platform}/${brand_name}: profile=${!!brand_profile}, products=${productsSaved}, agent=${agent_id || 'unknown'}`);
+
+    res.json({ success: true, brand_name, platform, products_saved: productsSaved });
+
+    // Auto-trigger scoring in background (non-blocking)
+    setImmediate(async () => {
+      try {
+        const { rows: workspaces } = await pool.query(`
+          SELECT DISTINCT w.id FROM workspaces w
+          JOIN workspace_competitors wc ON wc.workspace_id = w.id
+          WHERE wc.brand_name = $1
+        `, [brand_name]);
+
+        if (workspaces.length > 0) {
+          const { spawn } = require('child_process');
+          const pythonBin = process.env.PYTHON_BIN || 'python3';
+          for (const ws of workspaces) {
+            spawn(pythonBin, [
+              '-m', 'services.competitor_intel.scoring_pipeline',
+              '--workspace-id', ws.id,
+            ], {
+              cwd: process.cwd().replace('/backend', ''),
+              env: { ...process.env },
+              detached: true,
+              stdio: 'ignore',
+            }).unref();
+          }
+          console.log(`[INGEST] Triggered scoring for ${workspaces.length} workspaces after ${brand_name} ingest`);
+        }
+      } catch (err) {
+        console.error('[INGEST] Scoring trigger failed:', err.message);
+      }
+    });
+
+  } catch (err) {
+    console.error('[INGEST] Error:', err.message);
+    res.status(500).json({ error: 'Failed to ingest data', detail: err.message });
+  }
+});
+
+// GET /api/ci/scrape-targets — list brands that need scraping
+app.get('/api/ci/scrape-targets', async (req, res) => {
+  const tier = req.query.tier || 'watchlist';
+  const platform = req.query.platform || 'xhs';
+
+  try {
+    // Get all unique brands at this tier across all workspaces
+    const { rows: brands } = await pool.query(`
+      SELECT DISTINCT wc.brand_name, wc.tier, wc.platform_ids
+      FROM workspace_competitors wc
+      WHERE wc.tier = $1
+      ORDER BY wc.brand_name
+    `, [tier]);
+
+    // Enrich with last scrape time so agents can skip fresh data
+    const targets = [];
+    for (const brand of brands) {
+      const { rows: lastScrape } = await pool.query(`
+        SELECT MAX(scraped_at) as last_scraped
+        FROM scraped_brand_profiles
+        WHERE brand_name = $1 AND platform = $2
+      `, [brand.brand_name, platform]);
+
+      targets.push({
+        brand_name: brand.brand_name,
+        tier: brand.tier,
+        keyword: (brand.platform_ids || {})[platform] || brand.brand_name,
+        last_scraped: lastScrape[0]?.last_scraped || null,
+      });
+    }
+
+    res.json({ targets, count: targets.length, platform, tier });
+  } catch (err) {
+    console.error('[CI] GET scrape-targets error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch scrape targets' });
+  }
+});
+
 // ── Start server ────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
