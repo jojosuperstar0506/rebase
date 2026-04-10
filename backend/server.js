@@ -1072,6 +1072,119 @@ app.get('/api/ci/scrape-targets', async (req, res) => {
   }
 });
 
+// GET /api/ci/trends — historical score data for trend charts
+// Query params: workspace_id, competitor, metric (momentum|threat|wtp), days (default 30)
+app.get('/api/ci/trends', async (req, res) => {
+  const { workspace_id, competitor, metric, days } = req.query;
+
+  if (!workspace_id || !competitor) {
+    return res.status(400).json({ error: 'Missing workspace_id or competitor' });
+  }
+
+  const metricType = metric || 'momentum';
+  const dayCount = Math.min(parseInt(days) || 30, 180); // Max 180 days
+
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        score,
+        analyzed_at::date as date,
+        metric_version
+      FROM analysis_results
+      WHERE workspace_id = $1
+        AND competitor_name = $2
+        AND metric_type = $3
+        AND analyzed_at > NOW() - make_interval(days => $4)
+      ORDER BY analyzed_at ASC
+    `, [workspace_id, competitor, metricType, dayCount]);
+
+    // Deduplicate by date (keep latest score per day)
+    const byDate = {};
+    for (const row of rows) {
+      const dateStr = row.date.toISOString().slice(0, 10);
+      byDate[dateStr] = {
+        date: dateStr,
+        value: parseFloat(row.score),
+        version: row.metric_version,
+      };
+    }
+
+    const dataPoints = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date));
+
+    res.json({
+      competitor,
+      metric: metricType,
+      days: dayCount,
+      data: dataPoints,
+      count: dataPoints.length,
+    });
+  } catch (err) {
+    console.error('[CI] GET trends error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch trends' });
+  }
+});
+
+// GET /api/ci/trends/summary — score changes for all competitors in a workspace
+// Returns: { competitors: [{ brand_name, momentum_current, momentum_7d_ago, momentum_direction, ... }] }
+app.get('/api/ci/trends/summary', async (req, res) => {
+  const { workspace_id } = req.query;
+  if (!workspace_id) return res.status(400).json({ error: 'Missing workspace_id' });
+
+  try {
+    // Get all competitors for this workspace
+    const { rows: competitors } = await pool.query(
+      'SELECT brand_name FROM workspace_competitors WHERE workspace_id = $1',
+      [workspace_id]
+    );
+
+    const summaries = [];
+
+    for (const comp of competitors) {
+      const summary = { brand_name: comp.brand_name };
+
+      for (const metric of ['momentum', 'threat', 'wtp']) {
+        // Current score (latest)
+        const { rows: current } = await pool.query(`
+          SELECT score FROM analysis_results
+          WHERE workspace_id = $1 AND competitor_name = $2 AND metric_type = $3
+          ORDER BY analyzed_at DESC LIMIT 1
+        `, [workspace_id, comp.brand_name, metric]);
+
+        // Score from ~7 days ago
+        const { rows: weekAgo } = await pool.query(`
+          SELECT score FROM analysis_results
+          WHERE workspace_id = $1 AND competitor_name = $2 AND metric_type = $3
+            AND analyzed_at < NOW() - INTERVAL '6 days'
+          ORDER BY analyzed_at DESC LIMIT 1
+        `, [workspace_id, comp.brand_name, metric]);
+
+        const currentScore = current[0] ? parseFloat(current[0].score) : null;
+        const pastScore = weekAgo[0] ? parseFloat(weekAgo[0].score) : null;
+
+        let direction = 'stable';
+        let change = 0;
+        if (currentScore !== null && pastScore !== null) {
+          change = currentScore - pastScore;
+          if (change > 2) direction = 'rising';
+          else if (change < -2) direction = 'falling';
+        }
+
+        summary[`${metric}_current`] = currentScore;
+        summary[`${metric}_7d_ago`] = pastScore;
+        summary[`${metric}_change`] = Math.round(change * 10) / 10;
+        summary[`${metric}_direction`] = direction;
+      }
+
+      summaries.push(summary);
+    }
+
+    res.json({ workspace_id, competitors: summaries });
+  } catch (err) {
+    console.error('[CI] GET trends/summary error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch trend summary' });
+  }
+});
+
 // ── Start server ────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
