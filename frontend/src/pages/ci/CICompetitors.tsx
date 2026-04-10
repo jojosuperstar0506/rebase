@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { t, T, Lang } from '../../i18n';
 import CISubNav from '../../components/ci/CISubNav';
-import { removeCompetitor as apiRemoveCompetitor } from '../../services/ciApi';
+import { removeCompetitor as apiRemoveCompetitor, getBrandInsights } from '../../services/ciApi';
 import { useCIData } from '../../hooks/useCIData';
 import { LANDSCAPE_SEED, LandscapeBrand } from '../../data/ci/landscapeSeed';
 import { CICompetitorsSkeleton } from '../../components/ci/CISkeleton';
@@ -124,8 +124,16 @@ function PlatformPill({ name, status }: { name: string; status: 'active' | 'part
   );
 }
 
+// ── Sparkle icon for AI insight ───────────────────────────────────
+
+const SparkleIcon = ({ color }: { color: string }) => (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+    <path d="M8 1L9.5 5.5L14 7L9.5 8.5L8 13L6.5 8.5L2 7L6.5 5.5Z" fill={color} />
+  </svg>
+);
+
 function CompetitorCard({
-  profile, C, lang, isSelected, isHovered, deepDiveOpen,
+  profile, C, lang, isSelected, isHovered, deepDiveOpen, insight,
   onSelect, onHover, onDeepDive, onRemove,
 }: {
   profile: CompetitorProfile;
@@ -134,11 +142,15 @@ function CompetitorCard({
   isSelected: boolean;
   isHovered: boolean;
   deepDiveOpen: boolean;
+  insight: string | null; // null = not loaded, '' = no insight
   onSelect: () => void;
   onHover: (h: boolean) => void;
   onDeepDive: () => void;
   onRemove: () => void;
 }) {
+  const [insightExpanded, setInsightExpanded] = useState(false);
+  const INSIGHT_CLAMP = 3; // line clamp lines
+
   return (
     <div
       onMouseEnter={() => onHover(true)}
@@ -175,6 +187,44 @@ function CompetitorCard({
         <ScoreBar label={t(T.ci.momentum, lang)} score={profile.momentum_score} C={C} />
         <ScoreBar label={t(T.ci.threat, lang)} score={profile.threat_index} C={C} />
         <ScoreBar label={t(T.ci.wtp, lang)} score={profile.wtp_score} C={C} />
+      </div>
+
+      {/* AI Insight section */}
+      <div style={{ borderTop: `1px solid ${C.bd}`, paddingTop: 12, marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
+          <SparkleIcon color={C.ac} />
+          <span style={{ fontSize: 12, fontWeight: 700, color: C.ac }}>{t(T.ci.aiInsight, lang)}</span>
+        </div>
+        {insight === null ? (
+          /* Loading */
+          <p style={{ fontSize: 12, color: C.t3, fontStyle: 'italic', margin: 0 }}>
+            {t(T.ci.insightPending, lang)}
+          </p>
+        ) : insight ? (
+          /* Has insight */
+          <>
+            <p style={{
+              fontSize: 12, color: C.t2, lineHeight: 1.7, margin: 0, marginBottom: 4,
+              display: '-webkit-box',
+              WebkitLineClamp: insightExpanded ? undefined : INSIGHT_CLAMP,
+              WebkitBoxOrient: 'vertical' as any,
+              overflow: insightExpanded ? 'visible' : 'hidden',
+            }}>
+              {insight}
+            </p>
+            <button
+              onClick={() => setInsightExpanded(e => !e)}
+              style={{ background: 'none', border: 'none', padding: 0, color: C.ac, fontSize: 11, cursor: 'pointer', fontWeight: 600 }}
+            >
+              {insightExpanded ? t(T.ci.collapse, lang) : t(T.ci.readMore, lang)}
+            </button>
+          </>
+        ) : (
+          /* No insight yet */
+          <p style={{ fontSize: 12, color: C.t3, fontStyle: 'italic', margin: 0 }}>
+            {t(T.ci.insightPending, lang)}
+          </p>
+        )}
       </div>
 
       {/* Details */}
@@ -420,6 +470,16 @@ export default function CICompetitors() {
   const [viewMode, setViewMode] = useState<'cards' | 'compare'>('cards');
   const [tierFilter, setTierFilter] = useState<'all' | 'watchlist' | 'landscape'>('all');
   const [sortBy, setSortBy] = useState<'name' | 'threat' | 'momentum' | 'price'>('name');
+  // brandInsights: null = not fetched, '' = no insight, string = insight text
+  const [brandInsights, setBrandInsights] = useState<Record<string, string>>({});
+
+  // Fetch per-brand AI insights from API (falls back gracefully if endpoint absent)
+  useEffect(() => {
+    if (!workspace?.id || workspace.id === 'local') return;
+    getBrandInsights(workspace.id).then(insights => {
+      setBrandInsights(insights);
+    });
+  }, [workspace?.id]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [deepDiveOpen, setDeepDiveOpen] = useState<string | null>(null);
@@ -618,6 +678,7 @@ export default function CICompetitors() {
                 isSelected={selected.has(profile.id)}
                 isHovered={hoveredCard === profile.id}
                 deepDiveOpen={deepDiveOpen === profile.id}
+                insight={brandInsights[profile.brand_name] ?? null}
                 onSelect={() => toggleSelect(profile.id)}
                 onHover={h => setHoveredCard(h ? profile.id : null)}
                 onDeepDive={() => setDeepDiveOpen(deepDiveOpen === profile.id ? null : profile.id)}

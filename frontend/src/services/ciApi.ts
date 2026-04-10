@@ -266,6 +266,47 @@ export async function saveConnection(workspaceId: string, platform: string, cook
   return null;
 }
 
+// ─── TASK-19: Brand insights + score trends ────────────────────────
+
+// TODO: Requires GET /api/ci/brand-insights endpoint (coordinate with William)
+// Falls back to empty map if endpoint doesn't exist
+export async function getBrandInsights(workspaceId: string): Promise<Record<string, string>> {
+  const data = await tryApi<any[]>(
+    `/brand-insights?workspace_id=${encodeURIComponent(workspaceId)}`
+  );
+  if (!data) return {};
+  const map: Record<string, string> = {};
+  for (const row of data) {
+    if (row.competitor_name && row.ai_narrative) {
+      map[row.competitor_name] = row.ai_narrative;
+    }
+  }
+  return map;
+}
+
+export interface TrendDataPoint {
+  date: string;   // ISO 8601 date string, e.g. "2026-03-11"
+  value: number;  // 0-100 score
+}
+
+// TODO: Requires GET /api/ci/trends endpoint (TASK-23)
+// Returns simulated data as fallback until real historical data is available
+export async function getScoreTrends(
+  workspaceId: string,
+  competitor: string,
+  metric: string,
+  days: number
+): Promise<{ data: TrendDataPoint[]; source: 'api' | 'simulated' }> {
+  const apiData = await tryApi<TrendDataPoint[]>(
+    `/trends?workspace_id=${encodeURIComponent(workspaceId)}&competitor=${encodeURIComponent(competitor)}&metric=${encodeURIComponent(metric)}&days=${days}`
+  );
+  if (apiData && apiData.length > 1) {
+    return { data: apiData, source: 'api' };
+  }
+  // Simulated fallback — will be replaced when TASK-23 builds the trends API
+  return { data: [], source: 'simulated' };
+}
+
 // ─── Demo Data (last resort fallback) ─────────────────────────────
 
 const DEMO_DATA: DashboardData = {

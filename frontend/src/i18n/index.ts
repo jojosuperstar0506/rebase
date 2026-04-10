@@ -143,6 +143,19 @@ export const T = {
     openingPrint: { en: "Opening print dialog...", zh: "正在打开打印对话框..." },
     reportTitle: { en: "Competitive Intelligence Report", zh: "竞品情报报告" },
     generatedOn: { en: "Generated", zh: "生成于" },
+    // ── TASK-19: AI narratives + trends ──────────────────────────
+    aiAnalysis: { en: "AI Strategic Analysis", zh: "AI战略分析" },
+    aiInsight: { en: "AI Insight", zh: "AI洞察" },
+    readMore: { en: "Read more", zh: "展开全文" },
+    collapse: { en: "Collapse", zh: "收起" },
+    noAnalysisYet: { en: "AI analysis will appear after the first pipeline run", zh: "AI分析将在首次数据管道运行后显示" },
+    insightPending: { en: "AI insight available after analysis", zh: "AI洞察将在分析后显示" },
+    scoreTrends: { en: "Score Trends", zh: "评分趋势" },
+    days30: { en: "30 days", zh: "30天" },
+    days90: { en: "90 days", zh: "90天" },
+    rising: { en: "Rising", zh: "上升" },
+    falling: { en: "Falling", zh: "下降" },
+    stable: { en: "Stable", zh: "稳定" },
   },
 
   // ── Home ────────────────────────────────────────────────────────

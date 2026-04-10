@@ -9,6 +9,7 @@ import { CIDashboardSkeleton } from '../../components/ci/CISkeleton';
 import CIWelcomeBanner from '../../components/ci/CIWelcomeBanner';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { exportDashboardCSV, exportDashboardPDF, showExportToast } from '../../utils/ciExport';
+import { MiniTrendChart } from '../../components/ci/CITrendChart';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -78,6 +79,34 @@ function bubbleColor(b: BrandScore, C: Record<string, string>): string {
 type SortKey = 'brand_name' | 'momentum_score' | 'threat_index' | 'wtp_score';
 type SortDir = 'asc' | 'desc';
 
+// ── AI sparkle icon ───────────────────────────────────────────────────────────
+
+const AIIcon = ({ color }: { color: string }) => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+    <path d="M8 1L9.5 5.5L14 7L9.5 8.5L8 13L6.5 8.5L2 7L6.5 5.5Z" fill={color} />
+  </svg>
+);
+
+// ── Simulated trend data generator ────────────────────────────────────────────
+// NOTE: Generates plausible 30/90-day history ending at current score.
+// Will be replaced when TASK-23 builds the real trends API.
+
+function generateTrendData(
+  currentScore: number,
+  days: number = 30
+): { date: string; value: number }[] {
+  const result: { date: string; value: number }[] = [];
+  const now = new Date();
+  for (let i = days; i >= 0; i--) {
+    const date = new Date(now);
+    date.setDate(date.getDate() - i);
+    const noise = Math.sin(i * 0.5) * 8 + Math.cos(i * 0.3) * 5;
+    const value = Math.max(0, Math.min(100, Math.round(currentScore - i * 0.3 + noise)));
+    result.push({ date: date.toISOString().slice(0, 10), value });
+  }
+  return result;
+}
+
 // ── Score bar ─────────────────────────────────────────────────────────────────
 
 function ScoreBar({ value, C }: { value: number; C: Record<string, string> }) {
@@ -122,6 +151,8 @@ export default function CIDashboard() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [syncing, setSyncing] = useState(false);
   const [syncDone, setSyncDone] = useState(false);
+  const [narrativeExpanded, setNarrativeExpanded] = useState(false);
+  const [trendDays, setTrendDays] = useState<30 | 90>(30);
 
   // Enrich dashboard brands with tier from competitors list
   const data: LocalDashboardData = useMemo(() => {
@@ -620,6 +651,146 @@ export default function CIDashboard() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── AI Strategic Analysis ───────────────────────────── */}
+        {(() => {
+          const narrative = data.narrative ?? '';
+          const TRUNCATE = 200;
+          const isLong = narrative.length > TRUNCATE;
+          const displayText = isLong && !narrativeExpanded
+            ? narrative.slice(0, TRUNCATE).trimEnd() + '…'
+            : narrative;
+
+          return (
+            <div style={{
+              ...card,
+              borderLeft: `3px solid ${C.ac}`,
+              padding: isMobile ? '14px 16px' : '20px 24px',
+            }}>
+              {/* Header row */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <AIIcon color={C.ac} />
+                  <span style={{ fontSize: 14, fontWeight: 700, color: C.tx }}>
+                    {t(T.ci.aiAnalysis, lang)}
+                  </span>
+                </div>
+                <span style={{ fontSize: 11, color: C.t3 }}>
+                  {new Date(data.last_updated).toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                </span>
+              </div>
+
+              {/* Narrative text */}
+              {narrative ? (
+                <>
+                  <p style={{ fontSize: 14, color: C.tx, lineHeight: 1.8, margin: 0, marginBottom: isLong ? 12 : 0 }}>
+                    {displayText}
+                  </p>
+                  {isLong && (
+                    <button
+                      onClick={() => setNarrativeExpanded(e => !e)}
+                      style={{
+                        background: 'none', border: 'none', padding: 0,
+                        color: C.ac, fontSize: 13, cursor: 'pointer', fontWeight: 600,
+                      }}
+                    >
+                      {narrativeExpanded ? t(T.ci.collapse, lang) : t(T.ci.readMore, lang)}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <p style={{ fontSize: 13, color: C.t3, fontStyle: 'italic', margin: 0 }}>
+                  {t(T.ci.noAnalysisYet, lang)}
+                </p>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ── Score Trends ────────────────────────────────────── */}
+        {data.brands.length > 0 && (
+          <div style={card}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div style={sectionTitle as CSSProperties}>
+                {t(T.ci.scoreTrends, lang)}
+                <span style={{ fontSize: 11, color: C.t3, fontWeight: 400, marginLeft: 8 }}>
+                  ({lang === 'zh' ? '模拟数据' : 'simulated'})
+                </span>
+              </div>
+              {/* Time range toggle */}
+              <div style={{ display: 'flex', gap: 6 }}>
+                {([30, 90] as const).map(d => (
+                  <button
+                    key={d}
+                    onClick={() => setTrendDays(d)}
+                    style={{
+                      padding: '4px 12px', borderRadius: 6, fontSize: 12, fontWeight: trendDays === d ? 700 : 400,
+                      border: `1px solid ${trendDays === d ? C.ac : C.bd}`,
+                      background: trendDays === d ? `${C.ac}22` : 'transparent',
+                      color: trendDays === d ? C.ac : C.t2,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {d === 30 ? t(T.ci.days30, lang) : t(T.ci.days90, lang)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Mini trend cards — horizontal scroll on mobile, 3-column grid on desktop */}
+            <div style={{
+              display: isMobile ? 'flex' : 'grid',
+              gridTemplateColumns: isMobile ? undefined : 'repeat(auto-fill, minmax(280px, 1fr))',
+              gap: 16,
+              overflowX: isMobile ? 'auto' : undefined,
+              scrollSnapType: isMobile ? 'x mandatory' : undefined,
+              WebkitOverflowScrolling: isMobile ? 'touch' as any : undefined,
+              paddingBottom: isMobile ? 8 : 0,
+            }}>
+              {data.brands.map(brand => {
+                const trendData = generateTrendData(brand.momentum_score, trendDays);
+                const score7dAgo = trendData[Math.max(0, trendData.length - 8)]?.value ?? brand.momentum_score;
+                const diff = brand.momentum_score - score7dAgo;
+                const isRising = diff > 2;
+                const isFalling = diff < -2;
+                const arrowColor = isRising ? C.success : isFalling ? C.danger : C.t3;
+                const arrowLabel = isRising
+                  ? `↑${diff} ${t(T.ci.rising, lang)}`
+                  : isFalling
+                  ? `↓${Math.abs(diff)} ${t(T.ci.falling, lang)}`
+                  : `→ ${t(T.ci.stable, lang)}`;
+
+                return (
+                  <div
+                    key={brand.brand_name}
+                    style={{
+                      background: C.s2,
+                      border: `1px solid ${C.bd}`,
+                      borderRadius: 10,
+                      padding: '14px 16px',
+                      minWidth: isMobile ? 240 : undefined,
+                      scrollSnapAlign: isMobile ? 'start' : undefined,
+                      flexShrink: isMobile ? 0 : undefined,
+                    }}
+                  >
+                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2, color: C.tx }}>
+                      {brand.brand_name}
+                    </div>
+                    <div style={{ fontSize: 11, color: C.t2, marginBottom: 10 }}>
+                      {t(T.ci.momentum, lang)}
+                    </div>
+                    <MiniTrendChart data={trendData} color={C.ac} width={200} height={56} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                      <span style={{ fontSize: 20, fontWeight: 700, color: C.ac }}>{brand.momentum_score}</span>
+                      <span style={{ fontSize: 12, color: arrowColor, fontWeight: 600 }}>{arrowLabel}</span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
