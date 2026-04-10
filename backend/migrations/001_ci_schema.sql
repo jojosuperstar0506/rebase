@@ -2,7 +2,11 @@
 -- TASK-01: Competitive Intelligence Schema
 -- Creates all CI tables for the Rebase platform.
 -- Run via: node backend/migrate.js
+-- Compatible with PostgreSQL 13+
 -- =============================================================================
+
+-- Enable pgcrypto for gen_random_uuid() (built-in only in PG 14+)
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- Workspaces (one per user, created from onboarding data)
 CREATE TABLE IF NOT EXISTS workspaces (
@@ -62,8 +66,12 @@ CREATE TABLE IF NOT EXISTS scraped_products (
   scrape_tier TEXT NOT NULL CHECK (scrape_tier IN ('landscape', 'watchlist', 'deep_dive')),
   data_confidence TEXT DEFAULT 'direct_scrape' CHECK (data_confidence IN ('direct_scrape', 'estimated', 'stale')),
   scraped_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(platform, product_id, (scraped_at::date))
+  scraped_date DATE DEFAULT CURRENT_DATE
 );
+
+-- Dedup constraint: one scrape per product per platform per day
+CREATE UNIQUE INDEX IF NOT EXISTS idx_scraped_products_dedup
+  ON scraped_products(platform, product_id, scraped_date);
 
 -- Scraped brand profiles
 CREATE TABLE IF NOT EXISTS scraped_brand_profiles (
