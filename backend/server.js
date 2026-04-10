@@ -1282,6 +1282,175 @@ app.get('/api/ci/trends/summary', async (req, res) => {
   }
 });
 
+// POST /api/ci/deep-dive — request a full-depth analysis of one competitor
+app.post('/api/ci/deep-dive', async (req, res) => {
+  const { workspace_id, brand_name, platform } = req.body;
+
+  if (!workspace_id || !brand_name) {
+    return res.status(400).json({ error: 'Missing workspace_id or brand_name' });
+  }
+
+  try {
+    // Create a deep dive job record
+    const { rows } = await pool.query(`
+      INSERT INTO ci_deep_dive_jobs
+        (workspace_id, brand_name, platform, status)
+      VALUES ($1, $2, $3, 'queued')
+      RETURNING *
+    `, [workspace_id, brand_name, platform || 'all']);
+
+    const job = rows[0];
+
+    // Spawn the deep dive pipeline as a background process
+    const { spawn } = require('child_process');
+    const pythonBin = process.env.PYTHON_BIN || 'python3';
+
+    const proc = spawn(pythonBin, [
+      '-m', 'services.competitor_intel.deep_dive_runner',
+      '--job-id', job.id,
+      '--workspace-id', workspace_id,
+      '--brand', brand_name,
+      '--platform', platform || 'all',
+    ], {
+      cwd: process.cwd().replace('/backend', ''),
+      env: { ...process.env },
+      detached: true,
+      stdio: 'ignore',
+    });
+    proc.unref();
+
+    res.json({
+      job_id: job.id,
+      status: 'queued',
+      brand_name,
+      message: `Deep dive analysis started for ${brand_name}`,
+    });
+  } catch (err) {
+    console.error('[CI] POST deep-dive error:', err.message);
+    res.status(500).json({ error: 'Failed to start deep dive' });
+  }
+});
+
+// GET /api/ci/deep-dive/status — check deep dive job status
+app.get('/api/ci/deep-dive/status', async (req, res) => {
+  const { job_id, workspace_id, brand_name } = req.query;
+
+  let query, params;
+  if (job_id) {
+    query = 'SELECT * FROM ci_deep_dive_jobs WHERE id = $1';
+    params = [job_id];
+  } else if (workspace_id && brand_name) {
+    query = 'SELECT * FROM ci_deep_dive_jobs WHERE workspace_id = $1 AND brand_name = $2 ORDER BY created_at DESC LIMIT 1';
+    params = [workspace_id, brand_name];
+  } else {
+    return res.status(400).json({ error: 'Missing job_id or workspace_id+brand_name' });
+  }
+
+  try {
+    const { rows } = await pool.query(query, params);
+
+    if (rows.length === 0) {
+      return res.json({ status: 'none', message: 'No deep dive has been run for this competitor' });
+    }
+
+    const job = rows[0];
+    res.json({
+      job_id: job.id,
+      brand_name: job.brand_name,
+      platform: job.platform,
+      status: job.status,
+      started_at: job.started_at,
+      completed_at: job.completed_at,
+      error: job.error_message,
+      result_summary: job.result_summary,
+    });
+  } catch (err) {
+    console.error('[CI] GET deep-dive/status error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch deep dive status' });
+  }
+});
+
+// GET /api/ci/deep-dive/result — get the full deep dive data for a brand
+app.get('/api/ci/deep-dive/result', async (req, res) => {
+  const { workspace_id, brand_name } = req.query;
+  if (!workspace_id || !brand_name) {
+    return res.status(400).json({ error: 'Missing workspace_id or brand_name' });
+  }
+
+  try {
+    // Get latest deep dive profile
+    const { rows: profiles } = await pool.query(`
+      SELECT * FROM scraped_brand_profiles
+      WHERE brand_name = $1 AND scrape_tier = 'deep_dive'
+      ORDER BY scraped_at DESC LIMIT 1
+    `, [brand_name]);
+
+    // Get deep dive products
+    const { rows: products } = await pool.query(`
+      SELECT * FROM scraped_products
+      WHERE brand_name = $1 AND scrape_tier = 'deep_dive'
+      ORDER BY scraped_at DESC LIMIT 50
+    `, [brand_name]);
+
+    // Get all scores
+    const { rows: scores } = await pool.query(`
+      SELECT metric_type, score, raw_inputs, ai_narrative, analyzed_at
+      FROM analysis_results
+      WHERE workspace_id = $1 AND competitor_name = $2
+      ORDER BY analyzed_at DESC
+    `, [workspace_id, brand_name]);
+
+    // Get per-brand insight
+    const { rows: insights } = await pool.query(`
+      SELECT ai_narrative FROM analysis_results
+      WHERE workspace_id = $1 AND competitor_name = $2 AND metric_type = 'brand_insight'
+      ORDER BY analyzed_at DESC LIMIT 1
+    `, [workspace_id, brand_name]);
+
+    // Deduplicate scores by metric type (latest only)
+    const latestScores = {};
+    for (const s of scores) {
+      if (!latestScores[s.metric_type]) {
+        latestScores[s.metric_type] = s;
+      }
+    }
+
+    res.json({
+      brand_name,
+      profile: profiles[0] || null,
+      products,
+      scores: latestScores,
+      insight: insights[0]?.ai_narrative || null,
+      raw_dimensions: profiles[0]?.raw_dimensions || null,
+      last_deep_dive: profiles[0]?.scraped_at || null,
+    });
+  } catch (err) {
+    console.error('[CI] GET deep-dive/result error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch deep dive result' });
+  }
+});
+
+// GET /api/ci/brand-insights — per-brand AI insights for a workspace
+app.get('/api/ci/brand-insights', async (req, res) => {
+  const { workspace_id } = req.query;
+  if (!workspace_id) return res.status(400).json({ error: 'Missing workspace_id' });
+
+  try {
+    const { rows } = await pool.query(`
+      SELECT DISTINCT ON (competitor_name)
+        competitor_name, ai_narrative, analyzed_at
+      FROM analysis_results
+      WHERE workspace_id = $1 AND metric_type = 'brand_insight' AND ai_narrative IS NOT NULL
+      ORDER BY competitor_name, analyzed_at DESC
+    `, [workspace_id]);
+
+    res.json(rows);
+  } catch (err) {
+    console.error('[CI] GET brand-insights error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch brand insights' });
+  }
+});
+
 // ── Start server ────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
