@@ -61,6 +61,31 @@ export default function Home() {
             </div>
           ))}
         </div>
+
+        {/* CI vFinal spotlight card */}
+        <div style={{
+          background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 12,
+          padding: 24, textAlign: "center", marginTop: 24,
+          borderTop: `3px solid ${C.ac}`,
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 3, color: C.ac, textTransform: "uppercase", marginBottom: 10 }}>
+            {lang === "zh" ? "现已上线" : "Now Live"}
+          </div>
+          <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8, marginTop: 0 }}>
+            {t(T.ci.homeTitle, lang)}
+          </h3>
+          <p style={{ color: C.t2, fontSize: 14, marginBottom: 16, maxWidth: 480, margin: "0 auto 16px", lineHeight: 1.65 }}>
+            {t(T.ci.homeDesc, lang)}
+          </p>
+          <a href="/ci" style={{
+            display: "inline-block",
+            background: `linear-gradient(135deg, ${C.ac}, ${C.ac2})`,
+            color: "#fff", padding: "10px 24px", borderRadius: 8,
+            textDecoration: "none", fontWeight: 600, fontSize: 14,
+          }}>
+            {t(T.ci.homeButton, lang)}
+          </a>
+        </div>
       </div>
 
       <div style={{ borderTop: `1px solid ${C.bd}` }} />

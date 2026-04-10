@@ -292,6 +292,25 @@ export default function CILandscape() {
           </p>
         </div>
 
+        {/* Banner when user has no competitors yet */}
+        {userCompetitors.length === 0 && (
+          <div style={{
+            background: `${C.ac}10`, border: `1px solid ${C.ac}33`,
+            borderRadius: 10, padding: '12px 18px', marginBottom: 16,
+            display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: C.t2,
+          }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', display: 'inline-block', flexShrink: 0 }} />
+            <span>
+              {lang === 'zh'
+                ? '在「设置」中添加竞品后，您的竞品将以红点显示在图上。'
+                : 'Your competitors will appear as red dots after you add them in Settings.'}
+            </span>
+            <a href="/ci/settings" style={{ color: C.ac, fontWeight: 600, textDecoration: 'none', marginLeft: 'auto', whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {lang === 'zh' ? '前往设置 →' : 'Go to Settings →'}
+            </a>
+          </div>
+        )}
+
         {/* Summary stats — stack vertically on mobile */}
         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 10 : 16, marginBottom: isMobile ? 14 : 20 }}>
           <div style={{ background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 10, padding: '14px 18px', flex: 1, minWidth: 160 }}>

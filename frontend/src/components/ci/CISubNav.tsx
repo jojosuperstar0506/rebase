@@ -7,6 +7,7 @@ const CI_TABS = [
   { path: '/ci/landscape', labelKey: T.ci.landscape },
   { path: '/ci/competitors', labelKey: T.ci.competitors },
   { path: '/ci/settings', labelKey: T.ci.settings },
+  { path: '/ci/help', labelKey: T.ci.help },
 ];
 
 export default function CISubNav() {

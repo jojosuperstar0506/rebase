@@ -211,6 +211,11 @@ export const T = {
     setupBrandFirst: { en: "Set up your brand profile above to get AI suggestions", zh: "请先在上方设置品牌资料以获取AI推荐" },
     loadingSuggestions: { en: "Generating AI suggestions...", zh: "正在生成AI推荐..." },
     platformKeywords: { en: "Platform keywords", zh: "平台关键词" },
+    // ── TASK-30: help + home card ────────────────────────────────
+    help: { en: "Help", zh: "帮助" },
+    homeTitle: { en: "Competitive Intelligence", zh: "竞品情报" },
+    homeDesc: { en: "Track, analyze, and outmaneuver your competitors across Chinese ecommerce platforms", zh: "追踪、分析并超越您在中国电商平台上的竞争对手" },
+    homeButton: { en: "Explore CI Dashboard", zh: "进入竞品情报" },
   },
 
   // ── Home ────────────────────────────────────────────────────────

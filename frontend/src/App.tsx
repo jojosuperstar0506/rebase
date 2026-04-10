@@ -26,6 +26,7 @@ import CILandscape from "./pages/ci/CILandscape";
 import CICompetitors from "./pages/ci/CICompetitors";
 import CISettings from "./pages/ci/CISettings";
 import CIDeepDive from "./pages/ci/CIDeepDive";
+import CIHelp from "./pages/ci/CIHelp";
 import { CIErrorBoundary } from "./components/ci/CIErrorBoundary";
 
 const Calculator = lazy(() => import("./pages/Calculator"));
@@ -255,6 +256,7 @@ function AppRoutes() {
         <Route path="/ci/competitors/:brandName" element={<ProtectedRoute><CIErrorBoundary><CIDeepDive /></CIErrorBoundary></ProtectedRoute>} />
         <Route path="/ci/competitors" element={<ProtectedRoute><CIErrorBoundary><CICompetitors /></CIErrorBoundary></ProtectedRoute>} />
         <Route path="/ci/settings" element={<ProtectedRoute><CIErrorBoundary><CISettings /></CIErrorBoundary></ProtectedRoute>} />
+        <Route path="/ci/help" element={<ProtectedRoute><CIErrorBoundary><CIHelp /></CIErrorBoundary></ProtectedRoute>} />
       </Routes>
     </div>
   );
