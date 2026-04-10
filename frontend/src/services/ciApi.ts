@@ -307,6 +307,65 @@ export async function getScoreTrends(
   return { data: [], source: 'simulated' };
 }
 
+// ─── TASK-28: Brand resolution + AI suggestions ───────────────────
+
+export interface BrandResolution {
+  brand_name: string;
+  platform_ids: Record<string, string | null>;
+  source: 'database' | 'registry' | 'default';
+  badge?: string;
+}
+
+export interface ParsedLink {
+  parsed: boolean;
+  platform?: string;
+  identifier?: string;
+  brand_name?: string;
+  platform_ids?: Record<string, string>;
+  error?: string;
+}
+
+export interface CompetitorSuggestion {
+  brand_name: string;
+  reason: string;
+  priority: 'high' | 'medium' | 'low';
+  group: 'direct' | 'aspirational' | 'emerging';
+  platform_ids?: Record<string, string>;
+  badge?: string;
+}
+
+export async function resolveBrand(brandName: string): Promise<BrandResolution | null> {
+  return await tryApi<BrandResolution>('/resolve-brand', {
+    method: 'POST',
+    body: JSON.stringify({ brand_name: brandName }),
+  });
+}
+
+export async function parseLink(url: string): Promise<ParsedLink | null> {
+  return await tryApi<ParsedLink>('/parse-link', {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  });
+}
+
+export async function suggestCompetitors(
+  brandName: string,
+  category: string,
+  priceRange?: { min: number; max: number }
+): Promise<{ suggestions: CompetitorSuggestion[] }> {
+  const data = await tryApi<{ suggestions: CompetitorSuggestion[] }>('/suggest-competitors', {
+    method: 'POST',
+    body: JSON.stringify({ brand_name: brandName, brand_category: category, brand_price_range: priceRange }),
+  });
+  return data || { suggestions: [] };
+}
+
+export async function searchBrands(query: string): Promise<BrandResolution[]> {
+  if (query.length < 1) return [];
+  const data = await tryApi<{ brands: BrandResolution[] }>(`/brands/search?q=${encodeURIComponent(query)}`);
+  return data?.brands || [];
+}
+
 // ─── TASK-26: Deep Dive ───────────────────────────────────────────
 
 export interface DeepDiveJob {

@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import type { CSSProperties } from 'react';
 import { useApp } from '../../context/AppContext';
 import { t, T } from '../../i18n';
 import CISubNav from '../../components/ci/CISubNav';
@@ -8,9 +9,12 @@ import {
   getCIWorkspace, saveCIWorkspace,
   getCICompetitors, saveCICompetitors,
   getCIConnections, saveCIConnections,
-  parsePlatformFromUrl,
   type CIWorkspace, type CICompetitor, type CIConnection,
 } from '../../utils/ciStorage';
+import {
+  resolveBrand, parseLink, suggestCompetitors, searchBrands,
+  type BrandResolution, type CompetitorSuggestion,
+} from '../../services/ciApi';
 
 const CATEGORIES = ['女包', '男包', '箱包配件', '鞋类', '服饰', '其他'];
 const PLATFORM_OPTIONS = ['淘宝/天猫', '京东', '小红书', '抖音'];
@@ -197,57 +201,145 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
   onAdd: (c: CICompetitor) => void;
 }) {
   const [activeTab, setActiveTab] = useState<'name' | 'link' | 'ai'>('name');
-  const [nameInput, setNameInput] = useState('');
-  const [linkInput, setLinkInput] = useState('');
   const [error, setError] = useState('');
-
   const watchlistCount = competitors.filter(c => c.tier === 'watchlist').length;
 
-  function makeCompetitor(brand_name: string, platform_ids: Record<string, string>, added_via: CICompetitor['added_via']): CICompetitor {
-    return {
-      id: crypto.randomUUID(),
-      brand_name,
-      tier: watchlistCount < MAX_WATCHLIST ? 'watchlist' : 'landscape',
-      platform_ids,
-      added_via,
-      created_at: new Date().toISOString(),
-    };
+  // ── Name tab state ──────────────────────────────────────────────
+  const [nameInput, setNameInput] = useState('');
+  const [nameSuggestions, setNameSuggestions] = useState<BrandResolution[]>([]);
+  const [showNameDrop, setShowNameDrop] = useState(false);
+  const [resolvedPlatformIds, setResolvedPlatformIds] = useState<Record<string, string>>({});
+  const [resolveSource, setResolveSource] = useState<'database' | 'registry' | 'default' | null>(null);
+  const [nameAdding, setNameAdding] = useState(false);
+  const nameDropRef = useRef<HTMLDivElement>(null);
+
+  // Debounced search
+  useEffect(() => {
+    if (nameInput.length < 2) { setNameSuggestions([]); setShowNameDrop(false); return; }
+    const timer = setTimeout(async () => {
+      const results = await searchBrands(nameInput);
+      setNameSuggestions(results);
+      setShowNameDrop(results.length > 0);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [nameInput]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (nameDropRef.current && !nameDropRef.current.contains(e.target as Node)) {
+        setShowNameDrop(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  function selectNameSuggestion(brand: BrandResolution) {
+    setNameInput(brand.brand_name);
+    setResolvedPlatformIds(
+      Object.fromEntries(Object.entries(brand.platform_ids).filter(([, v]) => v != null)) as Record<string, string>
+    );
+    setResolveSource(brand.source);
+    setShowNameDrop(false);
+    setNameSuggestions([]);
   }
 
-  function handleAddName() {
+  async function handleAddName() {
     const name = nameInput.trim();
     if (!name) return;
-    if (watchlistCount >= MAX_WATCHLIST) {
-      setError(t(T.ci.maxWatchlist, lang as any));
-      return;
+    if (watchlistCount >= MAX_WATCHLIST) { setError(t(T.ci.maxWatchlist, lang as any)); return; }
+    setNameAdding(true);
+    let platformIds = resolvedPlatformIds;
+    if (Object.keys(platformIds).length === 0) {
+      // Unknown brand — try to resolve
+      const resolved = await resolveBrand(name);
+      if (resolved) {
+        platformIds = Object.fromEntries(
+          Object.entries(resolved.platform_ids).filter(([, v]) => v != null)
+        ) as Record<string, string>;
+        setResolveSource(resolved.source);
+      }
     }
-    onAdd(makeCompetitor(name, {}, 'manual'));
+    onAdd({
+      id: crypto.randomUUID(),
+      brand_name: name,
+      tier: watchlistCount < MAX_WATCHLIST ? 'watchlist' : 'landscape',
+      platform_ids: platformIds,
+      added_via: 'manual',
+      created_at: new Date().toISOString(),
+    });
     setNameInput('');
+    setResolvedPlatformIds({});
+    setResolveSource(null);
+    setNameAdding(false);
     setError('');
   }
 
-  function handleAddLink() {
+  // ── Link tab state ──────────────────────────────────────────────
+  const [linkInput, setLinkInput] = useState('');
+  const [linkParsing, setLinkParsing] = useState(false);
+  const [linkResult, setLinkResult] = useState<{ platform: string; brandName: string; platformIds: Record<string, string> } | null>(null);
+  const [linkError, setLinkError] = useState('');
+
+  async function handleParseLink() {
     const url = linkInput.trim();
     if (!url) return;
-    if (watchlistCount >= MAX_WATCHLIST) {
-      setError(t(T.ci.maxWatchlist, lang as any));
+    if (watchlistCount >= MAX_WATCHLIST) { setError(t(T.ci.maxWatchlist, lang as any)); return; }
+    setLinkParsing(true);
+    setLinkResult(null);
+    setLinkError('');
+    const result = await parseLink(url);
+    setLinkParsing(false);
+    if (!result || !result.parsed) {
+      setLinkError(result?.error ?? t(T.ci.unrecognizedUrl, lang as any));
+      setTimeout(() => setLinkError(''), 4000);
       return;
     }
-    const parsed = parsePlatformFromUrl(url);
-    const platform_ids = parsed ? { [parsed.platform]: parsed.identifier } : {};
-    const brand_name = parsed ? `${PLATFORM_LABELS[parsed.platform] ?? 'Brand'}: ${parsed.identifier}` : url;
-    onAdd(makeCompetitor(brand_name, platform_ids, 'link_paste'));
-    setLinkInput('');
-    setError('');
+    const platformIds: Record<string, string> = result.platform_ids ?? (result.platform && result.identifier ? { [result.platform]: result.identifier } : {});
+    const brandName = result.brand_name ?? (result.platform && result.identifier ? `${PLATFORM_LABELS[result.platform] ?? result.platform}: ${result.identifier}` : url);
+    setLinkResult({ platform: result.platform ?? '', brandName, platformIds });
+    // Auto-add after 1s
+    setTimeout(() => {
+      onAdd({
+        id: crypto.randomUUID(),
+        brand_name: brandName,
+        tier: watchlistCount < MAX_WATCHLIST ? 'watchlist' : 'landscape',
+        platform_ids: platformIds,
+        added_via: 'link_paste',
+        created_at: new Date().toISOString(),
+      });
+      setLinkInput('');
+      setLinkResult(null);
+    }, 1200);
   }
 
-  const tabs = [
-    { key: 'name' as const, label: t(T.ci.typeName, lang as any) },
-    { key: 'link' as const, label: t(T.ci.pasteLink, lang as any) },
-    { key: 'ai' as const, label: t(T.ci.aiSuggestions, lang as any) },
-  ];
+  // ── AI tab state ────────────────────────────────────────────────
+  const [aiSuggestions, setAiSuggestions] = useState<CompetitorSuggestion[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiLoaded, setAiLoaded] = useState(false);
 
-  const inputStyle = {
+  async function loadAiSuggestions() {
+    const ws = getCIWorkspace();
+    if (!ws?.brand_name) return;
+    setAiLoading(true);
+    const result = await suggestCompetitors(ws.brand_name, ws.brand_category, ws.price_range);
+    setAiSuggestions(result.suggestions);
+    setAiLoading(false);
+    setAiLoaded(true);
+  }
+
+  // Auto-load when AI tab first activated
+  useEffect(() => {
+    if (activeTab === 'ai' && !aiLoaded && !aiLoading) {
+      loadAiSuggestions();
+    }
+  }, [activeTab]);
+
+  const trackedNames = new Set(competitors.map(c => c.brand_name));
+  const workspace = getCIWorkspace();
+
+  const inputStyle: CSSProperties = {
     background: C.inputBg,
     border: `1px solid ${C.inputBd}`,
     borderRadius: 8,
@@ -258,79 +350,322 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
     outline: 'none',
   };
 
+  const tabs = [
+    { key: 'name' as const, label: t(T.ci.typeName, lang as any) },
+    { key: 'link' as const, label: t(T.ci.pasteLink, lang as any) },
+    { key: 'ai' as const, label: t(T.ci.aiSuggestions, lang as any) },
+  ];
+
+  function groupLabel(group: CompetitorSuggestion['group']): string {
+    if (group === 'direct') return t(T.ci.directCompetitor, lang as any);
+    if (group === 'aspirational') return t(T.ci.aspirational, lang as any);
+    return t(T.ci.emergingThreat, lang as any);
+  }
+
+  function priorityColor(priority: CompetitorSuggestion['priority']): string {
+    if (priority === 'high') return C.danger;
+    if (priority === 'medium') return '#f59e0b';
+    return C.t3;
+  }
+
   return (
     <div style={{ marginBottom: 20 }}>
       {/* Tab bar */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: `1px solid ${C.bd}`, paddingBottom: 0 }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: `1px solid ${C.bd}` }}>
         {tabs.map(tab => (
           <button
             key={tab.key}
             onClick={() => { setActiveTab(tab.key); setError(''); }}
             style={{
-              padding: '8px 16px',
-              border: 'none',
+              padding: '8px 16px', border: 'none',
               borderBottom: activeTab === tab.key ? `2px solid ${C.ac}` : '2px solid transparent',
               background: 'transparent',
               color: activeTab === tab.key ? C.ac : C.t2,
               fontWeight: activeTab === tab.key ? 600 : 400,
-              fontSize: 13,
-              cursor: 'pointer',
-              opacity: tab.key === 'ai' ? 0.45 : 1,
+              fontSize: 13, cursor: 'pointer',
             }}
-            disabled={tab.key === 'ai'}
           >
             {tab.label}
           </button>
         ))}
       </div>
 
-      {/* Tab: Name */}
+      {/* ── Tab: Name with autocomplete ────────────────────────── */}
       {activeTab === 'name' && (
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            style={inputStyle}
-            value={nameInput}
-            onChange={e => setNameInput(e.target.value)}
-            placeholder="Enter brand name, e.g. Songmont, 古良吉吉"
-            onKeyDown={e => e.key === 'Enter' && handleAddName()}
-          />
-          <button onClick={handleAddName} style={{ background: C.ac, border: 'none', borderRadius: 8, padding: '10px 20px', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-            {t(T.ci.addCompetitor, lang as any)}
-          </button>
+        <div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {/* Input wrapper — relative for dropdown */}
+            <div ref={nameDropRef} style={{ flex: 1, position: 'relative' }}>
+              <input
+                style={inputStyle}
+                value={nameInput}
+                onChange={e => { setNameInput(e.target.value); setResolvedPlatformIds({}); setResolveSource(null); }}
+                placeholder={lang === 'zh' ? '输入品牌名，如 Songmont、古良吉吉' : 'Brand name, e.g. Songmont, 古良吉吉'}
+                onKeyDown={e => e.key === 'Enter' && !showNameDrop && handleAddName()}
+                onFocus={() => nameSuggestions.length > 0 && setShowNameDrop(true)}
+                autoComplete="off"
+              />
+              {/* Autocomplete dropdown */}
+              {showNameDrop && nameSuggestions.length > 0 && (
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20,
+                  background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 8,
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.12)', marginTop: 4,
+                  maxHeight: 200, overflowY: 'auto',
+                }}>
+                  {nameSuggestions.map((brand, i) => (
+                    <div
+                      key={i}
+                      onMouseDown={() => selectNameSuggestion(brand)}
+                      style={{
+                        padding: '10px 14px', cursor: 'pointer',
+                        borderBottom: i < nameSuggestions.length - 1 ? `1px solid ${C.bd}` : 'none',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = C.s2)}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <div style={{ fontWeight: 600, fontSize: 14, color: C.tx }}>{brand.brand_name}</div>
+                      <div style={{ fontSize: 12, color: C.t2, marginTop: 2 }}>
+                        {brand.badge ? `${brand.badge} · ` : ''}
+                        {brand.source === 'default' ? t(T.ci.newBrand, lang as any) : t(T.ci.knownBrand, lang as any)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button
+              onClick={handleAddName}
+              disabled={nameAdding}
+              style={{
+                background: nameAdding ? C.t3 : C.ac, border: 'none', borderRadius: 8,
+                padding: '10px 20px', color: '#fff', fontSize: 14, fontWeight: 600,
+                cursor: nameAdding ? 'default' : 'pointer', whiteSpace: 'nowrap',
+              }}
+            >
+              {nameAdding ? '…' : t(T.ci.addCompetitor, lang as any)}
+            </button>
+          </div>
+
+          {/* Resolution feedback */}
+          {resolveSource && nameInput && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+              <span style={{
+                fontSize: 11, padding: '2px 8px', borderRadius: 4, fontWeight: 600,
+                background: resolveSource === 'default' ? C.s2 : `${C.success}18`,
+                color: resolveSource === 'default' ? C.t3 : C.success,
+                border: `1px solid ${resolveSource === 'default' ? C.bd : C.success}44`,
+              }}>
+                {resolveSource === 'default' ? t(T.ci.newBrand, lang as any) : t(T.ci.knownBrand, lang as any)}
+              </span>
+              {Object.entries(resolvedPlatformIds).map(([plat, id]) => (
+                <span key={plat} style={{ fontSize: 11, color: C.t3 }}>{plat}: {id}</span>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Tab: Link */}
+      {/* ── Tab: Paste Link ────────────────────────────────────── */}
       {activeTab === 'link' && (
         <div>
           <div style={{ display: 'flex', gap: 8 }}>
             <input
               style={inputStyle}
               value={linkInput}
-              onChange={e => setLinkInput(e.target.value)}
-              placeholder="Paste a 小红书, 淘宝, 抖音, or 京东 URL"
-              onKeyDown={e => e.key === 'Enter' && handleAddLink()}
+              onChange={e => { setLinkInput(e.target.value); setLinkResult(null); setLinkError(''); }}
+              placeholder={lang === 'zh' ? '粘贴小红书/淘宝/抖音/京东链接' : 'Paste a 小红书, 淘宝, 抖音, or 京东 URL'}
+              onKeyDown={e => e.key === 'Enter' && handleParseLink()}
             />
-            <button onClick={handleAddLink} style={{ background: C.ac, border: 'none', borderRadius: 8, padding: '10px 20px', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              {t(T.ci.addCompetitor, lang as any)}
+            <button
+              onClick={handleParseLink}
+              disabled={linkParsing}
+              style={{
+                background: linkParsing ? C.t3 : C.ac, border: 'none', borderRadius: 8,
+                padding: '10px 20px', color: '#fff', fontSize: 14, fontWeight: 600,
+                cursor: linkParsing ? 'default' : 'pointer', whiteSpace: 'nowrap',
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              {linkParsing && (
+                <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" style={{ animation: 'spin 1s linear infinite' }}>
+                  <circle cx={12} cy={12} r={10} strokeDasharray="31.4" strokeDashoffset="10" />
+                </svg>
+              )}
+              {linkParsing ? t(T.ci.detecting, lang as any) : t(T.ci.addCompetitor, lang as any)}
             </button>
           </div>
-          <p style={{ fontSize: 12, color: C.t3, marginTop: 6, marginBottom: 0 }}>
-            We'll automatically detect the platform and brand
-          </p>
+
+          {/* Parse result */}
+          {linkResult && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8, marginTop: 8,
+              padding: '8px 12px', background: `${C.success}10`,
+              border: `1px solid ${C.success}44`, borderRadius: 8,
+            }}>
+              <svg width={14} height={14} viewBox="0 0 12 12" fill="none">
+                <circle cx={6} cy={6} r={6} fill={C.success} />
+                <polyline points="2.5,6 5,8.5 9.5,3.5" stroke="#fff" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span style={{ fontSize: 13, color: C.success, fontWeight: 600 }}>
+                {t(T.ci.detected, lang as any)}:
+              </span>
+              {linkResult.platform && (
+                <span style={{
+                  background: PLATFORM_COLORS[linkResult.platform] ?? C.ac,
+                  color: '#fff', padding: '1px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600,
+                }}>
+                  {PLATFORM_LABELS[linkResult.platform] ?? linkResult.platform}
+                </span>
+              )}
+              <span style={{ fontSize: 13, color: C.tx }}>{linkResult.brandName}</span>
+            </div>
+          )}
+
+          {/* Parse error */}
+          {linkError && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8, marginTop: 8,
+              padding: '8px 12px', background: `${C.danger}10`,
+              border: `1px solid ${C.danger}44`, borderRadius: 8,
+            }}>
+              <svg width={14} height={14} viewBox="0 0 12 12" fill="none">
+                <circle cx={6} cy={6} r={6} fill={C.danger} />
+                <line x1={4} y1={4} x2={8} y2={8} stroke="#fff" strokeWidth={1.5} strokeLinecap="round" />
+                <line x1={8} y1={4} x2={4} y2={8} stroke="#fff" strokeWidth={1.5} strokeLinecap="round" />
+              </svg>
+              <span style={{ fontSize: 13, color: C.danger }}>{linkError}</span>
+            </div>
+          )}
+
+          {!linkResult && !linkError && (
+            <p style={{ fontSize: 12, color: C.t3, marginTop: 6, marginBottom: 0 }}>
+              {lang === 'zh' ? '我们将自动识别平台和品牌' : "We'll automatically detect the platform and brand"}
+            </p>
+          )}
         </div>
       )}
 
-      {/* Tab: AI (placeholder) */}
+      {/* ── Tab: AI Suggestions ────────────────────────────────── */}
       {activeTab === 'ai' && (
-        <div style={{ padding: '16px', background: C.s2, borderRadius: 8, color: C.t3, fontSize: 13 }}>
-          Based on your brand profile, AI will suggest competitors you should be tracking. Coming in a future update.
+        <div>
+          {!workspace?.brand_name ? (
+            <div style={{ padding: '20px 16px', background: C.s2, borderRadius: 10, fontSize: 13, color: C.t3, textAlign: 'center' }}>
+              {t(T.ci.setupBrandFirst, lang as any)}
+            </div>
+          ) : aiLoading ? (
+            <div>
+              <div style={{ fontSize: 13, color: C.t2, marginBottom: 12 }}>{t(T.ci.loadingSuggestions, lang as any)}</div>
+              {[0, 1, 2].map(i => (
+                <div key={i} style={{
+                  height: 80, background: C.s2, borderRadius: 10, marginBottom: 10,
+                  animation: 'shimmer 1.4s ease-in-out infinite',
+                  opacity: 1 - i * 0.15,
+                }} />
+              ))}
+            </div>
+          ) : aiSuggestions.length > 0 ? (
+            <div>
+              {/* Header */}
+              <div style={{ fontSize: 13, color: C.t2, marginBottom: 12 }}>
+                {t(T.ci.aiRecommends, lang as any)}{' '}
+                <strong style={{ color: C.tx }}>{workspace.brand_name}</strong>
+                {workspace.brand_category && ` (${workspace.brand_category}`}
+                {workspace.price_range?.min ? `, ¥${workspace.price_range.min}–${workspace.price_range.max})` : workspace.brand_category ? ')' : ''}
+              </div>
+
+              {/* Suggestion cards */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+                {aiSuggestions.map((s, i) => {
+                  const isTracked = trackedNames.has(s.brand_name);
+                  const pColor = priorityColor(s.priority);
+                  return (
+                    <div key={i} style={{
+                      display: 'flex', gap: 12, alignItems: 'flex-start',
+                      padding: '14px 16px', background: C.s2, borderRadius: 10,
+                      border: `1px solid ${C.bd}`,
+                    }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 700, fontSize: 14, color: C.tx }}>{s.brand_name}</span>
+                          <span style={{
+                            fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 4,
+                            background: `${pColor}18`, color: pColor, border: `1px solid ${pColor}44`,
+                            textTransform: 'uppercase' as CSSProperties['textTransform'], letterSpacing: '0.05em',
+                          }}>
+                            {s.priority.toUpperCase()}
+                          </span>
+                          <span style={{
+                            fontSize: 10, color: C.t2, background: C.s1,
+                            border: `1px solid ${C.bd}`, borderRadius: 4, padding: '1px 6px',
+                          }}>
+                            {groupLabel(s.group)}
+                          </span>
+                          {s.badge && <span style={{ fontSize: 11, color: C.t3 }}>{s.badge}</span>}
+                        </div>
+                        <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.6 }}>{s.reason}</div>
+                      </div>
+                      {isTracked ? (
+                        <span style={{ fontSize: 12, color: C.success, fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                          {t(T.ci.alreadyTracking, lang as any)}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            onAdd({
+                              id: crypto.randomUUID(),
+                              brand_name: s.brand_name,
+                              tier: watchlistCount < MAX_WATCHLIST ? 'watchlist' : 'landscape',
+                              platform_ids: s.platform_ids ?? {},
+                              added_via: 'ai_suggestion',
+                              created_at: new Date().toISOString(),
+                            });
+                          }}
+                          style={{
+                            background: C.ac, border: 'none', borderRadius: 6,
+                            padding: '6px 14px', color: '#fff', fontSize: 12,
+                            fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          + {lang === 'zh' ? '添加' : 'Add'}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Refresh button */}
+              <button
+                onClick={loadAiSuggestions}
+                style={{
+                  background: 'transparent', border: `1px solid ${C.bd}`,
+                  borderRadius: 8, padding: '8px 18px', color: C.t2,
+                  fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                {t(T.ci.refreshSuggestions, lang as any)}
+              </button>
+            </div>
+          ) : aiLoaded ? (
+            <div style={{ padding: '24px 0', textAlign: 'center', color: C.t3, fontSize: 13 }}>
+              {lang === 'zh' ? '暂无AI推荐，请稍后重试' : 'No suggestions available. Try again later.'}
+              <br />
+              <button onClick={loadAiSuggestions} style={{ marginTop: 12, background: C.ac, border: 'none', borderRadius: 6, padding: '7px 16px', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                {t(T.ci.refreshSuggestions, lang as any)}
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
 
-      {error && (
-        <p style={{ color: C.danger, fontSize: 13, marginTop: 8, marginBottom: 0 }}>{error}</p>
-      )}
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes shimmer { 0%,100% { opacity: 0.5; } 50% { opacity: 0.85; } }
+      `}</style>
+
+      {error && <p style={{ color: C.danger, fontSize: 13, marginTop: 8, marginBottom: 0 }}>{error}</p>}
     </div>
   );
 }
@@ -378,23 +713,18 @@ function CompetitorList({ C, lang, competitors, onChange, isMobile }: {
           borderRadius: 8,
           fontSize: 13,
         }}>
-          {/* Brand name */}
-          <span style={{ fontWeight: 600, flex: 1 }}>{c.brand_name}</span>
-
-          {/* Platform badges */}
-          <div style={{ display: 'flex', gap: 4 }}>
-            {Object.keys(c.platform_ids).map(p => (
-              <span key={p} style={{
-                background: PLATFORM_COLORS[p] ?? C.ac,
-                color: '#fff',
-                padding: '2px 7px',
-                borderRadius: 4,
-                fontSize: 11,
-                fontWeight: 600,
-              }}>
-                {PLATFORM_LABELS[p] ?? p}
-              </span>
-            ))}
+          {/* Brand name + platform keyword labels */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ fontWeight: 600, fontSize: 13 }}>{c.brand_name}</span>
+            {Object.keys(c.platform_ids).length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                {Object.entries(c.platform_ids).map(([plat, id]) => (
+                  <span key={plat} style={{ fontSize: 11, color: C.t3 }}>
+                    <span style={{ color: PLATFORM_COLORS[plat] ?? C.ac, fontWeight: 600 }}>{PLATFORM_LABELS[plat] ?? plat}</span>: {id}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Tier toggle */}

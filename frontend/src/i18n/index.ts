@@ -196,6 +196,21 @@ export const T = {
     productsTitle: { en: "Products", zh: "产品列表" },
     noProducts: { en: "No product data yet", zh: "暂无产品数据" },
     runInsightHint: { en: "Run analysis to generate AI insight", zh: "运行分析以生成AI洞察" },
+    // ── TASK-28: settings upgrades ───────────────────────────────
+    knownBrand: { en: "Known brand", zh: "已知品牌" },
+    newBrand: { en: "New brand", zh: "新品牌" },
+    detecting: { en: "Detecting...", zh: "识别中..." },
+    detected: { en: "Detected", zh: "已识别" },
+    unrecognizedUrl: { en: "Unrecognized platform URL", zh: "无法识别的平台链接" },
+    aiRecommends: { en: "AI recommends competitors for", zh: "AI为以下品牌推荐竞品：" },
+    directCompetitor: { en: "Direct Competitor", zh: "直接竞品" },
+    aspirational: { en: "Aspirational", zh: "标杆品牌" },
+    emergingThreat: { en: "Emerging Threat", zh: "新兴威胁" },
+    alreadyTracking: { en: "Already tracking", zh: "已在追踪" },
+    refreshSuggestions: { en: "Refresh Suggestions", zh: "刷新推荐" },
+    setupBrandFirst: { en: "Set up your brand profile above to get AI suggestions", zh: "请先在上方设置品牌资料以获取AI推荐" },
+    loadingSuggestions: { en: "Generating AI suggestions...", zh: "正在生成AI推荐..." },
+    platformKeywords: { en: "Platform keywords", zh: "平台关键词" },
   },
 
   // ── Home ────────────────────────────────────────────────────────
