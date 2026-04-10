@@ -7,6 +7,7 @@ import { removeCompetitor as apiRemoveCompetitor } from '../../services/ciApi';
 import { useCIData } from '../../hooks/useCIData';
 import { LANDSCAPE_SEED, LandscapeBrand } from '../../data/ci/landscapeSeed';
 import { CICompetitorsSkeleton } from '../../components/ci/CISkeleton';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -236,7 +237,7 @@ function CompetitorCard({
 }
 
 function CompareView({
-  selectedProfiles, allProfiles, selected, onSelect, C, lang,
+  selectedProfiles, allProfiles, selected, onSelect, C, lang, isMobile,
 }: {
   selectedProfiles: CompetitorProfile[];
   allProfiles: CompetitorProfile[];
@@ -244,6 +245,7 @@ function CompareView({
   onSelect: (id: string) => void;
   C: ReturnType<typeof useApp>['colors'];
   lang: Lang;
+  isMobile?: boolean;
 }) {
   if (selectedProfiles.length < 2) {
     return (
@@ -390,6 +392,8 @@ function CompareView({
                 style={{
                   padding: '14px 16px', fontSize: 13,
                   borderRight: ci < selectedProfiles.length - 1 ? `1px solid ${C.bd}` : undefined,
+                  minWidth: isMobile ? 280 : undefined,
+                  scrollSnapAlign: isMobile ? 'start' : undefined,
                 }}
               >
                 {row.render(p, ci)}
@@ -406,6 +410,8 @@ function CompareView({
 
 export default function CICompetitors() {
   const { colors: C, lang } = useApp();
+  const bp = useBreakpoint();
+  const isMobile = bp === 'mobile';
   const { competitors: rawCompetitors, workspace, loading } = useCIData();
 
   if (loading) return <CICompetitorsSkeleton />;
@@ -485,10 +491,10 @@ export default function CICompetitors() {
   // Empty state
   if (rawCompetitors.length === 0) {
     return (
-      <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: '32px 24px', fontFamily: 'system-ui, sans-serif' }}>
+      <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: isMobile ? '16px 12px' : '32px 24px', fontFamily: 'system-ui, sans-serif' }}>
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
           <CISubNav />
-          <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8, marginTop: 0 }}>{t(T.ci.competitors, lang)}</h1>
+          <h1 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, marginBottom: 8, marginTop: 0 }}>{t(T.ci.competitors, lang)}</h1>
           <div style={{ textAlign: 'center', padding: '80px 24px' }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>📋</div>
             <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>{t(T.ci.noCompetitorsYet, lang)}</h2>
@@ -503,48 +509,65 @@ export default function CICompetitors() {
   }
 
   return (
-    <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: '32px 24px', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: isMobile ? '16px 12px' : '32px 24px', fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
         <CISubNav />
 
         {/* Page header + view toggle */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: isMobile ? 14 : 20, flexWrap: 'wrap', gap: 12 }}>
           <div>
-            <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 4, marginTop: 0 }}>{t(T.ci.competitors, lang)}</h1>
+            <h1 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, marginBottom: 4, marginTop: 0 }}>{t(T.ci.competitors, lang)}</h1>
             <span style={{ color: C.t3, fontSize: 13 }}>{filtered.length} {t(T.ci.xCompetitors, lang)}</span>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => setViewMode('cards')} style={btnBase(viewMode === 'cards')}>{t(T.ci.cardView, lang)}</button>
-            <button onClick={() => setViewMode('compare')} style={btnBase(viewMode === 'compare')}>{t(T.ci.compareView, lang)}</button>
+            <button onClick={() => setViewMode('cards')} style={{ ...btnBase(viewMode === 'cards'), minHeight: 44 }}>{t(T.ci.cardView, lang)}</button>
+            <button onClick={() => setViewMode('compare')} style={{ ...btnBase(viewMode === 'compare'), minHeight: 44 }}>{t(T.ci.compareView, lang)}</button>
           </div>
         </div>
 
         {/* Filter + Sort */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 8, marginBottom: isMobile ? 14 : 24, flexWrap: 'wrap', alignItems: isMobile ? 'stretch' : 'center' }}>
           {/* Tier filter */}
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {(['all', 'watchlist', 'landscape'] as const).map(tier => (
-              <button key={tier} onClick={() => setTierFilter(tier)} style={btnBase(tierFilter === tier)}>
+              <button key={tier} onClick={() => setTierFilter(tier)} style={{ ...btnBase(tierFilter === tier), minHeight: 44 }}>
                 {tier === 'all' ? t(T.ci.all, lang) : tier === 'watchlist' ? t(T.ci.watchlist, lang) : t(T.ci.landscapeTier, lang)}
               </button>
             ))}
           </div>
-          {/* Sort */}
-          <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
-            {(['name', 'threat', 'momentum', 'price'] as const).map(s => (
-              <button key={s} onClick={() => setSortBy(s)} style={btnBase(sortBy === s)}>
-                {s === 'name' ? t(T.ci.sortByName, lang)
-                  : s === 'threat' ? t(T.ci.sortByThreat, lang)
-                  : s === 'momentum' ? t(T.ci.sortByMomentum, lang)
-                  : t(T.ci.sortByPrice, lang)}
-              </button>
-            ))}
-          </div>
+          {/* Sort — full width dropdown-style on mobile */}
+          {isMobile ? (
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value as typeof sortBy)}
+              style={{
+                background: C.inputBg, border: `1px solid ${C.inputBd}`, borderRadius: 8,
+                padding: '10px 14px', color: C.tx, fontSize: 13, outline: 'none', width: '100%',
+                minHeight: 44,
+              }}
+            >
+              <option value="name">{t(T.ci.sortByName, lang)}</option>
+              <option value="threat">{t(T.ci.sortByThreat, lang)}</option>
+              <option value="momentum">{t(T.ci.sortByMomentum, lang)}</option>
+              <option value="price">{t(T.ci.sortByPrice, lang)}</option>
+            </select>
+          ) : (
+            <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
+              {(['name', 'threat', 'momentum', 'price'] as const).map(s => (
+                <button key={s} onClick={() => setSortBy(s)} style={btnBase(sortBy === s)}>
+                  {s === 'name' ? t(T.ci.sortByName, lang)
+                    : s === 'threat' ? t(T.ci.sortByThreat, lang)
+                    : s === 'momentum' ? t(T.ci.sortByMomentum, lang)
+                    : t(T.ci.sortByPrice, lang)}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Card View */}
         {viewMode === 'cards' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(340px, 1fr))', gap: isMobile ? 12 : 16 }}>
             {filtered.map(profile => (
               <CompetitorCard
                 key={profile.id}
@@ -565,14 +588,17 @@ export default function CICompetitors() {
 
         {/* Compare View */}
         {viewMode === 'compare' && (
-          <CompareView
-            selectedProfiles={selectedProfiles}
-            allProfiles={filtered}
-            selected={selected}
-            onSelect={toggleSelect}
-            C={C}
-            lang={lang}
-          />
+          <div style={isMobile ? { overflowX: 'auto', scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' as any } : {}}>
+            <CompareView
+              selectedProfiles={selectedProfiles}
+              allProfiles={filtered}
+              selected={selected}
+              onSelect={toggleSelect}
+              C={C}
+              lang={lang}
+              isMobile={isMobile}
+            />
+          </div>
         )}
       </div>
     </div>
