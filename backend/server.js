@@ -186,6 +186,45 @@ app.post("/api/onboarding", async (req, res) => {
     // Notify Will/Joanna by email (skips silently if keys not configured)
     notifyNewApplicant(applicant).catch((e) => console.error("[Onboarding] Email failed:", e.message));
 
+    // Auto-create CI workspace if competitors field is present (non-fatal side effect)
+    if (competitors && competitors.trim()) {
+      try {
+        const userId = email || phone || `applicant-${Date.now()}`;
+
+        // Create workspace
+        const { rows: [workspace] } = await pool.query(
+          `INSERT INTO workspaces (user_id, brand_name, brand_category)
+           VALUES ($1, $2, $3)
+           ON CONFLICT DO NOTHING
+           RETURNING *`,
+          [userId, company || 'My Brand', industry || null]
+        );
+
+        if (workspace) {
+          // Parse competitors (comma-separated or newline-separated from form)
+          const competitorNames = competitors
+            .split(/[,，\n]/)
+            .map(s => s.trim())
+            .filter(Boolean);
+
+          // Add each as a watchlist competitor (max 10)
+          for (const compName of competitorNames.slice(0, 10)) {
+            await pool.query(
+              `INSERT INTO workspace_competitors (workspace_id, brand_name, tier, added_via)
+               VALUES ($1, $2, 'watchlist', 'onboarding')
+               ON CONFLICT (workspace_id, brand_name) DO NOTHING`,
+              [workspace.id, compName]
+            );
+          }
+
+          console.log(`[CI] Created workspace for ${userId} with ${competitorNames.length} competitors`);
+        }
+      } catch (ciErr) {
+        // Non-fatal: log but don't fail the onboarding
+        console.error('[CI] Failed to create workspace from onboarding:', ciErr.message);
+      }
+    }
+
     res.json({ success: true, message: "Application received" });
   } catch (err) {
     console.error("Onboarding error:", err.message);
@@ -544,6 +583,32 @@ app.get('/api/ci/workspace', async (req, res) => {
     res.json(rows[0]);
   } catch (err) {
     console.error('[CI] GET workspace error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch workspace' });
+  }
+});
+
+// GET /api/ci/workspace/me — find workspace by auth token info, with competitor counts
+app.get('/api/ci/workspace/me', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    if (!userId) return res.status(401).json({ error: 'Missing user ID' });
+
+    const { rows } = await pool.query(
+      `SELECT w.*,
+         (SELECT COUNT(*) FROM workspace_competitors wc WHERE wc.workspace_id = w.id AND wc.tier = 'watchlist') as watchlist_count,
+         (SELECT COUNT(*) FROM workspace_competitors wc WHERE wc.workspace_id = w.id) as total_competitors
+       FROM workspaces w
+       WHERE w.user_id = $1
+       ORDER BY w.created_at DESC
+       LIMIT 1`,
+      [userId]
+    );
+
+    if (rows.length === 0) return res.status(404).json({ error: 'No workspace found. Complete onboarding first.' });
+
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('[CI] GET workspace/me error:', err.message);
     res.status(500).json({ error: 'Failed to fetch workspace' });
   }
 });
