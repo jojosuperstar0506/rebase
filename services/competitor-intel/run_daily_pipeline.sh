@@ -9,9 +9,13 @@ REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LOG_FILE="/var/log/rebase/ci-pipeline.log"
 STATUS_FILE="/tmp/rebase-pipeline-status.json"
 
-# Load environment
+# Load environment (handles special characters in values)
 if [ -f "$REPO_DIR/backend/.env" ]; then
-  export $(grep -v '^#' "$REPO_DIR/backend/.env" | xargs)
+  while IFS= read -r line; do
+    # Skip comments and empty lines
+    [[ -z "$line" || "$line" =~ ^# ]] && continue
+    export "$line"
+  done < "$REPO_DIR/backend/.env"
 fi
 
 PYTHON=${PYTHON_BIN:-python3.11}
