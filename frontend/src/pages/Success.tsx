@@ -7,6 +7,9 @@ export default function Success() {
   const navigate = useNavigate();
   const s = T.success;
 
+  // Check if user submitted competitors during onboarding
+  const hasCompetitors = !!localStorage.getItem('rebase_submitted_competitors');
+
   return (
     <div style={{ background: C.bg, minHeight: "100vh", fontFamily: "system-ui, sans-serif", color: C.tx }}>
       <div style={{ maxWidth: 720, margin: "0 auto", padding: "64px 24px" }}>
@@ -53,6 +56,41 @@ export default function Success() {
             {t(s.aboutDesc, lang)}
           </p>
         </div>
+
+        {/* CI preview card — shown when competitors were submitted */}
+        {hasCompetitors && (
+          <div style={{
+            background: C.s1,
+            border: `1px solid ${C.ac}`,
+            borderRadius: 12,
+            padding: 24,
+            marginBottom: 24,
+            textAlign: 'center',
+          }}>
+            <div style={{ fontSize: 28, marginBottom: 12 }}>📊</div>
+            <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8, marginTop: 0, color: C.tx }}>
+              {t(T.ci.yourIntelReady, lang)}
+            </h3>
+            <p style={{ color: C.t2, fontSize: 14, lineHeight: 1.7, marginBottom: 16 }}>
+              {t(T.ci.onboardingCIHint, lang)}
+            </p>
+            <a
+              href="/ci"
+              style={{
+                display: 'inline-block',
+                background: C.ac,
+                color: '#fff',
+                padding: '10px 24px',
+                borderRadius: 8,
+                textDecoration: 'none',
+                fontWeight: 600,
+                fontSize: 14,
+              }}
+            >
+              {t(T.ci.viewDashboard, lang)} →
+            </a>
+          </div>
+        )}
 
         {/* Actions */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>

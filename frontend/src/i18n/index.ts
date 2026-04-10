@@ -128,6 +128,14 @@ export const T = {
     syncComplete: { en: "Data synced successfully", zh: "数据同步成功" },
     somethingWrong: { en: "Something went wrong", zh: "出了点问题" },
     tryRefresh: { en: "Try refreshing the page.", zh: "请尝试刷新页面。" },
+    // ── TASK-12: onboarding flow + nav dot + welcome banner ─────────
+    yourIntelReady: { en: "Your competitive intelligence is being set up", zh: "您的竞品情报正在配置中" },
+    onboardingCIHint: { en: "We're analyzing your competitors. View your dashboard to see initial insights.", zh: "我们正在分析您的竞品。查看仪表盘以获取初步洞察。" },
+    viewDashboard: { en: "View CI Dashboard", zh: "查看竞品情报" },
+    welcomeBanner: { en: "👋 Welcome to Competitive Intelligence! Your competitors are plotted on the bubble chart below by threat and momentum. Check the Market Landscape tab for a full category view, or visit Settings to add more competitors.", zh: "👋 欢迎使用竞品情报！您的竞品已按威胁指数和增长势能绘制在下方气泡图中。前往「市场全景」查看全品类视图，或在「设置」中添加更多竞品。" },
+    gotIt: { en: "Got it", zh: "知道了" },
+    newUpdates: { en: "New updates available", zh: "有新的更新" },
+    tryNew: { en: "Try our new Competitive Intelligence tool", zh: "试试全新的竞品情报工具" },
   },
 
   // ── Home ────────────────────────────────────────────────────────

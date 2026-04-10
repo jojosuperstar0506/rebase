@@ -79,6 +79,10 @@ export default function Onboarding() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Submission failed");
+      // Persist competitors so Success page can offer CI link
+      if (form.competitors.trim()) {
+        localStorage.setItem('rebase_submitted_competitors', form.competitors.trim());
+      }
       navigate("/success");
     } catch (err) {
       setStatus("error");
@@ -120,6 +124,27 @@ export default function Onboarding() {
               <Field label={t(s.fields.company, lang)}     value={form.company}     onChange={set("company")}     placeholder={t(s.placeholders.company, lang)}     C={C} />
               <Field label={t(s.fields.industry, lang)}    value={form.industry}    onChange={set("industry")}    placeholder={t(s.placeholders.industry, lang)}    C={C} />
               <Field label={t(s.fields.competitors, lang)} value={form.competitors} onChange={set("competitors")} placeholder={t(s.placeholders.competitors, lang)} C={C} />
+
+              {/* Competitors helper text */}
+              <div style={{
+                background: C.s2, border: `1px solid ${C.bd}`, borderRadius: 8,
+                padding: '12px 14px', marginTop: -12, marginBottom: 20, fontSize: 12, color: C.t3, lineHeight: 1.7,
+              }}>
+                <span style={{ fontWeight: 600, color: C.t2 }}>
+                  {lang === 'zh' ? '格式提示：' : 'Format tip: '}
+                </span>
+                {lang === 'zh'
+                  ? '用逗号分隔品牌名称，例如：Songmont, 古良吉吉, CASSILE'
+                  : 'Enter brand names separated by commas — e.g. Songmont, 古良吉吉, CASSILE'}
+                <br />
+                {lang === 'zh'
+                  ? '也可以粘贴平台链接，我们会自动识别品牌：'
+                  : 'You can also paste platform links — we\'ll detect the brand automatically:'}
+                <br />
+                <span style={{ fontFamily: 'monospace', fontSize: 11, color: C.t3 }}>
+                  https://xiaohongshu.com/user/profile/xxx
+                </span>
+              </div>
 
               {/* Goal — quick-select + free-form */}
               <div style={{ marginBottom: 20 }}>

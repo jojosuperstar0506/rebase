@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import type { CSSProperties } from "react";
 import { useApp } from "../context/AppContext";
+import { T, t } from "../i18n";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -178,7 +179,7 @@ type SortDir = "asc" | "desc";
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function AppDashboard() {
-  const { colors: C } = useApp();
+  const { colors: C, lang } = useApp();
 
   // Start with demo data so the page renders immediately — no blank screen ever
   const [data, setData] = useState<DashboardData>(DEMO_DATA);
@@ -317,6 +318,24 @@ export default function AppDashboard() {
 
   return (
     <div style={{ fontFamily: "system-ui, sans-serif", color: C.tx }}>
+
+      {/* ── CI vFinal promo banner ────────────────────────────────────────────── */}
+      <div style={{
+        background: `${C.ac}18`,
+        border: `1px solid ${C.ac}44`,
+        borderRadius: 8,
+        padding: '8px 16px',
+        margin: '16px 24px 0',
+        fontSize: 13,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+      }}>
+        <span style={{ color: C.t2 }}>{t(T.ci.tryNew, lang)}</span>
+        <a href="/ci" style={{ color: C.ac, fontWeight: 600, textDecoration: 'none', flexShrink: 0, marginLeft: 12 }}>
+          CI vFinal →
+        </a>
+      </div>
 
       {/* ── Page header ──────────────────────────────────────────────────────── */}
       <div style={{ padding: "24px 32px 0", display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
