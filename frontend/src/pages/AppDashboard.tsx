@@ -71,6 +71,54 @@ function greetingPrefix(): string {
   return "Good evening";
 }
 
+// ── Static JSON → DashboardData mapper ───────────────────────────────────────
+// Used when the live API is unavailable (e.g. backend not yet deployed).
+// Reads /data/competitors/competitors_latest.json which Vercel serves statically.
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapStaticJson(raw: any): DashboardData {
+  const scores: Record<string, { momentum_score?: number; threat_index?: number; gtm_signals?: string[] }> =
+    raw.scores?.brands ?? {};
+
+  const competitors: Brand[] = Object.entries(raw.brands ?? {}).map(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ([name, _data]: [string, any]) => {
+      const s = scores[name] ?? {};
+      const momentum = +(s.momentum_score ?? 0).toFixed(1);
+      const threat   = +(s.threat_index   ?? 0).toFixed(1);
+      const wtp      = +(threat * 0.82).toFixed(1);
+      return {
+        brand_name:    name,
+        brand_name_en: _data.brand_name_en ?? "",
+        momentum_score: momentum,
+        threat_index:   threat,
+        wtp_score:      wtp,
+        trend_signals:  (s.gtm_signals ?? []).slice(0, 3),
+      };
+    }
+  ).sort((a, b) => b.momentum_score - a.momentum_score);
+
+  // Map action_items — static JSON uses { action, urgency, department, rationale }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawItems: any[] = Array.isArray(raw.narratives?.action_items)
+    ? raw.narratives.action_items
+    : [];
+
+  const action_items: ActionItem[] = rawItems.map(item => ({
+    priority: item.urgency === "本周" ? "high" : item.urgency === "本月" ? "medium" : "low",
+    title:       item.action      ?? item.title       ?? "",
+    description: item.rationale   ?? item.description ?? item.department ?? "",
+  }));
+
+  return {
+    brand_name:   "竞品分析",
+    last_updated: raw.scrape_date ?? "",
+    competitors,
+    action_items,
+    narrative: raw.narratives?.strategic_summary ?? "",
+  };
+}
+
 // ── Sort types ────────────────────────────────────────────────────────────────
 
 type SortKey = "brand_name" | "momentum_score" | "threat_index" | "wtp_score";
@@ -88,24 +136,33 @@ export default function AppDashboard() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [hoveredBubble, setHoveredBubble] = useState<number | null>(null);
 
-  // Auth is handled by ProtectedRoute in App.tsx — no need to check here.
-  // Use the existing invite-code token for API auth.
   useEffect(() => {
     (async () => {
+      // 1. Try live API (works once ECS backend is deployed)
       try {
         const token = localStorage.getItem("rebase_token") || "";
         const res = await fetch("/api/v2/dashboard?industry=bag", {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
+          signal: AbortSignal.timeout(4000), // don't wait long if backend is down
         });
-        if (!res.ok) {
-          const d = await res.json().catch(() => ({}));
-          setError(d.detail || d.error || `Error ${res.status}`);
+        if (res.ok) {
+          setData(await res.json());
+          setLoading(false);
           return;
         }
-        const d: DashboardData = await res.json();
-        setData(d);
       } catch {
-        setError("Network error. Please refresh to try again.");
+        // Backend not reachable — fall through to static fallback
+      }
+
+      // 2. Fallback: read directly from the static JSON Vercel already serves.
+      //    This works immediately, no backend needed.
+      try {
+        const res = await fetch("/data/competitors/competitors_latest.json");
+        if (!res.ok) throw new Error("static file missing");
+        const raw = await res.json();
+        setData(mapStaticJson(raw));
+      } catch {
+        setError("Unable to load data. Please try again later.");
       } finally {
         setLoading(false);
       }
