@@ -19,6 +19,10 @@ import Success from "./pages/Success";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Signup from "./pages/Signup";
 import AppDashboard from "./pages/AppDashboard";
+import CIDashboard from "./pages/ci/CIDashboard";
+import CILandscape from "./pages/ci/CILandscape";
+import CICompetitors from "./pages/ci/CICompetitors";
+import CISettings from "./pages/ci/CISettings";
 
 const Calculator = lazy(() => import("./pages/Calculator"));
 
@@ -111,6 +115,7 @@ function Nav() {
         {isLoggedIn && (
           <>
             <NavLink to="/intelligence" label="竞品分析" />
+            <NavLink to="/ci" label={t(nav.ciVfinal, lang)} />
             <NavLink to="/agents" label={t(nav.agents, lang)} />
             <NavLink to="/workflows" label={t(nav.workflows, lang)} />
             <NavLink to="/costs" label={t(nav.costs, lang)} />
@@ -179,6 +184,12 @@ function AppRoutes() {
 
         {/* Intelligence dashboard — tab inside the authenticated shell */}
         <Route path="/intelligence" element={<ProtectedRoute><AppDashboard /></ProtectedRoute>} />
+
+        {/* CI vFinal — new competitive intelligence tab */}
+        <Route path="/ci" element={<ProtectedRoute><CIDashboard /></ProtectedRoute>} />
+        <Route path="/ci/landscape" element={<ProtectedRoute><CILandscape /></ProtectedRoute>} />
+        <Route path="/ci/competitors" element={<ProtectedRoute><CICompetitors /></ProtectedRoute>} />
+        <Route path="/ci/settings" element={<ProtectedRoute><CISettings /></ProtectedRoute>} />
       </Routes>
     </div>
   );
