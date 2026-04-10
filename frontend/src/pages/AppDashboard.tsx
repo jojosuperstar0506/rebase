@@ -25,17 +25,65 @@ interface DashboardData {
   competitors: Brand[];
   action_items: ActionItem[];
   narrative?: string;
+  _source?: string;
 }
+
+// ── Hardcoded demo data (shown immediately; replaced by live data when available) ──
+
+const DEMO_DATA: DashboardData = {
+  brand_name: "竞品分析",
+  last_updated: "2026-04-09",
+  narrative:
+    "Songmont 和 古良吉吉 持续领跑新兴国货赛道，凭借强势的小红书内容矩阵和 KOL 合作，动能评分高居前列。La Festin（拉菲斯特）在价值挑战者梯队中威胁指数最高，需重点关注其直播渠道扩张动向。建议在本季度加大穿搭OOTD内容比重，并测试尾部 KOL 矩阵以对冲头部 KOL 成本上升风险。",
+  competitors: [
+    { brand_name: "Songmont", brand_name_en: "Songmont", momentum_score: 82, threat_index: 74, wtp_score: 68, trend_signals: ["直播销量增长", "小红书破圈", "联名限定款"] },
+    { brand_name: "古良吉吉", brand_name_en: "Gu Liang Ji Ji", momentum_score: 78, threat_index: 65, wtp_score: 61, trend_signals: ["设计师IP强化", "买手店渠道", "海外传播"] },
+    { brand_name: "La Festin", brand_name_en: "La Festin", momentum_score: 55, threat_index: 71, wtp_score: 58, trend_signals: ["价格下探", "抖音投流加速", "达人矩阵"] },
+    { brand_name: "DISSONA", brand_name_en: "DISSONA", momentum_score: 62, threat_index: 58, wtp_score: 52, trend_signals: ["天猫旗舰促销", "轻奢定位稳固"] },
+    { brand_name: "裘真", brand_name_en: "Qiu Zhen", momentum_score: 71, threat_index: 50, wtp_score: 46, trend_signals: ["东方美学叙事", "UGC口碑建设"] },
+    { brand_name: "VINEY", brand_name_en: "VINEY", momentum_score: 44, threat_index: 63, wtp_score: 51, trend_signals: ["低价冲量", "拼多多渗透"] },
+    { brand_name: "FOXER", brand_name_en: "FOXER", momentum_score: 38, threat_index: 47, wtp_score: 39, trend_signals: ["促销依赖"] },
+    { brand_name: "Cnolés蔻一", brand_name_en: "Cnoles", momentum_score: 51, threat_index: 42, wtp_score: 38, trend_signals: ["内容产量下降"] },
+  ],
+  action_items: [
+    {
+      priority: "high",
+      title: "监控 Songmont 直播频次与客单价动向",
+      description: "Songmont 上周直播观看人次环比增长 34%，客单价下探至 ¥680 区间，有走量策略迹象。建议本周内完成专项竞品监控报告。",
+    },
+    {
+      priority: "high",
+      title: "反制 La Festin 抖音投流策略",
+      description: "La Festin 在抖音的付费流量投放量级本月翻倍，主推 ¥400 以下入门款，正在蚕食价值挑战者赛道份额。建议评估差异化内容反制方案。",
+    },
+    {
+      priority: "medium",
+      title: "复制古良吉吉的买手店渠道模式",
+      description: "古良吉吉与 10+ 买手集合店达成合作，有效提升线下品牌曝光与溢价感知。评估是否在上海、北京各 1-2 家买手店进行试点。",
+    },
+    {
+      priority: "medium",
+      title: "测试腰部 KOL 矩阵替代头部 KOL 合作",
+      description: "头部 KOL 报价本季度上涨约 20%，而腰部 KOL（1-10万粉丝）的 ROI 表现持续优于头部。建议本月测试 5 个腰部账号内容合作。",
+    },
+    {
+      priority: "low",
+      title: "加强东方美学内容叙事",
+      description: "裘真和古良吉吉均在东方美学赛道取得显著声量，而该内容方向在全平台仍有流量红利。评估融入品牌内容策略的可行性。",
+    },
+  ],
+  _source: "demo",
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function bubbleColor(b: Brand): string {
   const highMomentum = b.momentum_score >= 50;
   const highThreat = b.threat_index >= 50;
-  if (highMomentum && highThreat) return "#ef4444";   // top-right: dangerous
-  if (highMomentum && !highThreat) return "#3b82f6";  // top-left: rising
-  if (!highMomentum && highThreat) return "#f59e0b";  // bottom-right: niche
-  return "#6b7280";                                    // bottom-left: declining
+  if (highMomentum && highThreat) return "#ef4444";
+  if (highMomentum && !highThreat) return "#3b82f6";
+  if (!highMomentum && highThreat) return "#f59e0b";
+  return "#6b7280";
 }
 
 function bubbleCx(threatIndex: number): number {
@@ -50,73 +98,76 @@ function bubbleR(wtpScore: number): number {
   return 18 + (wtpScore / 100) * 22;
 }
 
-function priorityColor(priority: string, C: Record<string, string>): string {
-  if (priority === "high") return C.danger;
-  if (priority === "medium") return C.ac;
-  return C.t2;
+function priorityColor(priority: string, colors: Record<string, string>): string {
+  if (priority === "high") return colors.danger;
+  if (priority === "medium") return colors.ac;
+  return colors.t2;
 }
 
 function formatDate(iso: string): string {
   try {
-    return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    return new Date(iso).toLocaleDateString("zh-CN", {
+      year: "numeric", month: "long", day: "numeric",
+    });
   } catch {
     return iso;
   }
 }
 
-function greetingPrefix(): string {
-  const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 17) return "Good afternoon";
-  return "Good evening";
-}
-
-// ── Static JSON → DashboardData mapper ───────────────────────────────────────
-// Used when the live API is unavailable (e.g. backend not yet deployed).
-// Reads /data/competitors/competitors_latest.json which Vercel serves statically.
+// ── Static JSON mapper ────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapStaticJson(raw: any): DashboardData {
-  const scores: Record<string, { momentum_score?: number; threat_index?: number; gtm_signals?: string[] }> =
-    raw.scores?.brands ?? {};
+function mapStaticJson(raw: any): DashboardData | null {
+  try {
+    // Static JSON may have scores nested at raw.scores.brands, or may not have scores at all
+    const scoresMap: Record<string, {
+      momentum_score?: number;
+      threat_index?: number;
+      gtm_signals?: string[];
+    }> = raw?.scores?.brands ?? {};
 
-  const competitors: Brand[] = Object.entries(raw.brands ?? {}).map(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ([name, _data]: [string, any]) => {
-      const s = scores[name] ?? {};
-      const momentum = +(s.momentum_score ?? 0).toFixed(1);
-      const threat   = +(s.threat_index   ?? 0).toFixed(1);
-      const wtp      = +(threat * 0.82).toFixed(1);
+    const brandsObj: Record<string, Record<string, unknown>> = raw?.brands ?? {};
+    if (Object.keys(brandsObj).length === 0) return null;
+
+    const competitors: Brand[] = Object.entries(brandsObj).map(([name, brandData]) => {
+      const s = scoresMap[name] ?? {};
+      const momentum = parseFloat(((s.momentum_score ?? 0) as number).toFixed(1));
+      const threat = parseFloat(((s.threat_index ?? 0) as number).toFixed(1));
+      const wtp = parseFloat((threat * 0.82).toFixed(1));
+      const d = brandData as Record<string, unknown>;
       return {
-        brand_name:    name,
-        brand_name_en: _data.brand_name_en ?? "",
+        brand_name: name,
+        brand_name_en: (d.brand_name_en as string) ?? "",
         momentum_score: momentum,
-        threat_index:   threat,
-        wtp_score:      wtp,
-        trend_signals:  (s.gtm_signals ?? []).slice(0, 3),
+        threat_index: threat,
+        wtp_score: wtp,
+        trend_signals: ((s.gtm_signals ?? []) as string[]).slice(0, 3),
       };
-    }
-  ).sort((a, b) => b.momentum_score - a.momentum_score);
+    }).sort((a, b) => b.momentum_score - a.momentum_score);
 
-  // Map action_items — static JSON uses { action, urgency, department, rationale }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rawItems: any[] = Array.isArray(raw.narratives?.action_items)
-    ? raw.narratives.action_items
-    : [];
+    const rawItems = Array.isArray(raw?.narratives?.action_items)
+      ? raw.narratives.action_items as Record<string, unknown>[]
+      : [];
 
-  const action_items: ActionItem[] = rawItems.map(item => ({
-    priority: item.urgency === "本周" ? "high" : item.urgency === "本月" ? "medium" : "low",
-    title:       item.action      ?? item.title       ?? "",
-    description: item.rationale   ?? item.description ?? item.department ?? "",
-  }));
+    const action_items: ActionItem[] = rawItems.map(item => ({
+      priority: item.urgency === "本周" ? "high" as const
+        : item.urgency === "本月" ? "medium" as const
+        : "low" as const,
+      title: (item.action ?? item.title ?? "") as string,
+      description: (item.rationale ?? item.description ?? item.department ?? "") as string,
+    }));
 
-  return {
-    brand_name:   "竞品分析",
-    last_updated: raw.scrape_date ?? "",
-    competitors,
-    action_items,
-    narrative: raw.narratives?.strategic_summary ?? "",
-  };
+    return {
+      brand_name: "竞品分析",
+      last_updated: (raw.scrape_date as string) ?? "",
+      competitors,
+      action_items,
+      narrative: (raw.narratives?.strategic_summary as string) ?? "",
+      _source: "static_json",
+    };
+  } catch {
+    return null;
+  }
 }
 
 // ── Sort types ────────────────────────────────────────────────────────────────
@@ -129,71 +180,89 @@ type SortDir = "asc" | "desc";
 export default function AppDashboard() {
   const { colors: C } = useApp();
 
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  // Start with demo data so the page renders immediately — no blank screen ever
+  const [data, setData] = useState<DashboardData>(DEMO_DATA);
+  const [fetchState, setFetchState] = useState<"loading" | "live" | "static" | "demo">("loading");
   const [sortKey, setSortKey] = useState<SortKey>("threat_index");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [hoveredBubble, setHoveredBubble] = useState<number | null>(null);
 
   useEffect(() => {
-    (async () => {
-      // Try the live API first (JSON response = backend is deployed and ready).
-      // If it returns non-JSON or fails, fall back to the static file.
-      // Once the ECS backend is set up, this automatically switches to live data.
-      let usedApi = false;
+    let cancelled = false;
+
+    async function loadData() {
+      // 1. Try live API (backend on ECS)
       try {
-        const token = localStorage.getItem("rebase_token") || "";
+        const token = localStorage.getItem("rebase_token") ?? "";
         const res = await fetch("/api/v2/dashboard?industry=bag", {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
+          signal: AbortSignal.timeout(4000),
         });
-        if (res.ok) {
-          const contentType = res.headers.get("content-type") || "";
-          if (contentType.includes("application/json")) {
-            setData(await res.json());
-            usedApi = true;
+        if (!cancelled && res.ok) {
+          const ct = res.headers.get("content-type") ?? "";
+          if (ct.includes("application/json")) {
+            const json = await res.json() as DashboardData;
+            if (!cancelled && json.competitors && json.competitors.length > 0) {
+              setData(json);
+              setFetchState("live");
+              return;
+            }
           }
         }
       } catch {
-        // Network error or backend not reachable — fall through
+        // backend not reachable — fall through
       }
 
-      if (!usedApi) {
-        // Static fallback: the competitors_latest.json Vercel serves directly.
-        // This is the primary data source until the backend is deployed.
-        try {
-          const res = await fetch("/data/competitors/competitors_latest.json");
-          if (!res.ok) throw new Error("static file not found");
+      // 2. Try static JSON file
+      try {
+        const res = await fetch("/data/competitors/competitors_latest.json", {
+          signal: AbortSignal.timeout(4000),
+        });
+        if (!cancelled && res.ok) {
           const raw = await res.json();
-          setData(mapStaticJson(raw));
-        } catch {
-          setError("Unable to load intelligence data. Please try refreshing.");
+          const mapped = mapStaticJson(raw);
+          // Only use static data if it has real scores (otherwise keep demo)
+          const hasRealScores = mapped !== null &&
+            mapped.competitors.some(b => b.momentum_score > 0 || b.threat_index > 0);
+          if (!cancelled && mapped !== null && hasRealScores) {
+            setData(mapped);
+            setFetchState("static");
+            return;
+          }
         }
+      } catch {
+        // static file missing — keep demo data
       }
 
-      setLoading(false);
-    })();
+      // 3. Keep demo data
+      if (!cancelled) setFetchState("demo");
+    }
+
+    loadData();
+    return () => { cancelled = true; };
   }, []);
 
-  // ── Sort logic ──────────────────────────────────────────────────────────────
+  // ── Sort ────────────────────────────────────────────────────────────────────
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
-      setSortDir(d => d === "asc" ? "desc" : "asc");
+      setSortDir(d => (d === "asc" ? "desc" : "asc"));
     } else {
       setSortKey(key);
       setSortDir("desc");
     }
   }
 
-  const sortedBrands = data ? [...data.competitors].sort((a, b) => {
+  const sortedBrands = [...data.competitors].sort((a, b) => {
     const av = a[sortKey];
     const bv = b[sortKey];
     if (typeof av === "string" && typeof bv === "string") {
       return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
     }
-    return sortDir === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number);
-  }) : [];
+    return sortDir === "asc"
+      ? (av as number) - (bv as number)
+      : (bv as number) - (av as number);
+  });
 
   // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -237,74 +306,71 @@ export default function AppDashboard() {
     verticalAlign: "middle",
   };
 
-  // ── Loading ─────────────────────────────────────────────────────────────────
+  const sourceLabel: Record<string, string> = {
+    loading: "Checking for live data…",
+    live: "Live data from backend",
+    static: "Latest scraped data",
+    demo: "Demo data · Connect backend for live intelligence",
+  };
 
-  if (loading) {
-    return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 80, fontFamily: "system-ui, sans-serif" }}>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ width: 40, height: 40, border: `3px solid ${C.bd}`, borderTopColor: C.ac, borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 16px" }} />
-          <div style={{ color: C.t2, fontSize: 14 }}>Loading intelligence data…</div>
-        </div>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    );
-  }
-
-  // ── Error ───────────────────────────────────────────────────────────────────
-
-  if (error) {
-    return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 80, fontFamily: "system-ui, sans-serif" }}>
-        <div style={{ width: 420, background: C.s1, border: `1px solid ${C.danger}44`, borderRadius: 12, padding: 40, textAlign: "center" }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: C.danger, marginBottom: 8 }}>Unable to load data</div>
-          <div style={{ fontSize: 13, color: C.t2, marginBottom: 24 }}>{error}</div>
-          <button onClick={() => window.location.reload()} style={{ padding: "10px 24px", background: C.ac, border: "none", borderRadius: 6, color: "#000", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!data) return null;
-
-  // ── Dashboard ───────────────────────────────────────────────────────────────
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <div style={{ fontFamily: "system-ui, sans-serif", color: C.tx }}>
 
-      {/* ── Page header ─────────────────────────────────────────────────────── */}
-      <div style={{ padding: "24px 32px 0", display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+      {/* ── Page header ──────────────────────────────────────────────────────── */}
+      <div style={{ padding: "24px 32px 0", display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: C.tx }}>竞品分析</h1>
-          <div style={{ fontSize: 13, color: C.t2, marginTop: 4 }}>Competitive Intelligence · {data.last_updated ? `Last updated ${formatDate(data.last_updated)}` : "Data refreshed nightly at 2am"}</div>
+          <div style={{ fontSize: 13, color: C.t2, marginTop: 4 }}>
+            Competitive Intelligence · {data.last_updated ? `更新于 ${formatDate(data.last_updated)}` : "每晚 2am 自动更新"}
+          </div>
+        </div>
+        <div style={{
+          fontSize: 11,
+          color: fetchState === "live" ? C.success : fetchState === "demo" ? C.t2 : C.ac,
+          background: C.s2,
+          border: `1px solid ${C.bd}`,
+          borderRadius: 6,
+          padding: "4px 10px",
+          display: "flex",
+          alignItems: "center",
+          gap: 5,
+          flexShrink: 0,
+          marginTop: 4,
+        }}>
+          <span style={{
+            display: "inline-block", width: 6, height: 6, borderRadius: "50%",
+            background: fetchState === "live" ? C.success : fetchState === "loading" ? C.ac : C.t2,
+          }} />
+          {sourceLabel[fetchState]}
         </div>
       </div>
 
-      {/* ── Main content ────────────────────────────────────────────────────── */}
+      {/* ── Main content ─────────────────────────────────────────────────────── */}
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 24px 40px" }}>
 
-        {/* ── Narrative summary (if present) ──────────────────────────────── */}
+        {/* ── AI Narrative ─────────────────────────────────────────────────── */}
         {data.narrative && (
-          <div style={{ ...cardStyle, borderLeft: `3px solid ${C.ac}`, marginBottom: 24 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.ac, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>AI Summary</div>
-            <div style={{ fontSize: 14, color: C.tx, lineHeight: 1.7 }}>{data.narrative}</div>
+          <div style={{ ...cardStyle, borderLeft: `3px solid ${C.ac}` }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.ac, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
+              AI 竞品摘要
+            </div>
+            <div style={{ fontSize: 14, color: C.tx, lineHeight: 1.8 }}>{data.narrative}</div>
           </div>
         )}
 
-        {/* ── Competitive Landscape (SVG bubble chart) ─────────────────────── */}
+        {/* ── Competitive Landscape Bubble Chart ───────────────────────────── */}
         <div style={cardStyle}>
-          <div style={sectionTitle}>Competitive Landscape</div>
+          <div style={sectionTitle}>竞品态势图</div>
 
           {/* Legend */}
           <div style={{ display: "flex", gap: 20, marginBottom: 16, flexWrap: "wrap" }}>
             {[
-              { color: "#ef4444", label: "High threat + momentum" },
-              { color: "#3b82f6", label: "Rising (low threat)" },
-              { color: "#f59e0b", label: "Niche (high threat)" },
-              { color: "#6b7280", label: "Declining" },
+              { color: "#ef4444", label: "高威胁 + 高动能" },
+              { color: "#3b82f6", label: "上升势头强" },
+              { color: "#f59e0b", label: "细分威胁" },
+              { color: "#6b7280", label: "动能下滑" },
             ].map(({ color, label }) => (
               <div key={label} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.t2 }}>
                 <div style={{ width: 10, height: 10, borderRadius: "50%", background: color }} />
@@ -315,12 +381,17 @@ export default function AppDashboard() {
 
           <div style={{ overflowX: "auto" }}>
             <svg viewBox="0 0 680 420" width="100%" style={{ maxWidth: 680, display: "block" }}>
-              {/* Background */}
               <rect x={0} y={0} width={680} height={420} fill="transparent" />
 
               {/* Quadrant shading */}
               <rect x={40} y={40} width={300} height={340} fill={C.s2} opacity={0.4} />
               <rect x={340} y={40} width={300} height={340} fill={C.s2} opacity={0.6} />
+
+              {/* Quadrant labels */}
+              <text x={190} y={58} textAnchor="middle" fill={C.t3} fontSize={10}>上升势头</text>
+              <text x={490} y={58} textAnchor="middle" fill={C.t3} fontSize={10}>高优先关注</text>
+              <text x={190} y={375} textAnchor="middle" fill={C.t3} fontSize={10}>动能下滑</text>
+              <text x={490} y={375} textAnchor="middle" fill={C.t3} fontSize={10}>细分威胁</text>
 
               {/* Axis lines */}
               <line x1={40} y1={40} x2={40} y2={385} stroke={C.bd} strokeWidth={1} />
@@ -329,23 +400,23 @@ export default function AppDashboard() {
               {/* Grid lines */}
               {[25, 50, 75].map(v => (
                 <g key={v}>
-                  <line x1={40 + (v / 100) * 600} y1={40} x2={40 + (v / 100) * 600} y2={380} stroke={C.bd} strokeWidth={0.5} strokeDasharray="4,4" />
-                  <line x1={40} y1={380 - (v / 100) * 340} x2={640} y2={380 - (v / 100) * 340} stroke={C.bd} strokeWidth={0.5} strokeDasharray="4,4" />
+                  <line x1={40 + (v / 100) * 600} y1={40} x2={40 + (v / 100) * 600} y2={380}
+                    stroke={C.bd} strokeWidth={0.5} strokeDasharray="4,4" />
+                  <line x1={40} y1={380 - (v / 100) * 340} x2={640} y2={380 - (v / 100) * 340}
+                    stroke={C.bd} strokeWidth={0.5} strokeDasharray="4,4" />
                 </g>
               ))}
 
               {/* Axis labels */}
-              <text x={340} y={414} textAnchor="middle" fill={C.t2} fontSize={11}>Threat Index →</text>
-              <text x={14} y={210} textAnchor="middle" fill={C.t2} fontSize={11} transform="rotate(-90, 14, 210)">Momentum →</text>
+              <text x={340} y={414} textAnchor="middle" fill={C.t2} fontSize={11}>威胁指数 →</text>
+              <text x={14} y={210} textAnchor="middle" fill={C.t2} fontSize={11} transform="rotate(-90, 14, 210)">动能 →</text>
 
-              {/* Tick labels — X axis */}
+              {/* Tick labels */}
               {[0, 25, 50, 75, 100].map(v => (
-                <text key={v} x={40 + (v / 100) * 600} y={396} textAnchor="middle" fill={C.t2} fontSize={9}>{v}</text>
-              ))}
-
-              {/* Tick labels — Y axis */}
-              {[0, 25, 50, 75, 100].map(v => (
-                <text key={v} x={34} y={380 - (v / 100) * 340 + 4} textAnchor="end" fill={C.t2} fontSize={9}>{v}</text>
+                <g key={v}>
+                  <text x={40 + (v / 100) * 600} y={396} textAnchor="middle" fill={C.t2} fontSize={9}>{v}</text>
+                  <text x={34} y={380 - (v / 100) * 340 + 4} textAnchor="end" fill={C.t2} fontSize={9}>{v}</text>
+                </g>
               ))}
 
               {/* Bubbles */}
@@ -355,9 +426,11 @@ export default function AppDashboard() {
                 const r = bubbleR(brand.wtp_score);
                 const color = bubbleColor(brand);
                 const isHovered = hoveredBubble === i;
+                // Clamp tooltip so it doesn't go off-canvas
+                const tipX = cx + r + 4 + 164 > 680 ? cx - r - 168 : cx + r + 4;
 
                 return (
-                  <g key={i}
+                  <g key={`${brand.brand_name}-${i}`}
                     onMouseEnter={() => setHoveredBubble(i)}
                     onMouseLeave={() => setHoveredBubble(null)}
                     style={{ cursor: "pointer" }}
@@ -368,7 +441,7 @@ export default function AppDashboard() {
                       stroke={color} strokeWidth={isHovered ? 2 : 1}
                     />
                     <text
-                      x={cx} y={cy + r + 12}
+                      x={cx} y={cy + r + 13}
                       textAnchor="middle"
                       fill={C.tx}
                       fontSize={isHovered ? 11 : 10}
@@ -377,28 +450,28 @@ export default function AppDashboard() {
                       {brand.brand_name}
                     </text>
 
-                    {/* Tooltip on hover */}
                     {isHovered && (
                       <g>
                         <rect
-                          x={cx + r + 4} y={cy - 34}
-                          width={160} height={68}
+                          x={tipX} y={cy - 38}
+                          width={160} height={76}
                           rx={4} ry={4}
                           fill={C.s1} stroke={color} strokeWidth={1}
                         />
-                        <text x={cx + r + 12} y={cy - 18} fill={C.tx} fontSize={11} fontWeight={700}>
+                        <text x={tipX + 8} y={cy - 22} fill={C.tx} fontSize={11} fontWeight={700}>
                           {brand.brand_name}
                         </text>
-                        <text x={cx + r + 12} y={cy - 4} fill={C.t2} fontSize={10}>
-                          Threat: {brand.threat_index}  Momentum: {brand.momentum_score}
+                        <text x={tipX + 8} y={cy - 8} fill={C.t2} fontSize={10}>
+                          动能: {brand.momentum_score}  威胁: {brand.threat_index}
                         </text>
-                        <text x={cx + r + 12} y={cy + 12} fill={C.t2} fontSize={10}>
-                          WTP Score: {brand.wtp_score}
+                        <text x={tipX + 8} y={cy + 6} fill={C.t2} fontSize={10}>
+                          WTP: {brand.wtp_score}
                         </text>
-                        <text x={cx + r + 12} y={cy + 26} fill={color} fontSize={10} fontWeight={600}>
-                          {brand.threat_index >= 50 && brand.momentum_score >= 50 ? "⚠ High Priority" :
-                            brand.momentum_score >= 50 ? "↑ Rising" :
-                            brand.threat_index >= 50 ? "◆ Niche Threat" : "↓ Declining"}
+                        <text x={tipX + 8} y={cy + 22} fill={color} fontSize={10} fontWeight={600}>
+                          {brand.threat_index >= 50 && brand.momentum_score >= 50 ? "⚠ 高优先关注"
+                            : brand.momentum_score >= 50 ? "↑ 上升势头强"
+                            : brand.threat_index >= 50 ? "◆ 细分威胁"
+                            : "↓ 动能下滑"}
                         </text>
                       </g>
                     )}
@@ -409,52 +482,78 @@ export default function AppDashboard() {
           </div>
 
           <div style={{ fontSize: 11, color: C.t2, marginTop: 8 }}>
-            Bubble size represents Willingness-to-Pay (WTP) score. Hover bubbles for details.
+            气泡大小代表品牌溢价意愿（WTP）评分。将鼠标悬停于气泡查看详情。
           </div>
         </div>
 
-        {/* ── Brand Scores Table ──────────────────────────────────────────────── */}
+        {/* ── Brand Scores Table ───────────────────────────────────────────── */}
         <div style={cardStyle}>
-          <div style={sectionTitle}>Brand Scores</div>
+          <div style={sectionTitle}>品牌评分排名</div>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
                   {([
-                    ["brand_name", "Brand"],
-                    ["momentum_score", "Momentum"],
-                    ["threat_index", "Threat Index"],
-                    ["wtp_score", "WTP Score"],
+                    ["brand_name", "品牌"],
+                    ["momentum_score", "动能评分"],
+                    ["threat_index", "威胁指数"],
+                    ["wtp_score", "溢价意愿"],
                   ] as [SortKey, string][]).map(([key, label]) => (
                     <th key={key} style={thStyle} onClick={() => handleSort(key)}>
                       {label}
                       {sortKey === key ? (sortDir === "desc" ? " ↓" : " ↑") : " ↕"}
                     </th>
                   ))}
-                  <th style={{ ...thStyle, cursor: "default" }}>Trend Signals</th>
+                  <th style={{ ...thStyle, cursor: "default" }}>近期信号</th>
                 </tr>
               </thead>
               <tbody>
                 {sortedBrands.map((brand, i) => (
-                  <tr key={i} style={{ background: i % 2 === 0 ? "transparent" : C.s2 + "55" }}>
+                  <tr key={`${brand.brand_name}-row-${i}`}
+                    style={{ background: i % 2 === 0 ? "transparent" : C.s2 + "55" }}
+                  >
                     <td style={tdStyle}>
                       <div style={{ fontWeight: 600 }}>{brand.brand_name}</div>
-                      {brand.brand_name_en && <div style={{ fontSize: 11, color: C.t2 }}>{brand.brand_name_en}</div>}
+                      {brand.brand_name_en && (
+                        <div style={{ fontSize: 11, color: C.t2 }}>{brand.brand_name_en}</div>
+                      )}
                     </td>
                     <td style={tdStyle}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <div style={{ flex: 1, height: 6, background: C.bd, borderRadius: 3, overflow: "hidden", minWidth: 60 }}>
-                          <div style={{ width: `${brand.momentum_score}%`, height: "100%", background: brand.momentum_score >= 50 ? "#3b82f6" : C.t2, borderRadius: 3 }} />
+                          <div style={{
+                            width: `${brand.momentum_score}%`, height: "100%",
+                            background: brand.momentum_score >= 50 ? "#3b82f6" : C.t2,
+                            borderRadius: 3,
+                          }} />
                         </div>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: brand.momentum_score >= 70 ? "#3b82f6" : C.tx, minWidth: 28 }}>{brand.momentum_score}</span>
+                        <span style={{
+                          fontSize: 12, fontWeight: 600,
+                          color: brand.momentum_score >= 70 ? "#3b82f6" : C.tx,
+                          minWidth: 28,
+                        }}>
+                          {brand.momentum_score}
+                        </span>
                       </div>
                     </td>
                     <td style={tdStyle}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <div style={{ flex: 1, height: 6, background: C.bd, borderRadius: 3, overflow: "hidden", minWidth: 60 }}>
-                          <div style={{ width: `${brand.threat_index}%`, height: "100%", background: brand.threat_index >= 60 ? C.danger : brand.threat_index >= 40 ? "#f59e0b" : C.success, borderRadius: 3 }} />
+                          <div style={{
+                            width: `${brand.threat_index}%`, height: "100%",
+                            background: brand.threat_index >= 60 ? C.danger
+                              : brand.threat_index >= 40 ? "#f59e0b"
+                              : C.success,
+                            borderRadius: 3,
+                          }} />
                         </div>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: brand.threat_index >= 60 ? C.danger : C.tx, minWidth: 28 }}>{brand.threat_index}</span>
+                        <span style={{
+                          fontSize: 12, fontWeight: 600,
+                          color: brand.threat_index >= 60 ? C.danger : C.tx,
+                          minWidth: 28,
+                        }}>
+                          {brand.threat_index}
+                        </span>
                       </div>
                     </td>
                     <td style={{ ...tdStyle, fontWeight: 600, fontSize: 14 }}>
@@ -462,12 +561,20 @@ export default function AppDashboard() {
                     </td>
                     <td style={tdStyle}>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                        {(brand.trend_signals || []).slice(0, 3).map((sig, j) => (
-                          <span key={j} style={{ fontSize: 11, background: C.s2, border: `1px solid ${C.bd}`, borderRadius: 4, padding: "2px 6px", color: C.t2, whiteSpace: "nowrap" }}>
+                        {(brand.trend_signals ?? []).slice(0, 3).map((sig, j) => (
+                          <span key={j} style={{
+                            fontSize: 11,
+                            background: C.s2,
+                            border: `1px solid ${C.bd}`,
+                            borderRadius: 4,
+                            padding: "2px 6px",
+                            color: C.t2,
+                            whiteSpace: "nowrap",
+                          }}>
                             {sig}
                           </span>
                         ))}
-                        {(brand.trend_signals || []).length === 0 && (
+                        {(brand.trend_signals ?? []).length === 0 && (
                           <span style={{ fontSize: 11, color: C.t2 }}>—</span>
                         )}
                       </div>
@@ -479,25 +586,51 @@ export default function AppDashboard() {
           </div>
         </div>
 
-        {/* ── Action Items ────────────────────────────────────────────────────── */}
-        {data.action_items && data.action_items.length > 0 && (
+        {/* ── Action Items ─────────────────────────────────────────────────── */}
+        {data.action_items.length > 0 && (
           <div style={cardStyle}>
-            <div style={sectionTitle}>Action Items</div>
+            <div style={sectionTitle}>行动建议</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {data.action_items.map((item, i) => {
                 const pColor = priorityColor(item.priority, C as unknown as Record<string, string>);
+                const priorityLabel: Record<string, string> = {
+                  high: "本周必做",
+                  medium: "本月完成",
+                  low: "持续关注",
+                };
                 return (
-                  <div key={i} style={{ display: "flex", gap: 14, padding: "14px 16px", background: C.s2, borderRadius: 8, border: `1px solid ${C.bd}`, borderLeft: `3px solid ${pColor}` }}>
+                  <div key={i} style={{
+                    display: "flex",
+                    gap: 14,
+                    padding: "14px 16px",
+                    background: C.s2,
+                    borderRadius: 8,
+                    border: `1px solid ${C.bd}`,
+                    borderLeft: `3px solid ${pColor}`,
+                  }}>
                     <div style={{ flexShrink: 0, marginTop: 2 }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: pColor, background: pColor + "18", border: `1px solid ${pColor}44`, borderRadius: 4, padding: "2px 7px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                        {item.priority}
+                      <span style={{
+                        fontSize: 11, fontWeight: 700, color: pColor,
+                        background: `${pColor}18`,
+                        border: `1px solid ${pColor}44`,
+                        borderRadius: 4,
+                        padding: "2px 7px",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.04em",
+                        whiteSpace: "nowrap",
+                      }}>
+                        {priorityLabel[item.priority] ?? item.priority}
                       </span>
                     </div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: C.tx, marginBottom: 4 }}>{item.title}</div>
-                      <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.6 }}>{item.description}</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: C.tx, marginBottom: 4 }}>
+                        {item.title}
+                      </div>
+                      <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.7 }}>
+                        {item.description}
+                      </div>
                     </div>
-                    <div style={{ flexShrink: 0, fontSize: 18, color: C.bd }}>
+                    <div style={{ flexShrink: 0, fontSize: 18 }}>
                       {item.priority === "high" ? "🔴" : item.priority === "medium" ? "🟡" : "🟢"}
                     </div>
                   </div>
@@ -507,9 +640,14 @@ export default function AppDashboard() {
           </div>
         )}
 
-        {/* ── Footer ──────────────────────────────────────────────────────────── */}
+        {/* ── Footer ───────────────────────────────────────────────────────── */}
         <div style={{ textAlign: "center", fontSize: 12, color: C.t2, paddingTop: 8, paddingBottom: 32 }}>
-          Powered by Rebase · Data refreshed automatically every 24 hours
+          Powered by Rebase · 数据每 24 小时自动更新
+          {fetchState === "demo" && (
+            <span style={{ marginLeft: 8, color: C.t3 }}>
+              · 当前显示演示数据，接入后端后将自动切换为实时数据
+            </span>
+          )}
         </div>
       </div>
     </div>
