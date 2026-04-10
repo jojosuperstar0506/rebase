@@ -307,6 +307,45 @@ export async function getScoreTrends(
   return { data: [], source: 'simulated' };
 }
 
+// ─── TASK-25: Alerts ──────────────────────────────────────────────
+
+export interface CIAlert {
+  id: string;
+  competitor_name: string;
+  alert_type: string;
+  metric_type: string | null;
+  previous_value: number | null;
+  current_value: number | null;
+  change_amount: number | null;
+  severity: 'critical' | 'warning' | 'info';
+  message: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+export async function getAlerts(
+  workspaceId: string,
+  unreadOnly: boolean = false
+): Promise<{ alerts: CIAlert[]; unread_count: number }> {
+  const params = `workspace_id=${encodeURIComponent(workspaceId)}${unreadOnly ? '&unread_only=true' : ''}`;
+  const data = await tryApi<{ alerts: CIAlert[]; unread_count: number }>(`/alerts?${params}`);
+  return data || { alerts: [], unread_count: 0 };
+}
+
+export async function getAlertCount(workspaceId: string): Promise<number> {
+  const data = await tryApi<{ unread_count: number }>(
+    `/alerts/count?workspace_id=${encodeURIComponent(workspaceId)}`
+  );
+  return data?.unread_count || 0;
+}
+
+export async function markAlertsRead(workspaceId: string, alertIds?: string[]): Promise<void> {
+  await tryApi('/alerts/read', {
+    method: 'POST',
+    body: JSON.stringify({ workspace_id: workspaceId, alert_ids: alertIds }),
+  });
+}
+
 // ─── Demo Data (last resort fallback) ─────────────────────────────
 
 const DEMO_DATA: DashboardData = {

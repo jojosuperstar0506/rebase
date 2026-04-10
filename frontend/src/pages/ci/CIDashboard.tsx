@@ -10,6 +10,7 @@ import CIWelcomeBanner from '../../components/ci/CIWelcomeBanner';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { exportDashboardCSV, exportDashboardPDF, showExportToast } from '../../utils/ciExport';
 import { MiniTrendChart } from '../../components/ci/CITrendChart';
+import CIAlertFeed from '../../components/ci/CIAlertFeed';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -795,11 +796,18 @@ export default function CIDashboard() {
           </div>
         )}
 
-        {/* Action items */}
+        {/* Alert Feed */}
+        <CIAlertFeed
+          workspaceId={workspace?.id || ''}
+          competitors={data.brands}
+          source={source}
+        />
+
+        {/* Action items (AI recommendations) */}
         {data.action_items.length > 0 && (
           <div style={card}>
             <div style={sectionTitle}>
-              {lang === 'zh' ? '行动建议' : 'Action Items'}
+              {t(T.ci.actionItems, lang)}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {data.action_items.map((item, i) => {

@@ -3,6 +3,8 @@ import type { CSSProperties } from "react";
 import { Routes, Route, Link, useNavigate, useLocation } from "react-router-dom";
 
 import { AppProvider, useApp } from "./context/AppContext";
+import { getWorkspace } from "./services/ciApi";
+import { useCIAlertCount } from "./hooks/useCIAlertCount";
 import { T, t } from "./i18n";
 
 import Home from "./pages/Home";
@@ -62,6 +64,10 @@ function Nav() {
   const [isAdmin, setIsAdmin] = useState(checkIsAdmin);
   const nav = T.nav;
 
+  // CI workspace ID — fetched lazily for alert badge
+  const [ciWorkspaceId, setCiWorkspaceId] = useState<string | null>(null);
+  const alertCount = useCIAlertCount(ciWorkspaceId);
+
   // CI dot indicator: show when user hasn't visited /ci yet, or there's newer CI data
   function checkCiDot(): boolean {
     const lastVisit = localStorage.getItem('rebase_ci_last_visit');
@@ -79,8 +85,17 @@ function Nav() {
 
   // Re-check auth on every route change (catches login/logout navigations)
   useEffect(() => {
-    setIsLoggedIn(checkAuth());
+    const loggedIn = checkAuth();
+    setIsLoggedIn(loggedIn);
     setIsAdmin(checkIsAdmin());
+
+    // Fetch CI workspace ID (for alert badge) once when logged in
+    if (loggedIn && !ciWorkspaceId) {
+      getWorkspace().then(ws => {
+        if (ws.data?.id) setCiWorkspaceId(ws.data.id);
+      }).catch(() => {});
+    }
+
     // Clear CI dot when visiting /ci, set it when leaving
     if (location.pathname === '/ci' || location.pathname.startsWith('/ci/')) {
       localStorage.setItem('rebase_ci_last_visit', new Date().toISOString());
@@ -138,10 +153,26 @@ function Nav() {
         {isLoggedIn && (
           <>
             <NavLink to="/intelligence" label="竞品分析" />
-            {/* CI nav link with optional indicator dot */}
+            {/* CI nav link with alert badge (real count) or dot fallback */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <NavLink to="/ci" label={t(nav.ciVfinal, lang)} />
-              {ciDot && (
+              {alertCount > 0 ? (
+                <span style={{
+                  background: C.danger,
+                  color: '#fff',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  padding: '1px 5px',
+                  borderRadius: 8,
+                  minWidth: 16,
+                  textAlign: 'center' as CSSProperties['textAlign'],
+                  display: 'inline-block',
+                  verticalAlign: 'middle',
+                  flexShrink: 0,
+                }}>
+                  {alertCount > 9 ? '9+' : alertCount}
+                </span>
+              ) : ciDot && (
                 <span style={{
                   width: 6, height: 6, borderRadius: '50%', background: C.ac,
                   display: 'inline-block', verticalAlign: 'middle', flexShrink: 0,

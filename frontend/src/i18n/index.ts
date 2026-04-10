@@ -156,6 +156,16 @@ export const T = {
     rising: { en: "Rising", zh: "上升" },
     falling: { en: "Falling", zh: "下降" },
     stable: { en: "Stable", zh: "稳定" },
+    // ── TASK-25: alerts ──────────────────────────────────────────
+    alerts: { en: "Alerts", zh: "提醒" },
+    unread: { en: "unread", zh: "未读" },
+    markAllRead: { en: "Mark All Read", zh: "全部标为已读" },
+    noAlerts: { en: "No alerts yet", zh: "暂无提醒" },
+    noAlertsDesc: { en: "Alerts appear when competitor scores change significantly", zh: "当竞品评分发生显著变化时将显示提醒" },
+    critical: { en: "Critical", zh: "严重" },
+    warning: { en: "Warning", zh: "警告" },
+    info: { en: "Info", zh: "信息" },
+    actionItems: { en: "AI Recommendations", zh: "AI建议" },
   },
 
   // ── Home ────────────────────────────────────────────────────────
