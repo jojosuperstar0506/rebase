@@ -6,6 +6,7 @@ import CISubNav from '../../components/ci/CISubNav';
 import { useCIData } from '../../hooks/useCIData';
 import { LANDSCAPE_SEED } from '../../data/ci/landscapeSeed';
 import { CILandscapeSkeleton } from '../../components/ci/CISkeleton';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -67,6 +68,8 @@ function fmtVol(v: number): string {
 
 export default function CILandscape() {
   const { colors: C, lang } = useApp();
+  const bp = useBreakpoint();
+  const isMobile = bp === 'mobile';
   const { workspace, competitors: userCompetitors, loading } = useCIData();
 
   if (loading) return <CILandscapeSkeleton />;
@@ -276,12 +279,12 @@ export default function CILandscape() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: '32px 24px', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: isMobile ? '16px 12px' : '32px 24px', fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         <CISubNav />
 
-        <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 6, marginTop: 0 }}>
+        <div style={{ marginBottom: isMobile ? 16 : 24 }}>
+          <h1 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, marginBottom: 6, marginTop: 0 }}>
             {t(T.ci.landscape, lang)}
           </h1>
           <p style={{ color: C.t2, fontSize: 14, margin: 0 }}>
@@ -289,8 +292,8 @@ export default function CILandscape() {
           </p>
         </div>
 
-        {/* Summary stats */}
-        <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
+        {/* Summary stats — stack vertically on mobile */}
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 10 : 16, marginBottom: isMobile ? 14 : 20 }}>
           <div style={{ background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 10, padding: '14px 18px', flex: 1, minWidth: 160 }}>
             <div style={{ fontSize: 22, fontWeight: 700, color: C.ac }}>
               {userZone ? `${brandsInUserZone}` : '—'}
@@ -320,20 +323,9 @@ export default function CILandscape() {
 
         {/* Filters */}
         <div style={{ ...card, padding: '14px 20px' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center' }}>
-            {/* Search */}
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder={t(T.ci.searchBrand, lang)}
-              style={{
-                background: C.inputBg, border: `1px solid ${C.inputBd}`, borderRadius: 8,
-                padding: '6px 12px', color: C.tx, fontSize: 13, outline: 'none', width: 180,
-              }}
-            />
-
-            {/* Price zone toggles */}
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', flexWrap: 'wrap', gap: isMobile ? 10 : 16, alignItems: isMobile ? 'stretch' : 'center' }}>
+            {/* Price zone toggles — row 1 on mobile */}
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12, color: C.t3 }}>{t(T.ci.priceSegment, lang)}:</span>
               {PRICE_ZONES.map(z => (
                 <button key={z.key} style={filterBtn(activeZones.has(z.key))} onClick={() => toggleZone(z.key)}>
@@ -342,7 +334,7 @@ export default function CILandscape() {
               ))}
             </div>
 
-            {/* Group toggles */}
+            {/* Group toggles — row 2 on mobile */}
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               <span style={{ fontSize: 12, color: C.t3 }}>{t(T.ci.allGroups, lang)}:</span>
               {['D', 'C', 'B'].map(g => (
@@ -351,12 +343,25 @@ export default function CILandscape() {
                 </button>
               ))}
             </div>
+
+            {/* Search — full width below on mobile */}
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder={t(T.ci.searchBrand, lang)}
+              style={{
+                background: C.inputBg, border: `1px solid ${C.inputBd}`, borderRadius: 8,
+                padding: '6px 12px', color: C.tx, fontSize: 13, outline: 'none',
+                width: isMobile ? '100%' : 180,
+                boxSizing: 'border-box',
+              }}
+            />
           </div>
         </div>
 
         {/* Scatter plot */}
         <div style={card}>
-          <div style={{ overflowX: 'auto' }}>
+          <div style={{ overflowX: 'auto', minHeight: isMobile ? 300 : undefined }}>
             <svg viewBox={`0 0 ${VB_W} ${VB_H}`} width="100%" style={{ display: 'block', minWidth: 480 }}>
 
               {/* Price zone bands */}
@@ -375,9 +380,11 @@ export default function CILandscape() {
                   return (
                     <g key={z.labelKey}>
                       <rect x={x1} y={PAD_T} width={w} height={CHART_H} fill={z.color} opacity={0.04} />
-                      <text x={x1 + w / 2} y={PAD_T - 6} textAnchor="middle" fill={C.t3} fontSize={9}>
-                        {t(T.ci[z.labelKey], lang)}
-                      </text>
+                      {!isMobile && (
+                        <text x={x1 + w / 2} y={PAD_T - 6} textAnchor="middle" fill={C.t3} fontSize={9}>
+                          {t(T.ci[z.labelKey], lang)}
+                        </text>
+                      )}
                     </g>
                   );
                 });
@@ -582,13 +589,13 @@ export default function CILandscape() {
                   {([
                     ['brand_name', lang === 'zh' ? '品牌' : 'Brand'],
                     ['avg_price', t(T.ci.avgPrice, lang)],
-                    ['est_monthly_volume', t(T.ci.estVolume, lang)],
+                    ...(!isMobile ? [['est_monthly_volume', t(T.ci.estVolume, lang)]] as [SortKey, string][] : []),
                   ] as [SortKey, string][]).map(([key, label]) => (
                     <th key={key} style={thStyle} onClick={() => handleSort(key)}>
                       {label} {sortKey === key ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
                     </th>
                   ))}
-                  <th style={{ ...thStyle, cursor: 'default' }}>{t(T.ci.priceSegment, lang)}</th>
+                  {!isMobile && <th style={{ ...thStyle, cursor: 'default' }}>{t(T.ci.priceSegment, lang)}</th>}
                   <th style={{ ...thStyle, cursor: 'default' }}>Status</th>
                 </tr>
               </thead>
@@ -617,15 +624,17 @@ export default function CILandscape() {
                         </div>
                       </td>
                       <td style={{ ...tdStyle, fontWeight: 600 }}>¥{b.avg_price.toLocaleString()}</td>
-                      <td style={tdStyle}>{b.est_monthly_volume.toLocaleString()}/mo</td>
-                      <td style={tdStyle}>
-                        <span style={{
-                          fontSize: 11, padding: '2px 8px', borderRadius: 4, fontWeight: 600,
-                          background: `${zoneColor}22`, color: zoneColor, border: `1px solid ${zoneColor}55`,
-                        }}>
-                          {t(T.ci[PRICE_ZONES.find(z => z.key === zone)!.labelKey], lang)}
-                        </span>
-                      </td>
+                      {!isMobile && <td style={tdStyle}>{b.est_monthly_volume.toLocaleString()}/mo</td>}
+                      {!isMobile && (
+                        <td style={tdStyle}>
+                          <span style={{
+                            fontSize: 11, padding: '2px 8px', borderRadius: 4, fontWeight: 600,
+                            background: `${zoneColor}22`, color: zoneColor, border: `1px solid ${zoneColor}55`,
+                          }}>
+                            {t(T.ci[PRICE_ZONES.find(z => z.key === zone)!.labelKey], lang)}
+                          </span>
+                        </td>
+                      )}
                       <td style={tdStyle}>
                         {b.isYourBrand ? (
                           <span style={{ fontSize: 11, color: C.ac, fontWeight: 600 }}>{t(T.ci.yourBrand, lang)}</span>

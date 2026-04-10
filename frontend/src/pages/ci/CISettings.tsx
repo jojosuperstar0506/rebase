@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { t, T } from '../../i18n';
 import CISubNav from '../../components/ci/CISubNav';
 import { CISettingsSkeleton } from '../../components/ci/CISkeleton';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 import {
   getCIWorkspace, saveCIWorkspace,
   getCICompetitors, saveCICompetitors,
@@ -56,7 +57,7 @@ function Section({ title, children, C }: { title: string; children: React.ReactN
 }
 
 // ── Brand Profile ─────────────────────────────────────────────────
-function BrandProfileSection({ C, lang }: { C: ReturnType<typeof useApp>['colors']; lang: string }) {
+function BrandProfileSection({ C, lang, isMobile }: { C: ReturnType<typeof useApp>['colors']; lang: string; isMobile: boolean }) {
   const saved = getCIWorkspace();
   const [form, setForm] = useState<CIWorkspace>({
     brand_name: saved?.brand_name ?? '',
@@ -95,7 +96,7 @@ function BrandProfileSection({ C, lang }: { C: ReturnType<typeof useApp>['colors
 
   return (
     <Section title={t(T.ci.brandProfile, lang as any)} C={C}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
         {/* Brand name */}
         <div>
           <label style={labelStyle}>{t(T.ci.brandName, lang as any)}</label>
@@ -178,6 +179,8 @@ function BrandProfileSection({ C, lang }: { C: ReturnType<typeof useApp>['colors
           fontSize: 14,
           fontWeight: 600,
           cursor: 'pointer',
+          minHeight: 44,
+          width: isMobile ? '100%' : undefined,
         }}
       >
         {savedOk ? t(T.ci.saved, lang as any) : t(T.ci.saveBrand, lang as any)}
@@ -333,11 +336,12 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
 }
 
 // ── Competitor list ───────────────────────────────────────────────
-function CompetitorList({ C, lang, competitors, onChange }: {
+function CompetitorList({ C, lang, competitors, onChange, isMobile }: {
   C: ReturnType<typeof useApp>['colors'];
   lang: string;
   competitors: CICompetitor[];
   onChange: (updated: CICompetitor[]) => void;
+  isMobile: boolean;
 }) {
   const watchlistCount = competitors.filter(c => c.tier === 'watchlist').length;
 
@@ -411,15 +415,22 @@ function CompetitorList({ C, lang, competitors, onChange }: {
             {c.tier === 'watchlist' ? t(T.ci.watchlist, lang as any) : t(T.ci.landscapeTier, lang as any)}
           </button>
 
-          {/* Added date */}
-          <span style={{ color: C.t3, fontSize: 11, whiteSpace: 'nowrap' }}>
-            {new Date(c.created_at).toLocaleDateString()}
-          </span>
+          {/* Added date — hidden on mobile */}
+          {!isMobile && (
+            <span style={{ color: C.t3, fontSize: 11, whiteSpace: 'nowrap' }}>
+              {new Date(c.created_at).toLocaleDateString()}
+            </span>
+          )}
 
-          {/* Remove */}
+          {/* Remove — 44px touch target on mobile */}
           <button
             onClick={() => remove(c.id)}
-            style={{ background: 'none', border: 'none', color: C.t3, cursor: 'pointer', fontSize: 16, padding: '0 4px', lineHeight: 1 }}
+            style={{
+              background: 'none', border: 'none', color: C.t3, cursor: 'pointer',
+              fontSize: 18, padding: '0 8px', lineHeight: 1,
+              minWidth: isMobile ? 44 : undefined, minHeight: isMobile ? 44 : undefined,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
             title={t(T.ci.removeCompetitor, lang as any)}
           >
             ×
@@ -431,7 +442,7 @@ function CompetitorList({ C, lang, competitors, onChange }: {
 }
 
 // ── Platform connections ──────────────────────────────────────────
-function ConnectionsSection({ C, lang }: { C: ReturnType<typeof useApp>['colors']; lang: string }) {
+function ConnectionsSection({ C, lang, isMobile }: { C: ReturnType<typeof useApp>['colors']; lang: string; isMobile: boolean }) {
   const [connections, setConnections] = useState<CIConnection[]>(getCIConnections());
   const [modalPlatform, setModalPlatform] = useState<CIConnection['platform'] | null>(null);
   const [cookieInput, setCookieInput] = useState('');
@@ -496,7 +507,7 @@ function ConnectionsSection({ C, lang }: { C: ReturnType<typeof useApp>['colors'
                 ) : (
                   <button
                     onClick={() => { setModalPlatform(cfg.key); setCookieInput(''); }}
-                    style={{ background: C.ac, border: 'none', borderRadius: 8, padding: '8px 18px', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                    style={{ background: C.ac, border: 'none', borderRadius: 8, padding: '8px 18px', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', minHeight: 44 }}
                   >
                     {t(T.ci.connect, lang as any)}
                   </button>
@@ -513,11 +524,14 @@ function ConnectionsSection({ C, lang }: { C: ReturnType<typeof useApp>['colors'
         return (
           <div style={{
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+            display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', zIndex: 1000,
           }} onClick={() => setModalPlatform(null)}>
             <div style={{
-              background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 14,
-              padding: 28, maxWidth: 480, width: '90%',
+              background: C.s1, border: `1px solid ${C.bd}`,
+              borderRadius: isMobile ? '14px 14px 0 0' : 14,
+              padding: isMobile ? '24px 20px 32px' : 28,
+              maxWidth: isMobile ? '100%' : 480,
+              width: isMobile ? '100%' : '90%',
             }} onClick={e => e.stopPropagation()}>
               <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16, marginTop: 0 }}>
                 Connect {cfg.name}
@@ -532,7 +546,7 @@ function ConnectionsSection({ C, lang }: { C: ReturnType<typeof useApp>['colors'
 
               <textarea
                 style={{
-                  width: '100%', minHeight: 100, background: C.inputBg,
+                  width: '100%', minHeight: isMobile ? 120 : 100, background: C.inputBg,
                   border: `1px solid ${C.inputBd}`, borderRadius: 8,
                   padding: 12, color: C.tx, fontSize: 13, resize: 'vertical',
                   boxSizing: 'border-box', outline: 'none', fontFamily: 'monospace',
@@ -573,6 +587,8 @@ function ConnectionsSection({ C, lang }: { C: ReturnType<typeof useApp>['colors'
 // ── Main page ─────────────────────────────────────────────────────
 export default function CISettings() {
   const { colors: C, lang } = useApp();
+  const bp = useBreakpoint();
+  const isMobile = bp === 'mobile';
   const [competitors, setCompetitors] = useState<CICompetitor[]>(getCICompetitors());
   // Brief skeleton on first mount so the page feels consistent with other CI pages
   const [ready, setReady] = useState(false);
@@ -592,12 +608,12 @@ export default function CISettings() {
   }
 
   return (
-    <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: '32px 24px', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: isMobile ? '16px 12px' : '32px 24px', fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ maxWidth: 860, margin: '0 auto' }}>
         <CISubNav />
 
-        <div style={{ marginBottom: 28 }}>
-          <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8, marginTop: 0 }}>
+        <div style={{ marginBottom: isMobile ? 20 : 28 }}>
+          <h1 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, marginBottom: 8, marginTop: 0 }}>
             {t(T.ci.settings, lang)}
           </h1>
           <p style={{ color: C.t2, fontSize: 15, margin: 0 }}>
@@ -606,7 +622,7 @@ export default function CISettings() {
         </div>
 
         {/* 1 — Brand Profile */}
-        <BrandProfileSection C={C} lang={lang} />
+        <BrandProfileSection C={C} lang={lang} isMobile={isMobile} />
 
         {/* 2 — Competitor Management */}
         <Section title={t(T.ci.manageCompetitors, lang as any)} C={C}>
@@ -621,11 +637,12 @@ export default function CISettings() {
             lang={lang}
             competitors={competitors}
             onChange={handleCompetitorsChange}
+            isMobile={isMobile}
           />
         </Section>
 
         {/* 3 — Platform Connections */}
-        <ConnectionsSection C={C} lang={lang} />
+        <ConnectionsSection C={C} lang={lang} isMobile={isMobile} />
       </div>
     </div>
   );

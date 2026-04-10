@@ -15,35 +15,49 @@ export default function CISubNav() {
   const current = location.pathname;
 
   return (
-    <div style={{
-      display: 'flex',
-      gap: 4,
-      padding: '8px 0',
-      marginBottom: 24,
-      borderBottom: `1px solid ${C.bd}`,
-    }}>
-      {CI_TABS.map(tab => {
-        const active = tab.path === '/ci'
-          ? current === '/ci'
-          : current.startsWith(tab.path);
-        return (
-          <Link
-            key={tab.path}
-            to={tab.path}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 6,
-              fontSize: 13,
-              fontWeight: active ? 600 : 400,
-              color: active ? C.ac : C.t2,
-              background: active ? C.s2 : 'transparent',
-              textDecoration: 'none',
-            }}
-          >
-            {t(tab.labelKey, lang)}
-          </Link>
-        );
-      })}
-    </div>
+    <>
+      <style>{`.ci-subnav::-webkit-scrollbar { display: none }`}</style>
+      <div
+        className="ci-subnav"
+        style={{
+          display: 'flex',
+          gap: 4,
+          padding: '8px 0',
+          marginBottom: 24,
+          borderBottom: `1px solid ${C.bd}`,
+          overflowX: 'auto',
+          scrollbarWidth: 'none',
+          WebkitOverflowScrolling: 'touch' as any,
+        }}
+      >
+        {CI_TABS.map(tab => {
+          const active = tab.path === '/ci'
+            ? current === '/ci'
+            : current.startsWith(tab.path);
+          return (
+            <Link
+              key={tab.path}
+              to={tab.path}
+              style={{
+                padding: '8px 16px',
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: active ? 600 : 400,
+                color: active ? C.ac : C.t2,
+                background: active ? C.s2 : 'transparent',
+                textDecoration: 'none',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                minHeight: 44,
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              {t(tab.labelKey, lang)}
+            </Link>
+          );
+        })}
+      </div>
+    </>
   );
 }

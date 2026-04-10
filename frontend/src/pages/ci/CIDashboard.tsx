@@ -7,6 +7,7 @@ import CISubNav from '../../components/ci/CISubNav';
 import { useCIData } from '../../hooks/useCIData';
 import { CIDashboardSkeleton } from '../../components/ci/CISkeleton';
 import CIWelcomeBanner from '../../components/ci/CIWelcomeBanner';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -108,6 +109,8 @@ function StatCard({ label, value, C }: { label: string; value: string | number; 
 
 export default function CIDashboard() {
   const { colors: C, lang } = useApp();
+  const bp = useBreakpoint();
+  const isMobile = bp === 'mobile';
   const {
     dashboard, source: ciSource, workspace, competitors, connections,
     loading, refresh, needsSync, syncToApi,
@@ -169,8 +172,8 @@ export default function CIDashboard() {
   });
 
   // Styles
-  const card: CSSProperties = { background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 12, padding: 24, marginBottom: 24 };
-  const sectionTitle: CSSProperties = { fontSize: 15, fontWeight: 700, marginBottom: 16, paddingBottom: 10, borderBottom: `1px solid ${C.bd}` };
+  const card: CSSProperties = { background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 12, padding: isMobile ? 14 : 24, marginBottom: isMobile ? 16 : 24 };
+  const sectionTitle: CSSProperties = { fontSize: isMobile ? 15 : 15, fontWeight: 700, marginBottom: 16, paddingBottom: 10, borderBottom: `1px solid ${C.bd}` };
   const thStyle: CSSProperties = {
     padding: '10px 12px', fontSize: 11, fontWeight: 700, color: C.t2,
     textAlign: 'left', textTransform: 'uppercase', letterSpacing: '0.05em',
@@ -198,7 +201,7 @@ export default function CIDashboard() {
   // Welcome prompt: no workspace AND no competitors anywhere (neither API nor localStorage)
   if (!workspace && competitors.length === 0) {
     return (
-      <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: '32px 24px', fontFamily: 'system-ui, sans-serif' }}>
+      <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: isMobile ? '16px 12px' : '32px 24px', fontFamily: 'system-ui, sans-serif' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
           <CISubNav />
           <div style={{
@@ -226,13 +229,13 @@ export default function CIDashboard() {
   }
 
   return (
-    <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: '32px 24px', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: isMobile ? '16px 12px' : '32px 24px', fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         <CISubNav />
 
         {/* Header */}
-        <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 6, marginTop: 0 }}>
+        <div style={{ marginBottom: isMobile ? 16 : 24 }}>
+          <h1 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, marginBottom: 6, marginTop: 0 }}>
             {t(T.ci.title, lang)}
           </h1>
           <p style={{ color: C.t2, fontSize: 14, margin: 0 }}>{t(T.ci.subtitle, lang)}</p>
@@ -310,8 +313,13 @@ export default function CIDashboard() {
           </div>
         </div>
 
-        {/* Quick stats row */}
-        <div style={{ display: 'flex', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
+        {/* Quick stats row — 2x2 grid on mobile, 4-in-a-row on desktop */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+          gap: isMobile ? 12 : 16,
+          marginBottom: isMobile ? 16 : 24,
+        }}>
           <StatCard label={t(T.ci.competitorsTracked, lang)} value={data.brands.length} C={C as unknown as Record<string, string>} />
           <StatCard label={t(T.ci.avgThreat, lang)} value={avgThreat} C={C as unknown as Record<string, string>} />
           <StatCard label={t(T.ci.highestMomentum, lang)} value={highestMomBrand?.brand_name ?? '—'} C={C as unknown as Record<string, string>} />
@@ -363,7 +371,7 @@ export default function CIDashboard() {
               )}
             </div>
 
-            <div style={{ overflowX: 'auto' }}>
+            <div style={{ overflowX: 'auto', minHeight: isMobile ? 280 : 400 }}>
               <svg viewBox="0 0 700 420" width="100%" style={{ display: 'block' }}>
 
                 {/* Quadrant backgrounds */}
@@ -490,17 +498,19 @@ export default function CIDashboard() {
                   <tr>
                     {([
                       ['brand_name', lang === 'zh' ? '品牌' : 'Brand'],
-                      ['momentum_score', t(T.ci.momentum, lang)],
-                      ['threat_index', t(T.ci.threat, lang)],
+                      ['momentum_score', isMobile ? (lang === 'zh' ? '势能' : 'Mom.') : t(T.ci.momentum, lang)],
+                      ['threat_index', isMobile ? (lang === 'zh' ? '威胁' : 'Thr.') : t(T.ci.threat, lang)],
                       ['wtp_score', t(T.ci.wtp, lang)],
                     ] as [SortKey, string][]).map(([key, label]) => (
                       <th key={key} style={thStyle} onClick={() => handleSort(key)}>
                         {label} {sortKey === key ? (sortDir === 'desc' ? '▼' : '▲') : '↕'}
                       </th>
                     ))}
-                    <th style={{ ...thStyle, cursor: 'default' }}>
-                      {lang === 'zh' ? '信号' : 'Signals'}
-                    </th>
+                    {!isMobile && (
+                      <th style={{ ...thStyle, cursor: 'default' }}>
+                        {lang === 'zh' ? '信号' : 'Signals'}
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -518,26 +528,28 @@ export default function CIDashboard() {
                           {brand.tier === 'watchlist' ? t(T.ci.watchlist, lang) : t(T.ci.landscapeTier, lang)}
                         </span>
                       </td>
-                      <td style={tdStyle}>
+                      <td style={{ ...tdStyle, fontSize: isMobile ? 12 : 13 }}>
                         <ScoreBar value={brand.momentum_score} C={C as unknown as Record<string, string>} />
                       </td>
-                      <td style={tdStyle}>
+                      <td style={{ ...tdStyle, fontSize: isMobile ? 12 : 13 }}>
                         <ScoreBar value={brand.threat_index} C={C as unknown as Record<string, string>} />
                       </td>
-                      <td style={tdStyle}>
+                      <td style={{ ...tdStyle, fontSize: isMobile ? 12 : 13 }}>
                         <ScoreBar value={brand.wtp_score} C={C as unknown as Record<string, string>} />
                       </td>
-                      <td style={tdStyle}>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                          {brand.trend_signals.slice(0, 3).map((sig, j) => (
-                            <span key={j} style={{
-                              fontSize: 11, background: C.s2, border: `1px solid ${C.bd}`,
-                              borderRadius: 4, padding: '2px 6px', color: C.t2, whiteSpace: 'nowrap',
-                            }}>{sig}</span>
-                          ))}
-                          {brand.trend_signals.length === 0 && <span style={{ fontSize: 11, color: C.t3 }}>—</span>}
-                        </div>
-                      </td>
+                      {!isMobile && (
+                        <td style={tdStyle}>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                            {brand.trend_signals.slice(0, 3).map((sig, j) => (
+                              <span key={j} style={{
+                                fontSize: 11, background: C.s2, border: `1px solid ${C.bd}`,
+                                borderRadius: 4, padding: '2px 6px', color: C.t2, whiteSpace: 'nowrap',
+                              }}>{sig}</span>
+                            ))}
+                            {brand.trend_signals.length === 0 && <span style={{ fontSize: 11, color: C.t3 }}>—</span>}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -557,7 +569,7 @@ export default function CIDashboard() {
                 const pColor = item.priority === 'high' ? C.danger : item.priority === 'medium' ? C.ac : C.t2;
                 return (
                   <div key={i} style={{
-                    display: 'flex', gap: 14, padding: '14px 16px',
+                    display: 'flex', gap: 14, padding: isMobile ? '10px 12px' : '14px 16px',
                     background: C.s2, borderRadius: 8, border: `1px solid ${C.bd}`,
                     borderLeft: `3px solid ${pColor}`,
                   }}>
