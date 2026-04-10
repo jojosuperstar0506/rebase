@@ -251,16 +251,18 @@ function CompetitorCard({
 
       {/* Actions */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <button
-          onClick={onDeepDive}
+        <a
+          href={`/ci/competitors/${encodeURIComponent(profile.brand_name)}`}
           style={{
             flex: 1, padding: '7px 0', borderRadius: 8,
             border: `1px solid ${C.ac}`, background: 'transparent',
             color: C.ac, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+            textDecoration: 'none', textAlign: 'center' as const,
+            display: 'block',
           }}
         >
           {t(T.ci.deepDive, lang)}
-        </button>
+        </a>
         <button
           onClick={onRemove}
           style={{
@@ -272,17 +274,6 @@ function CompetitorCard({
           {t(T.ci.removeCompetitor, lang)}
         </button>
       </div>
-
-      {/* Deep dive inline message */}
-      {deepDiveOpen && (
-        <div style={{
-          marginTop: 10, padding: '10px 14px', background: C.ac + '15',
-          border: `1px solid ${C.ac}44`, borderRadius: 8,
-          fontSize: 13, color: C.ac, textAlign: 'center',
-        }}>
-          {t(T.ci.deepDiveComingSoon, lang)}
-        </div>
-      )}
     </div>
   );
 }

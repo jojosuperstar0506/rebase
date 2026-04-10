@@ -307,6 +307,47 @@ export async function getScoreTrends(
   return { data: [], source: 'simulated' };
 }
 
+// ─── TASK-26: Deep Dive ───────────────────────────────────────────
+
+export interface DeepDiveJob {
+  job_id: string;
+  brand_name: string;
+  status: 'queued' | 'scraping' | 'scoring' | 'narrating' | 'complete' | 'failed' | 'none';
+  started_at: string | null;
+  completed_at: string | null;
+  error: string | null;
+  result_summary: any;
+}
+
+export interface DeepDiveResult {
+  brand_name: string;
+  profile: any | null;
+  products: any[];
+  scores: Record<string, { score: number; raw_inputs: any; ai_narrative: string }>;
+  insight: string | null;
+  raw_dimensions: any | null;
+  last_deep_dive: string | null;
+}
+
+export async function requestDeepDive(workspaceId: string, brandName: string): Promise<DeepDiveJob | null> {
+  return await tryApi<DeepDiveJob>('/deep-dive', {
+    method: 'POST',
+    body: JSON.stringify({ workspace_id: workspaceId, brand_name: brandName }),
+  });
+}
+
+export async function getDeepDiveStatus(workspaceId: string, brandName: string): Promise<DeepDiveJob | null> {
+  return await tryApi<DeepDiveJob>(
+    `/deep-dive/status?workspace_id=${encodeURIComponent(workspaceId)}&brand_name=${encodeURIComponent(brandName)}`
+  );
+}
+
+export async function getDeepDiveResult(workspaceId: string, brandName: string): Promise<DeepDiveResult | null> {
+  return await tryApi<DeepDiveResult>(
+    `/deep-dive/result?workspace_id=${encodeURIComponent(workspaceId)}&brand_name=${encodeURIComponent(brandName)}`
+  );
+}
+
 // ─── TASK-25: Alerts ──────────────────────────────────────────────
 
 export interface CIAlert {
