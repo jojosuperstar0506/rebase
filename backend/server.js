@@ -1022,6 +1022,22 @@ app.post('/api/ci/ingest', async (req, res) => {
             }).unref();
           }
           console.log(`[INGEST] Triggered scoring for ${workspaces.length} workspaces after ${brand_name} ingest`);
+
+          // After scoring, trigger alert detection (10s delay so scoring finishes first)
+          setTimeout(() => {
+            for (const ws of workspaces) {
+              spawn(pythonBin, [
+                '-m', 'services.competitor_intel.alert_detector',
+                '--workspace-id', ws.id,
+              ], {
+                cwd: process.cwd().replace('/backend', ''),
+                env: { ...process.env },
+                detached: true,
+                stdio: 'ignore',
+              }).unref();
+            }
+            console.log(`[INGEST] Triggered alert detection for ${workspaces.length} workspaces`);
+          }, 10000);
         }
       } catch (err) {
         console.error('[INGEST] Scoring trigger failed:', err.message);
@@ -1069,6 +1085,87 @@ app.get('/api/ci/scrape-targets', async (req, res) => {
   } catch (err) {
     console.error('[CI] GET scrape-targets error:', err.message);
     res.status(500).json({ error: 'Failed to fetch scrape targets' });
+  }
+});
+
+// GET /api/ci/alerts — get alerts for a workspace
+app.get('/api/ci/alerts', async (req, res) => {
+  const { workspace_id, unread_only, limit } = req.query;
+  if (!workspace_id) return res.status(400).json({ error: 'Missing workspace_id' });
+
+  try {
+    let query = 'SELECT * FROM ci_alerts WHERE workspace_id = $1';
+    const params = [workspace_id];
+
+    if (unread_only === 'true') {
+      query += ' AND is_read = false';
+    }
+
+    query += ' ORDER BY created_at DESC';
+
+    const maxLimit = Math.min(parseInt(limit) || 20, 50);
+    query += ` LIMIT ${maxLimit}`;
+
+    const { rows } = await pool.query(query, params);
+
+    // Also get unread count
+    const { rows: countRows } = await pool.query(
+      'SELECT COUNT(*) as unread FROM ci_alerts WHERE workspace_id = $1 AND is_read = false',
+      [workspace_id]
+    );
+
+    res.json({
+      alerts: rows,
+      unread_count: parseInt(countRows[0].unread),
+      total_returned: rows.length,
+    });
+  } catch (err) {
+    console.error('[CI] GET alerts error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch alerts' });
+  }
+});
+
+// POST /api/ci/alerts/read — mark alerts as read
+app.post('/api/ci/alerts/read', async (req, res) => {
+  const { workspace_id, alert_ids } = req.body;
+
+  try {
+    if (alert_ids && alert_ids.length > 0) {
+      // Mark specific alerts as read
+      await pool.query(
+        'UPDATE ci_alerts SET is_read = true WHERE id = ANY($1) AND workspace_id = $2',
+        [alert_ids, workspace_id]
+      );
+    } else if (workspace_id) {
+      // Mark all as read for this workspace
+      await pool.query(
+        'UPDATE ci_alerts SET is_read = true WHERE workspace_id = $1 AND is_read = false',
+        [workspace_id]
+      );
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[CI] POST alerts/read error:', err.message);
+    res.status(500).json({ error: 'Failed to mark alerts as read' });
+  }
+});
+
+// GET /api/ci/alerts/count — just the unread count (lightweight, for nav badge)
+app.get('/api/ci/alerts/count', async (req, res) => {
+  const { workspace_id } = req.query;
+  if (!workspace_id) return res.status(400).json({ error: 'Missing workspace_id' });
+
+  try {
+    const { rows } = await pool.query(
+      'SELECT COUNT(*) as unread FROM ci_alerts WHERE workspace_id = $1 AND is_read = false',
+      [workspace_id]
+    );
+
+    res.json({ unread_count: parseInt(rows[0].unread) });
+  } catch (err) {
+    console.error('[CI] GET alerts/count error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch alert count' });
   }
 });
 

@@ -84,6 +84,14 @@ else
   report_failure "narrative" "Narrative pipeline returned non-zero"
 fi
 
+# Step 4: Detect alerts
+log "Step 4: Detecting alerts..."
+if $PYTHON -m services.competitor_intel.alert_detector --all >> "$LOG_FILE" 2>&1; then
+  log "Step 4: Alert detection complete"
+else
+  log "Step 4: Alert detection failed"
+fi
+
 # Write status: complete
 WORKSPACE_COUNT=$($PYTHON -c "
 from services.competitor_intel.db_bridge import get_conn
