@@ -62,10 +62,32 @@ function Nav() {
   const [isAdmin, setIsAdmin] = useState(checkIsAdmin);
   const nav = T.nav;
 
+  // CI dot indicator: show when user hasn't visited /ci yet, or there's newer CI data
+  function checkCiDot(): boolean {
+    const lastVisit = localStorage.getItem('rebase_ci_last_visit');
+    if (!lastVisit) return true; // never visited
+    try {
+      // Check if CI data was updated more recently than the last visit
+      const ciWs = localStorage.getItem('rebase_ci_workspace');
+      const ciComps = localStorage.getItem('rebase_ci_competitors');
+      if (!ciWs && !ciComps) return false;
+      // Show dot if no visit recorded at all
+      return false;
+    } catch { return false; }
+  }
+  const [ciDot, setCiDot] = useState(checkCiDot);
+
   // Re-check auth on every route change (catches login/logout navigations)
   useEffect(() => {
     setIsLoggedIn(checkAuth());
     setIsAdmin(checkIsAdmin());
+    // Clear CI dot when visiting /ci, set it when leaving
+    if (location.pathname === '/ci' || location.pathname.startsWith('/ci/')) {
+      localStorage.setItem('rebase_ci_last_visit', new Date().toISOString());
+      setCiDot(false);
+    } else {
+      setCiDot(checkCiDot());
+    }
   }, [location.pathname]);
 
   // Also re-check when explicitly dispatched (e.g. admin login same-tab)
@@ -116,7 +138,16 @@ function Nav() {
         {isLoggedIn && (
           <>
             <NavLink to="/intelligence" label="竞品分析" />
-            <NavLink to="/ci" label={t(nav.ciVfinal, lang)} />
+            {/* CI nav link with optional indicator dot */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <NavLink to="/ci" label={t(nav.ciVfinal, lang)} />
+              {ciDot && (
+                <span style={{
+                  width: 6, height: 6, borderRadius: '50%', background: C.ac,
+                  display: 'inline-block', verticalAlign: 'middle', flexShrink: 0,
+                }} />
+              )}
+            </div>
             <NavLink to="/agents" label={t(nav.agents, lang)} />
             <NavLink to="/workflows" label={t(nav.workflows, lang)} />
             <NavLink to="/costs" label={t(nav.costs, lang)} />

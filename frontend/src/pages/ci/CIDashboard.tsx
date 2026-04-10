@@ -6,6 +6,7 @@ import { t, T } from '../../i18n';
 import CISubNav from '../../components/ci/CISubNav';
 import { useCIData } from '../../hooks/useCIData';
 import { CIDashboardSkeleton } from '../../components/ci/CISkeleton';
+import CIWelcomeBanner from '../../components/ci/CIWelcomeBanner';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -236,6 +237,9 @@ export default function CIDashboard() {
           </h1>
           <p style={{ color: C.t2, fontSize: 14, margin: 0 }}>{t(T.ci.subtitle, lang)}</p>
         </div>
+
+        {/* First-visit welcome banner */}
+        <CIWelcomeBanner />
 
         {/* Sync banner */}
         {needsSync && !syncDone && (
