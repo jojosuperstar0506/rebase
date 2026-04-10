@@ -10,6 +10,7 @@ const { startScheduler, runDailyReport, generateFeedbackToken } = require("./sch
 const fs = require("fs");
 const path = require("path");
 const { pool } = require("./db");
+const { getKnownBrands, searchBrands, KNOWN_BRANDS } = require("./brand_registry");
 
 const app = express();
 
@@ -1449,6 +1450,262 @@ app.get('/api/ci/brand-insights', async (req, res) => {
     console.error('[CI] GET brand-insights error:', err.message);
     res.status(500).json({ error: 'Failed to fetch brand insights' });
   }
+});
+
+// ── LLM Helper ──────────────────────────────────────────────────────────────
+async function callLLM(prompt, maxTokens = 1000) {
+  const deepseekKey = process.env.DEEPSEEK_API_KEY;
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+
+  if (deepseekKey) {
+    const resp = await fetch(process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${deepseekKey}` },
+      body: JSON.stringify({
+        model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: maxTokens,
+      }),
+    });
+    const data = await resp.json();
+    return data.choices?.[0]?.message?.content || '';
+  }
+
+  if (anthropicKey) {
+    const client = new Anthropic({ apiKey: anthropicKey });
+    const msg = await client.messages.create({
+      model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+      max_tokens: maxTokens,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    return msg.content[0].text;
+  }
+
+  throw new Error('No LLM API key configured (DEEPSEEK_API_KEY or ANTHROPIC_API_KEY)');
+}
+
+// POST /api/ci/resolve-brand — auto-detect platform identifiers for a brand name
+app.post('/api/ci/resolve-brand', async (req, res) => {
+  const { brand_name } = req.body;
+  if (!brand_name) return res.status(400).json({ error: 'Missing brand_name' });
+
+  try {
+    // Step 1: Check if we've seen this brand before (any workspace)
+    const { rows: existing } = await pool.query(`
+      SELECT platform_ids FROM workspace_competitors
+      WHERE brand_name = $1 AND platform_ids IS NOT NULL
+      LIMIT 1
+    `, [brand_name]);
+
+    if (existing.length > 0 && existing[0].platform_ids) {
+      return res.json({
+        brand_name,
+        platform_ids: existing[0].platform_ids,
+        source: 'database',
+      });
+    }
+
+    // Step 2: Check against the known brand registry
+    const match = getKnownBrands().find(b =>
+      b.name === brand_name || b.name_en === brand_name ||
+      b.name.toLowerCase() === brand_name.toLowerCase() ||
+      (b.name_en && b.name_en.toLowerCase() === brand_name.toLowerCase())
+    );
+
+    if (match) {
+      return res.json({
+        brand_name,
+        platform_ids: {
+          xhs: match.xhs_keyword || brand_name,
+          douyin: match.douyin_keyword || brand_name,
+          taobao: match.tmall_store || null,
+        },
+        source: 'registry',
+        badge: match.badge,
+      });
+    }
+
+    // Step 3: Default — use brand name as keyword for all platforms
+    res.json({
+      brand_name,
+      platform_ids: {
+        xhs: brand_name,
+        douyin: brand_name,
+        taobao: null,
+      },
+      source: 'default',
+    });
+  } catch (err) {
+    console.error('[CI] POST resolve-brand error:', err.message);
+    res.status(500).json({ error: 'Failed to resolve brand' });
+  }
+});
+
+// POST /api/ci/parse-link — extract platform + brand from a URL
+app.post('/api/ci/parse-link', async (req, res) => {
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ error: 'Missing url' });
+
+  let platform = null;
+  let identifier = null;
+  let brand_name = null;
+
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    const urlPath = parsed.pathname;
+
+    if (host.includes('xiaohongshu.com') || host.includes('xhslink.com')) {
+      platform = 'xhs';
+      const userMatch = urlPath.match(/\/user\/profile\/([a-zA-Z0-9]+)/);
+      if (userMatch) identifier = userMatch[1];
+      const kwMatch = parsed.searchParams.get('keyword');
+      if (kwMatch) { identifier = kwMatch; brand_name = kwMatch; }
+    }
+    else if (host.includes('taobao.com') || host.includes('tmall.com')) {
+      platform = 'taobao';
+      const shopMatch = urlPath.match(/\/shop\/([^\/\?]+)/);
+      if (shopMatch) identifier = shopMatch[1];
+      const itemMatch = parsed.searchParams.get('id');
+      if (itemMatch) identifier = itemMatch;
+    }
+    else if (host.includes('douyin.com')) {
+      platform = 'douyin';
+      const userMatch = urlPath.match(/\/user\/([a-zA-Z0-9]+)/);
+      if (userMatch) identifier = userMatch[1];
+      const kwMatch = urlPath.match(/\/search\/([^\/\?]+)/);
+      if (kwMatch) { identifier = decodeURIComponent(kwMatch[1]); brand_name = identifier; }
+    }
+    else if (host.includes('jd.com')) {
+      platform = 'jd';
+      const shopMatch = urlPath.match(/\/([a-zA-Z0-9]+)\.html/);
+      if (shopMatch) identifier = shopMatch[1];
+    }
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid URL', detail: e.message });
+  }
+
+  if (!platform) {
+    return res.json({ parsed: false, error: 'Unrecognized platform URL' });
+  }
+
+  res.json({
+    parsed: true,
+    platform,
+    identifier,
+    brand_name,
+    platform_ids: { [platform]: identifier },
+  });
+});
+
+// POST /api/ci/suggest-competitors — AI-powered competitor suggestions
+app.post('/api/ci/suggest-competitors', async (req, res) => {
+  const { brand_name, brand_category, brand_price_range, brand_platforms } = req.body;
+
+  if (!brand_name || !brand_category) {
+    return res.status(400).json({ error: 'Missing brand_name or brand_category' });
+  }
+
+  const priceStr = brand_price_range
+    ? `¥${brand_price_range.min}-${brand_price_range.max}`
+    : 'unknown';
+
+  try {
+    // Get existing tracked brands for context
+    const { rows: existingBrands } = await pool.query(`
+      SELECT DISTINCT brand_name FROM scraped_brand_profiles
+      UNION
+      SELECT DISTINCT brand_name FROM workspace_competitors
+      ORDER BY brand_name
+    `);
+    const knownNames = existingBrands.map(r => r.brand_name);
+
+    const registryNames = KNOWN_BRANDS
+      .map(b => `${b.name} (${b.badge}, ${b.name_en || ''})`)
+      .join(', ');
+
+    const prompt = `You are a competitive intelligence analyst for the Chinese consumer goods market.
+
+A brand is setting up competitive tracking. Here is their profile:
+- Brand name: ${brand_name}
+- Category: ${brand_category}
+- Price range: ${priceStr}
+- Platforms: ${JSON.stringify(brand_platforms || [])}
+
+Known brands in our database that could be competitors:
+${registryNames}
+
+Other brands currently being tracked by users: ${knownNames.join(', ')}
+
+Based on this brand's category, price range, and positioning, suggest 5-8 competitors they should track. For each, explain in one sentence WHY they should track this competitor (in Chinese/简体中文).
+
+Prioritize:
+1. Direct price-range competitors (same category, similar pricing)
+2. Aspirational competitors (same category, higher tier)
+3. Emerging threats (same category, growing fast)
+
+Respond in this exact JSON format, no markdown:
+{
+  "suggestions": [
+    {"brand_name": "...", "reason": "...理由...", "priority": "high|medium|low", "group": "direct|aspirational|emerging"}
+  ]
+}`;
+
+    const llmResponse = await callLLM(prompt);
+
+    let suggestions;
+    try {
+      const raw = llmResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      suggestions = JSON.parse(raw).suggestions || [];
+    } catch {
+      suggestions = [];
+    }
+
+    // Enrich with platform_ids from registry
+    const registry = getKnownBrands();
+    for (const s of suggestions) {
+      const match = registry.find(b => b.name === s.brand_name || b.name_en === s.brand_name);
+      if (match) {
+        s.platform_ids = {
+          xhs: match.xhs_keyword,
+          douyin: match.douyin_keyword,
+          taobao: match.tmall_store || null,
+        };
+        s.badge = match.badge;
+      }
+    }
+
+    res.json({ suggestions, count: suggestions.length });
+  } catch (err) {
+    console.error('[SUGGEST] AI suggestion failed:', err.message);
+
+    // Fallback: return known brands in the same category
+    const fallback = searchBrands(brand_category).slice(0, 5).map(b => ({
+      brand_name: b.name,
+      reason: `${b.badge} — 同品类品牌`,
+      priority: 'medium',
+      group: 'direct',
+      platform_ids: { xhs: b.xhs_keyword, douyin: b.douyin_keyword },
+      badge: b.badge,
+    }));
+
+    res.json({ suggestions: fallback, count: fallback.length, source: 'fallback' });
+  }
+});
+
+// GET /api/ci/brands/search — search known brands for autocomplete
+app.get('/api/ci/brands/search', async (req, res) => {
+  const { q } = req.query;
+  if (!q || q.length < 1) return res.json({ brands: [] });
+
+  const results = searchBrands(q).map(b => ({
+    brand_name: b.name,
+    name_en: b.name_en,
+    badge: b.badge,
+    platform_ids: { xhs: b.xhs_keyword, douyin: b.douyin_keyword, taobao: b.tmall_store },
+  }));
+
+  res.json({ brands: results, count: results.length });
 });
 
 // ── Start server ────────────────────────────────────────────────────────────
