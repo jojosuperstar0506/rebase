@@ -709,6 +709,23 @@ app.get('/api/ci/dashboard', async (req, res) => {
       [workspaceId]
     );
 
+    // If no analysis results exist but competitors do, trigger scoring in background
+    if (scores.length === 0 && competitors.length > 0) {
+      const { spawn } = require('child_process');
+      const pythonBin = process.env.PYTHON_BIN || 'python3';
+      const proc = spawn(pythonBin, [
+        '-m', 'services.competitor_intel.scoring_pipeline',
+        '--workspace-id', workspaceId,
+      ], {
+        cwd: process.cwd().replace('/backend', ''),
+        env: { ...process.env },
+        detached: true,
+        stdio: 'ignore',
+      });
+      proc.unref();
+      console.log(`[CI] Triggered scoring pipeline for workspace ${workspaceId}`);
+    }
+
     // Assemble into dashboard format
     const brands = competitors.map(comp => {
       const brandScores = scores.filter(s => s.competitor_name === comp.brand_name);
