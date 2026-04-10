@@ -619,6 +619,10 @@ app.post('/api/ci/workspace', async (req, res) => {
   try {
     const { user_id, brand_name, brand_category, brand_price_range, brand_platforms } = req.body;
 
+    if (!user_id || !brand_name || !brand_category) {
+      return res.status(400).json({ error: 'Missing required fields: user_id, brand_name, brand_category' });
+    }
+
     const { rows } = await pool.query(
       `INSERT INTO workspaces (user_id, brand_name, brand_category, brand_price_range, brand_platforms)
        VALUES ($1, $2, $3, $4, $5)
@@ -906,29 +910,34 @@ app.post('/api/ci/scrape', async (req, res) => {
     return res.status(400).json({ error: 'Missing brand_name or platform' });
   }
 
-  const { spawn } = require('child_process');
-  const args = [
-    '-m', 'services.competitor-intel.scrape_runner',
-    '--platform', platform,
-    '--brand', brand_name,
-  ];
+  try {
+    const { spawn } = require('child_process');
+    const args = [
+      '-m', 'services.competitor-intel.scrape_runner',
+      '--platform', platform,
+      '--brand', brand_name,
+    ];
 
-  const repoRoot = path.resolve(__dirname, '..');
-  const pythonBin = process.env.PYTHON_BIN || 'python3.9';
-  const proc = spawn(pythonBin, args, {
-    cwd: repoRoot,
-    env: { ...process.env },
-    detached: true,
-    stdio: 'ignore',
-  });
-  proc.unref();
+    const repoRoot = path.resolve(__dirname, '..');
+    const pythonBin = process.env.PYTHON_BIN || 'python3.9';
+    const proc = spawn(pythonBin, args, {
+      cwd: repoRoot,
+      env: { ...process.env },
+      detached: true,
+      stdio: 'ignore',
+    });
+    proc.unref();
 
-  console.log(`[CI] Spawned scraper: ${platform} / ${brand_name} (pid ${proc.pid})`);
-  res.json({
-    status: 'started',
-    message: `Scraping ${brand_name} on ${platform}`,
-    pid: proc.pid,
-  });
+    console.log(`[CI] Spawned scraper: ${platform} / ${brand_name} (pid ${proc.pid})`);
+    res.json({
+      status: 'started',
+      message: `Scraping ${brand_name} on ${platform}`,
+      pid: proc.pid,
+    });
+  } catch (err) {
+    console.error('[CI] POST scrape error:', err.message);
+    res.status(500).json({ error: 'Failed to start scraper' });
+  }
 });
 
 // POST /api/ci/ingest — receive scraped data from local agents or server scrapers
@@ -1695,17 +1704,22 @@ Respond in this exact JSON format, no markdown:
 
 // GET /api/ci/brands/search — search known brands for autocomplete
 app.get('/api/ci/brands/search', async (req, res) => {
-  const { q } = req.query;
-  if (!q || q.length < 1) return res.json({ brands: [] });
+  try {
+    const { q } = req.query;
+    if (!q || q.length < 1) return res.json({ brands: [] });
 
-  const results = searchBrands(q).map(b => ({
-    brand_name: b.name,
-    name_en: b.name_en,
-    badge: b.badge,
-    platform_ids: { xhs: b.xhs_keyword, douyin: b.douyin_keyword, taobao: b.tmall_store },
-  }));
+    const results = searchBrands(q).map(b => ({
+      brand_name: b.name,
+      name_en: b.name_en,
+      badge: b.badge,
+      platform_ids: { xhs: b.xhs_keyword, douyin: b.douyin_keyword, taobao: b.tmall_store },
+    }));
 
-  res.json({ brands: results, count: results.length });
+    res.json({ brands: results, count: results.length });
+  } catch (err) {
+    console.error('[CI] GET brands/search error:', err.message);
+    res.status(500).json({ error: 'Failed to search brands' });
+  }
 });
 
 // ── Start server ────────────────────────────────────────────────────────────
