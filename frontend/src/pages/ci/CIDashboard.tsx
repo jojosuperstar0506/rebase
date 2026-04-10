@@ -5,6 +5,7 @@ import { useApp } from '../../context/AppContext';
 import { t, T } from '../../i18n';
 import CISubNav from '../../components/ci/CISubNav';
 import { useCIData } from '../../hooks/useCIData';
+import { CIDashboardSkeleton } from '../../components/ci/CISkeleton';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -106,11 +107,16 @@ function StatCard({ label, value, C }: { label: string; value: string | number; 
 
 export default function CIDashboard() {
   const { colors: C, lang } = useApp();
-  const { dashboard, source: ciSource, workspace, competitors, connections } = useCIData();
+  const {
+    dashboard, source: ciSource, workspace, competitors, connections,
+    loading, refresh, needsSync, syncToApi,
+  } = useCIData();
 
   const [hoveredBubble, setHoveredBubble] = useState<number | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('threat_index');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [syncing, setSyncing] = useState(false);
+  const [syncDone, setSyncDone] = useState(false);
 
   // Enrich dashboard brands with tier from competitors list
   const data: LocalDashboardData = useMemo(() => {
@@ -125,8 +131,16 @@ export default function CIDashboard() {
     };
   }, [dashboard, competitors]);
 
-  const source = ciSource === 'api' ? 'live' : ciSource;
+  const source = ciSource; // 'api' | 'local' | 'demo'
   const connectedCount = connections.filter(c => c.status === 'active').length;
+
+  async function handleSync() {
+    setSyncing(true);
+    await syncToApi();
+    setSyncing(false);
+    setSyncDone(true);
+    setTimeout(() => setSyncDone(false), 3000);
+  }
 
   // Quick stats
   const watchlistBrands = data.brands.filter(b => b.tier === 'watchlist');
@@ -167,16 +181,48 @@ export default function CIDashboard() {
     borderBottom: `1px solid ${C.bd}`, verticalAlign: 'middle',
   };
 
-  const bannerText = source === 'live'
-    ? t(T.ci.dataSource, lang)
+  const bannerText = source === 'api'
+    ? t(T.ci.liveDataFrom, lang)
     : source === 'local'
-    ? t(T.ci.localData, lang)
+    ? t(T.ci.localOnly, lang)
     : t(T.ci.demoHint, lang);
-  const bannerColor = source === 'live' ? C.success : source === 'local' ? C.ac : C.t3;
+  const bannerColor = source === 'api' ? C.success : source === 'local' ? C.ac : C.t3;
 
   // Quadrant label positions
   const midX = (CHART_LEFT + CHART_RIGHT) / 2;
   const midY = (CHART_TOP + CHART_BOTTOM) / 2;
+
+  if (loading) return <CIDashboardSkeleton />;
+
+  // Welcome prompt: no workspace AND no competitors anywhere (neither API nor localStorage)
+  if (!workspace && competitors.length === 0) {
+    return (
+      <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: '32px 24px', fontFamily: 'system-ui, sans-serif' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+          <CISubNav />
+          <div style={{
+            maxWidth: 560, margin: '80px auto', textAlign: 'center',
+            background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 16, padding: '48px 40px',
+          }}>
+            <div style={{ fontSize: 48, marginBottom: 20 }}>🏪</div>
+            <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 12, marginTop: 0 }}>
+              {t(T.ci.welcomeTitle, lang)}
+            </h2>
+            <p style={{ fontSize: 15, color: C.t2, lineHeight: 1.7, marginBottom: 28 }}>
+              {t(T.ci.welcomeDesc, lang)}
+            </p>
+            <Link to="/ci/settings" style={{
+              display: 'inline-block', background: C.ac, color: '#fff',
+              padding: '12px 28px', borderRadius: 8, fontSize: 15, fontWeight: 600,
+              textDecoration: 'none',
+            }}>
+              {t(T.ci.setupMyBrand, lang)}
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: '32px 24px', fontFamily: 'system-ui, sans-serif' }}>
@@ -191,6 +237,37 @@ export default function CIDashboard() {
           <p style={{ color: C.t2, fontSize: 14, margin: 0 }}>{t(T.ci.subtitle, lang)}</p>
         </div>
 
+        {/* Sync banner */}
+        {needsSync && !syncDone && (
+          <div style={{
+            background: `${C.ac}15`, border: `1px solid ${C.ac}44`, borderRadius: 10,
+            padding: '10px 20px', marginBottom: 12,
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            fontSize: 13,
+          }}>
+            <span style={{ color: C.t2 }}>{t(T.ci.unsyncedData, lang)}</span>
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              style={{
+                background: C.ac, border: 'none', borderRadius: 6,
+                padding: '5px 14px', color: '#fff', fontSize: 12, fontWeight: 600,
+                cursor: syncing ? 'default' : 'pointer', opacity: syncing ? 0.7 : 1, flexShrink: 0, marginLeft: 12,
+              }}
+            >
+              {syncing ? t(T.ci.syncing, lang) : t(T.ci.syncNow, lang)}
+            </button>
+          </div>
+        )}
+        {syncDone && (
+          <div style={{
+            background: `${C.success}15`, border: `1px solid ${C.success}44`, borderRadius: 10,
+            padding: '10px 20px', marginBottom: 12, fontSize: 13, color: C.success,
+          }}>
+            ✓ {t(T.ci.syncComplete, lang)}
+          </div>
+        )}
+
         {/* Status banner */}
         <div style={{
           background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 10,
@@ -199,10 +276,34 @@ export default function CIDashboard() {
           fontSize: 13, color: C.t2,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: bannerColor, display: 'inline-block' }} />
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: bannerColor, display: 'inline-block', flexShrink: 0 }} />
             <span>{bannerText}</span>
+            {source === 'local' && (
+              <span style={{ color: C.t3, fontSize: 11 }}>· {lang === 'zh' ? '数据仅保存在本设备' : 'Data saved on this device only'}</span>
+            )}
           </div>
-          <span>{t(T.ci.lastUpdated, lang)}: {new Date(data.last_updated).toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-US')}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+            <span style={{ color: C.t3, fontSize: 12 }}>
+              {t(T.ci.lastUpdated, lang)}: {new Date(data.last_updated).toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-US')}
+            </span>
+            {/* Refresh button — SVG circular arrow */}
+            <button
+              onClick={() => refresh()}
+              title={t(T.ci.refresh, lang)}
+              style={{
+                background: 'none', border: `1px solid ${C.bd}`, borderRadius: '50%',
+                width: 28, height: 28, cursor: 'pointer', display: 'flex',
+                alignItems: 'center', justifyContent: 'center', padding: 0, color: C.t2,
+                flexShrink: 0,
+              }}
+            >
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="23 4 23 10 17 10" />
+                <polyline points="1 20 1 14 7 14" />
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Quick stats row */}

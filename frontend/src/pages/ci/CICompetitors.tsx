@@ -6,6 +6,7 @@ import CISubNav from '../../components/ci/CISubNav';
 import { removeCompetitor as apiRemoveCompetitor } from '../../services/ciApi';
 import { useCIData } from '../../hooks/useCIData';
 import { LANDSCAPE_SEED, LandscapeBrand } from '../../data/ci/landscapeSeed';
+import { CICompetitorsSkeleton } from '../../components/ci/CISkeleton';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -405,7 +406,9 @@ function CompareView({
 
 export default function CICompetitors() {
   const { colors: C, lang } = useApp();
-  const { competitors: rawCompetitors, workspace } = useCIData();
+  const { competitors: rawCompetitors, workspace, loading } = useCIData();
+
+  if (loading) return <CICompetitorsSkeleton />;
 
   const [viewMode, setViewMode] = useState<'cards' | 'compare'>('cards');
   const [tierFilter, setTierFilter] = useState<'all' | 'watchlist' | 'landscape'>('all');

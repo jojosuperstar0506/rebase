@@ -5,6 +5,7 @@ import { t, T } from '../../i18n';
 import CISubNav from '../../components/ci/CISubNav';
 import { useCIData } from '../../hooks/useCIData';
 import { LANDSCAPE_SEED } from '../../data/ci/landscapeSeed';
+import { CILandscapeSkeleton } from '../../components/ci/CISkeleton';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -66,7 +67,9 @@ function fmtVol(v: number): string {
 
 export default function CILandscape() {
   const { colors: C, lang } = useApp();
-  const { workspace, competitors: userCompetitors } = useCIData();
+  const { workspace, competitors: userCompetitors, loading } = useCIData();
+
+  if (loading) return <CILandscapeSkeleton />;
 
   const watchlistNames = useMemo(
     () => new Set(userCompetitors.filter(c => c.tier === 'watchlist').map(c => c.brand_name)),
