@@ -1,11 +1,11 @@
 """
 AI narrative generation for CI vFinal.
-Reads scores from analysis_results, generates narratives via Claude, stores in analysis_narratives.
+Reads scores from analysis_results, generates narratives via LLM, stores in analysis_narratives.
 
-Two-tier model cost:
-- Haiku: per-brand dimension insights (~$0.001 per brand)
-- Sonnet: cross-brand strategic synthesis (~$0.02 per workspace)
-- Total target: <$0.05 per workspace per run
+Model priority (fallback chain):
+1. Anthropic Claude (Haiku + Sonnet) — best quality, may be blocked from HK
+2. DeepSeek V3 — primary fallback, strong Chinese language support
+3. GLM-4-Flash — free tier fallback
 
 Usage:
   python -m services.competitor_intel.narrative_pipeline --workspace-id UUID
@@ -17,18 +17,115 @@ import json
 import os
 import sys
 
-from anthropic import Anthropic
+import httpx
 
 from .db_bridge import get_conn
 
-client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
-HAIKU_MODEL = "claude-haiku-4-5-20251001"
-SONNET_MODEL = "claude-sonnet-4-20250514"
+# ---------------------------------------------------------------------------
+# Model configuration — reads from env vars, falls back through chain
+# ---------------------------------------------------------------------------
 
+def _get_llm_config():
+    """Determine which LLM provider to use based on available env vars."""
+
+    # Priority 1: Anthropic (if key exists and not in blocked region)
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+    if anthropic_key and os.environ.get("USE_ANTHROPIC", "").lower() == "true":
+        return {
+            "provider": "anthropic",
+            "api_key": anthropic_key,
+            "base_url": os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com"),
+            "brand_model": "claude-haiku-4-5-20251001",
+            "synthesis_model": "claude-sonnet-4-20250514",
+        }
+
+    # Priority 2: DeepSeek (recommended for HK servers)
+    deepseek_key = os.environ.get("DEEPSEEK_API_KEY")
+    if deepseek_key:
+        return {
+            "provider": "openai_compat",
+            "api_key": deepseek_key,
+            "base_url": os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+            "brand_model": os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
+            "synthesis_model": os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
+        }
+
+    # Priority 3: Qwen
+    qwen_key = os.environ.get("QWEN_API_KEY")
+    if qwen_key:
+        return {
+            "provider": "openai_compat",
+            "api_key": qwen_key,
+            "base_url": os.environ.get(
+                "QWEN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
+            ),
+            "brand_model": os.environ.get("QWEN_MODEL", "qwen-plus"),
+            "synthesis_model": os.environ.get("QWEN_MODEL", "qwen-plus"),
+        }
+
+    # Priority 4: GLM-4-Flash (free tier)
+    glm_key = os.environ.get("GLM_API_KEY")
+    if glm_key:
+        return {
+            "provider": "openai_compat",
+            "api_key": glm_key,
+            "base_url": os.environ.get("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4"),
+            "brand_model": os.environ.get("GLM_MODEL", "glm-4-flash"),
+            "synthesis_model": os.environ.get("GLM_MODEL", "glm-4-flash"),
+        }
+
+    raise RuntimeError(
+        "No LLM API key found. Set one of: DEEPSEEK_API_KEY, ANTHROPIC_API_KEY, "
+        "QWEN_API_KEY, or GLM_API_KEY"
+    )
+
+
+LLM_CONFIG = _get_llm_config()
+print(f"[LLM] Using provider: {LLM_CONFIG['provider']}, model: {LLM_CONFIG['brand_model']}")
+
+
+def _call_llm(prompt: str, model: str, max_tokens: int = 1000) -> str:
+    """Call the configured LLM and return the text response."""
+
+    if LLM_CONFIG["provider"] == "anthropic":
+        # Use Anthropic SDK format
+        from anthropic import Anthropic
+
+        client = Anthropic(api_key=LLM_CONFIG["api_key"])
+        response = client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response.content[0].text.strip()
+
+    else:
+        # OpenAI-compatible API (DeepSeek, Qwen, GLM)
+        url = f"{LLM_CONFIG['base_url']}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {LLM_CONFIG['api_key']}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.7,
+        }
+
+        resp = httpx.post(url, headers=headers, json=payload, timeout=60)
+        resp.raise_for_status()
+        data = resp.json()
+        return data["choices"][0]["message"]["content"].strip()
+
+
+# ---------------------------------------------------------------------------
+# Per-brand insight (cheap, high-volume call)
+# ---------------------------------------------------------------------------
 
 def generate_brand_insight(brand_name: str, scores: dict, profile: dict) -> str:
-    """Generate a 2-3 sentence insight for a single brand using Haiku."""
+    """Generate a 2-3 sentence insight for a single brand."""
 
     prompt = f"""You are a competitive intelligence analyst for the Chinese consumer goods market.
 
@@ -45,18 +142,16 @@ Top engagement metrics: {json.dumps(profile.get('engagement_metrics', {}), ensur
 
 Write ONLY the insight paragraph, no headers or bullet points."""
 
-    response = client.messages.create(
-        model=HAIKU_MODEL,
-        max_tokens=300,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    return _call_llm(prompt, LLM_CONFIG["brand_model"], max_tokens=300)
 
-    return response.content[0].text.strip()
 
+# ---------------------------------------------------------------------------
+# Cross-brand strategic synthesis (premium call)
+# ---------------------------------------------------------------------------
 
 def generate_workspace_narrative(workspace: dict, competitors_data: list) -> dict:
     """
-    Generate cross-brand strategic narrative and action items using Sonnet.
+    Generate cross-brand strategic narrative and action items.
 
     Returns: { narrative: str, action_items: [{ title, description, dept, priority }] }
     """
@@ -105,13 +200,7 @@ Respond in this exact JSON format, no markdown, no explanation outside the JSON:
   ]
 }}"""
 
-    response = client.messages.create(
-        model=SONNET_MODEL,
-        max_tokens=1000,
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    raw = response.content[0].text.strip()
+    raw = _call_llm(prompt, LLM_CONFIG["synthesis_model"], max_tokens=1000)
 
     # Parse JSON response (handle potential markdown wrapping)
     if raw.startswith("```"):
@@ -130,6 +219,10 @@ Respond in this exact JSON format, no markdown, no explanation outside the JSON:
             "action_items": [],
         }
 
+
+# ---------------------------------------------------------------------------
+# Pipeline orchestration
+# ---------------------------------------------------------------------------
 
 def run_narrative_for_workspace(workspace_id: str):
     """Generate all narratives for a workspace."""
@@ -195,7 +288,7 @@ def run_narrative_for_workspace(workspace_id: str):
                 f"in workspace {workspace_id}"
             )
 
-            # Step 1: Per-brand insights via Haiku
+            # Step 1: Per-brand insights
             for comp_data in competitors_data:
                 try:
                     scores = {
@@ -219,11 +312,11 @@ def run_narrative_for_workspace(workspace_id: str):
                         (workspace_id, comp_data["brand_name"], insight),
                     )
 
-                    print(f"  [Haiku] {comp_data['brand_name']}: {insight[:60]}...")
+                    print(f"  [Brand] {comp_data['brand_name']}: {insight[:60]}...")
                 except Exception as e:
-                    print(f"  [ERROR] Haiku insight for {comp_data['brand_name']}: {e}")
+                    print(f"  [ERROR] Brand insight for {comp_data['brand_name']}: {e}")
 
-            # Step 2: Cross-brand synthesis via Sonnet
+            # Step 2: Cross-brand synthesis
             try:
                 result = generate_workspace_narrative(dict(workspace), competitors_data)
 
@@ -241,10 +334,10 @@ def run_narrative_for_workspace(workspace_id: str):
                     ),
                 )
 
-                print(f"  [Sonnet] Narrative: {result['narrative'][:80]}...")
-                print(f"  [Sonnet] {len(result['action_items'])} action items generated")
+                print(f"  [Synthesis] Narrative: {result['narrative'][:80]}...")
+                print(f"  [Synthesis] {len(result['action_items'])} action items generated")
             except Exception as e:
-                print(f"  [ERROR] Sonnet narrative: {e}")
+                print(f"  [ERROR] Synthesis narrative: {e}")
 
             conn.commit()
             print(f"[DONE] Narratives saved for workspace {workspace_id}")
@@ -266,7 +359,7 @@ def run_all_workspaces():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate CI narratives via Claude")
+    parser = argparse.ArgumentParser(description="Generate CI narratives via LLM")
     parser.add_argument("--workspace-id", help="Generate for a specific workspace")
     parser.add_argument("--all", action="store_true", help="Generate for all workspaces")
     args = parser.parse_args()
