@@ -9,6 +9,7 @@ const jwt = require('jsonwebtoken');
 const { startScheduler, runDailyReport, generateFeedbackToken } = require("./scheduler");
 const fs = require("fs");
 const path = require("path");
+const { pool } = require("./db");
 
 const app = express();
 
@@ -48,7 +49,7 @@ function requireSecret(req, res, next) {
 // ── Middleware ──────────────────────────────────────────────────────────────
 app.use(cors({
   origin: process.env.FRONTEND_URL || '*',
-  methods: ['GET', 'POST'],
+  methods: ['GET', 'POST', 'DELETE'],
 }));
 app.use(express.json());
 
@@ -524,6 +525,186 @@ app.post("/api/admin/approve", (req, res) => {
 
   console.log(`[Admin] Approved ${applicant.name} → invite code: ${inviteCode}`);
   res.json({ success: true, inviteCode, user: applicant.name, company: applicant.company, email: applicant.email || "" });
+});
+
+// ── CI vFinal API endpoints ──────────────────────────────────────────────────
+
+// GET /api/ci/workspace — get current user's workspace
+app.get('/api/ci/workspace', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    if (!userId) return res.status(401).json({ error: 'Missing user ID' });
+
+    const { rows } = await pool.query(
+      'SELECT * FROM workspaces WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
+      [userId]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'No workspace found' });
+
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('[CI] GET workspace error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch workspace' });
+  }
+});
+
+// POST /api/ci/workspace — create workspace (from onboarding)
+app.post('/api/ci/workspace', async (req, res) => {
+  try {
+    const { user_id, brand_name, brand_category, brand_price_range, brand_platforms } = req.body;
+
+    const { rows } = await pool.query(
+      `INSERT INTO workspaces (user_id, brand_name, brand_category, brand_price_range, brand_platforms)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [user_id, brand_name, brand_category, brand_price_range, brand_platforms]
+    );
+
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error('[CI] POST workspace error:', err.message);
+    res.status(500).json({ error: 'Failed to create workspace' });
+  }
+});
+
+// GET /api/ci/competitors — list workspace competitors
+app.get('/api/ci/competitors', async (req, res) => {
+  try {
+    const workspaceId = req.query.workspace_id;
+    if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+
+    const { rows } = await pool.query(
+      'SELECT * FROM workspace_competitors WHERE workspace_id = $1 ORDER BY tier, brand_name',
+      [workspaceId]
+    );
+
+    res.json(rows);
+  } catch (err) {
+    console.error('[CI] GET competitors error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch competitors' });
+  }
+});
+
+// POST /api/ci/competitors — add a competitor
+app.post('/api/ci/competitors', async (req, res) => {
+  try {
+    const { workspace_id, brand_name, tier, platform_ids, added_via } = req.body;
+
+    const { rows } = await pool.query(
+      `INSERT INTO workspace_competitors (workspace_id, brand_name, tier, platform_ids, added_via)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (workspace_id, brand_name) DO UPDATE SET tier = $3, platform_ids = $4
+       RETURNING *`,
+      [workspace_id, brand_name, tier || 'watchlist', platform_ids, added_via || 'manual']
+    );
+
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error('[CI] POST competitors error:', err.message);
+    res.status(500).json({ error: 'Failed to add competitor' });
+  }
+});
+
+// DELETE /api/ci/competitors/:id — remove a competitor
+app.delete('/api/ci/competitors/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM workspace_competitors WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[CI] DELETE competitor error:', err.message);
+    res.status(500).json({ error: 'Failed to delete competitor' });
+  }
+});
+
+// GET /api/ci/dashboard — main dashboard data for a workspace
+app.get('/api/ci/dashboard', async (req, res) => {
+  try {
+    const workspaceId = req.query.workspace_id;
+    if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+
+    // Get competitors
+    const { rows: competitors } = await pool.query(
+      'SELECT * FROM workspace_competitors WHERE workspace_id = $1',
+      [workspaceId]
+    );
+
+    // Get latest scores for each competitor
+    const { rows: scores } = await pool.query(
+      `SELECT DISTINCT ON (competitor_name, metric_type)
+         competitor_name, metric_type, metric_version, score, ai_narrative, analyzed_at
+       FROM analysis_results
+       WHERE workspace_id = $1
+       ORDER BY competitor_name, metric_type, analyzed_at DESC`,
+      [workspaceId]
+    );
+
+    // Get latest narrative
+    const { rows: narratives } = await pool.query(
+      'SELECT * FROM analysis_narratives WHERE workspace_id = $1 ORDER BY analyzed_at DESC LIMIT 1',
+      [workspaceId]
+    );
+
+    // Assemble into dashboard format
+    const brands = competitors.map(comp => {
+      const brandScores = scores.filter(s => s.competitor_name === comp.brand_name);
+      return {
+        brand_name: comp.brand_name,
+        group: comp.tier === 'watchlist' ? 'C' : 'B',
+        momentum_score: brandScores.find(s => s.metric_type === 'momentum')?.score || 0,
+        threat_index: brandScores.find(s => s.metric_type === 'threat')?.score || 0,
+        wtp_score: brandScores.find(s => s.metric_type === 'wtp')?.score || 0,
+        trend_signals: [],
+      };
+    });
+
+    res.json({
+      narrative: narratives[0]?.narrative || '',
+      last_updated: narratives[0]?.analyzed_at || new Date().toISOString(),
+      brands,
+      action_items: narratives[0]?.action_items || [],
+    });
+  } catch (err) {
+    console.error('[CI] GET dashboard error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch dashboard' });
+  }
+});
+
+// GET /api/ci/connections — list platform connections for a workspace
+app.get('/api/ci/connections', async (req, res) => {
+  try {
+    const workspaceId = req.query.workspace_id;
+    const { rows } = await pool.query(
+      'SELECT id, workspace_id, platform, status, last_successful_scrape, expires_at, created_at FROM platform_connections WHERE workspace_id = $1',
+      [workspaceId]
+    );
+    // Note: never return cookies_encrypted to frontend
+    res.json(rows);
+  } catch (err) {
+    console.error('[CI] GET connections error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch connections' });
+  }
+});
+
+// POST /api/ci/connections — connect a platform (store encrypted cookies)
+app.post('/api/ci/connections', async (req, res) => {
+  try {
+    const { workspace_id, platform, cookies } = req.body;
+
+    // TODO TASK-10: Implement AES-256-GCM encryption for cookies
+    // For now, store as-is (TEMPORARY — must encrypt before production)
+    const { rows } = await pool.query(
+      `INSERT INTO platform_connections (workspace_id, platform, cookies_encrypted, status)
+       VALUES ($1, $2, $3, 'active')
+       ON CONFLICT (workspace_id, platform) DO UPDATE SET cookies_encrypted = $3, status = 'active', updated_at = NOW()
+       RETURNING id, workspace_id, platform, status, created_at`,
+      [workspace_id, platform, cookies]
+    );
+
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error('[CI] POST connections error:', err.message);
+    res.status(500).json({ error: 'Failed to save connection' });
+  }
 });
 
 // ── Start server ────────────────────────────────────────────────────────────
