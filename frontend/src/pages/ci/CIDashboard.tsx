@@ -197,8 +197,8 @@ export default function CIDashboard() {
 
   const source = ciSource; // 'api' | 'local' | 'demo'
 
-  // TASK-32: Real scores only from API. Local = pending.
-  const hasRealScores = source === 'api';
+  // TASK-32/35: Real scores only when API responded AND scoring pipeline has completed.
+  const hasRealScores = source === 'api' && !dashboard?.analysis_pending;
 
   // Clear analysis_started flag once real data is in
   if (hasRealScores) localStorage.removeItem('rebase_ci_analysis_started');

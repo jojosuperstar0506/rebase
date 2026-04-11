@@ -164,6 +164,7 @@ export interface DashboardData {
     dept: string;
     priority: 'high' | 'medium' | 'low';
   }>;
+  analysis_pending?: boolean;
 }
 
 // Stable name-based score — same brand name → same score on every page

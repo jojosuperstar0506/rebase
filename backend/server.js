@@ -752,7 +752,11 @@ app.get('/api/ci/dashboard', async (req, res) => {
         momentum_score: brandScores.find(s => s.metric_type === 'momentum')?.score || 0,
         threat_index: brandScores.find(s => s.metric_type === 'threat')?.score || 0,
         wtp_score: brandScores.find(s => s.metric_type === 'wtp')?.score || 0,
-        trend_signals: [],
+        trend_signals: (() => {
+          const narr = brandScores.find(s => s.ai_narrative)?.ai_narrative || '';
+          if (!narr) return [];
+          return narr.split(/[，。；,;]/).filter(s => s.trim().length > 2 && s.trim().length < 20).slice(0, 3).map(s => s.trim());
+        })(),
       };
     });
 
@@ -767,6 +771,7 @@ app.get('/api/ci/dashboard', async (req, res) => {
       last_updated: narratives[0]?.analyzed_at || new Date().toISOString(),
       brands,
       action_items: actionItems,
+      analysis_pending: scores.length === 0,
     });
   } catch (err) {
     console.error('[CI] GET dashboard error:', err.message);
@@ -1753,12 +1758,12 @@ Respond in this exact JSON format, no markdown:
   } catch (err) {
     console.error('[SUGGEST] AI suggestion failed:', err.message);
 
-    // Fallback: return known brands in the same category
-    const fallback = searchBrands(brand_category).slice(0, 5).map(b => ({
+    // Fallback: return known brands in the same category with differentiated priorities
+    const fallback = searchBrands(brand_category).slice(0, 5).map((b, idx) => ({
       brand_name: b.name,
       reason: `${b.badge} — 同品类品牌`,
-      priority: 'medium',
-      group: 'direct',
+      priority: idx === 0 ? 'high' : idx < 3 ? 'medium' : 'low',
+      group: b.badge?.includes('国货') ? 'direct' : b.badge?.includes('轻奢') ? 'aspirational' : 'indirect',
       platform_ids: { xhs: b.xhs_keyword, douyin: b.douyin_keyword },
       badge: b.badge,
     }));
