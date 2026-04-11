@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import type { CSSProperties } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { t, T } from '../../i18n';
 import CISubNav from '../../components/ci/CISubNav';
@@ -277,8 +277,7 @@ export default function CIDashboard() {
 
   // New user: no workspace AND no competitors — redirect to settings (TASK-32)
   if (!workspace && competitors.length === 0) {
-    window.location.href = '/ci/settings';
-    return null;
+    return <Navigate to="/ci/settings" replace />;
   }
 
   // Shared export button style

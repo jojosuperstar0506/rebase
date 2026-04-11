@@ -1089,6 +1089,93 @@ function StartAnalysisCard({ C, lang, competitorCount, workspaceName, isMobile }
   );
 }
 
+// ── Reset Data Section ───────────────────────────────────────────
+function ResetDataSection({ C, lang, onReset }: {
+  C: ReturnType<typeof useApp>['colors'];
+  lang: string;
+  onReset: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+
+  function handleReset() {
+    // Clear all CI localStorage keys
+    localStorage.removeItem('rebase_ci_workspace');
+    localStorage.removeItem('rebase_ci_competitors');
+    localStorage.removeItem('rebase_ci_connections');
+    localStorage.removeItem('rebase_ci_analysis_started');
+    localStorage.removeItem('rebase_ci_welcome_dismissed');
+    localStorage.removeItem('rebase_ci_last_visit');
+    // Notify parent + other listeners
+    onReset();
+    window.dispatchEvent(new CustomEvent('ci-data-updated'));
+    setConfirming(false);
+    // Redirect to fresh settings
+    window.location.href = '/ci/settings';
+  }
+
+  return (
+    <Section title={lang === 'zh' ? '重置数据' : 'Reset Data'} C={C}>
+      <p style={{ fontSize: 13, color: C.t2, lineHeight: 1.7, marginTop: 0, marginBottom: 16 }}>
+        {lang === 'zh'
+          ? '清除所有本地保存的品牌资料、竞品列表和分析状态，重新开始设置。此操作不可撤销。'
+          : 'Clear all locally saved brand profile, competitor list, and analysis state. Start fresh. This cannot be undone.'}
+      </p>
+      {!confirming ? (
+        <button
+          onClick={() => setConfirming(true)}
+          style={{
+            background: 'transparent',
+            border: `1px solid ${C.danger}`,
+            color: C.danger,
+            padding: '8px 20px',
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          {lang === 'zh' ? '重置所有CI数据' : 'Reset All CI Data'}
+        </button>
+      ) : (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <span style={{ fontSize: 13, color: C.danger, fontWeight: 600 }}>
+            {lang === 'zh' ? '确定要重置吗？' : 'Are you sure?'}
+          </span>
+          <button
+            onClick={handleReset}
+            style={{
+              background: C.danger,
+              border: 'none',
+              color: '#fff',
+              padding: '8px 20px',
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            {lang === 'zh' ? '确认重置' : 'Yes, Reset'}
+          </button>
+          <button
+            onClick={() => setConfirming(false)}
+            style={{
+              background: 'transparent',
+              border: `1px solid ${C.bd}`,
+              color: C.t2,
+              padding: '8px 16px',
+              borderRadius: 8,
+              fontSize: 13,
+              cursor: 'pointer',
+            }}
+          >
+            {lang === 'zh' ? '取消' : 'Cancel'}
+          </button>
+        </div>
+      )}
+    </Section>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────
 export default function CISettings() {
   const { colors: C, lang } = useApp();
@@ -1182,6 +1269,11 @@ export default function CISettings() {
         {/* 4 — Platform Connections: removed for beta (TASK-32) */}
         {/* Cookie connection UI removed for beta. See TASK-17 for backend. Bring back with browser extension in v2. */}
         {/* <ConnectionsSection C={C} lang={lang} isMobile={isMobile} /> */}
+
+        {/* 5 — Reset All Data */}
+        <ResetDataSection C={C} lang={lang} onReset={() => {
+          setCompetitors([]);
+        }} />
       </div>
     </div>
   );
