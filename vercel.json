@@ -5,6 +5,9 @@
   "installCommand": "cd api && npm install",
   "framework": "vite",
   "rewrites": [
+    { "source": "/api/admin/applicants", "destination": "/api/admin" },
+    { "source": "/api/admin/approve", "destination": "/api/admin" },
+    { "source": "/api/save-survey", "destination": "/api/submit-lead" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
