@@ -21,6 +21,7 @@ export const T = {
     title: { en: "Competitive Intelligence", zh: "竞品情报系统" },
     subtitle: { en: "Track, analyze, and outmaneuver your competitors", zh: "追踪、分析、超越竞争对手" },
     dashboard: { en: "Dashboard", zh: "总览" },
+    intelligence: { en: "Intelligence", zh: "竞品洞察" },
     landscape: { en: "Market Landscape", zh: "市场全景" },
     competitors: { en: "Competitors", zh: "竞品追踪" },
     deepDive: { en: "Deep Dive", zh: "深度分析" },

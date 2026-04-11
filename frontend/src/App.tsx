@@ -22,6 +22,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Signup from "./pages/Signup";
 import AppDashboard from "./pages/AppDashboard";
 import CIDashboard from "./pages/ci/CIDashboard";
+import CIIntelligence from "./pages/ci/CIIntelligence";
 import CILandscape from "./pages/ci/CILandscape";
 import CICompetitors from "./pages/ci/CICompetitors";
 import CISettings from "./pages/ci/CISettings";
@@ -252,6 +253,7 @@ function AppRoutes() {
 
         {/* CI vFinal — new competitive intelligence tab */}
         <Route path="/ci" element={<ProtectedRoute><CIErrorBoundary><CIDashboard /></CIErrorBoundary></ProtectedRoute>} />
+        <Route path="/ci/intelligence" element={<ProtectedRoute><CIErrorBoundary><CIIntelligence /></CIErrorBoundary></ProtectedRoute>} />
         <Route path="/ci/landscape" element={<ProtectedRoute><CIErrorBoundary><CILandscape /></CIErrorBoundary></ProtectedRoute>} />
         <Route path="/ci/competitors/:brandName" element={<ProtectedRoute><CIErrorBoundary><CIDeepDive /></CIErrorBoundary></ProtectedRoute>} />
         <Route path="/ci/competitors" element={<ProtectedRoute><CIErrorBoundary><CICompetitors /></CIErrorBoundary></ProtectedRoute>} />

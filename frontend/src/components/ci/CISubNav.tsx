@@ -4,6 +4,7 @@ import { Link, useLocation } from 'react-router-dom';
 
 const CI_TABS = [
   { path: '/ci', labelKey: T.ci.dashboard },
+  { path: '/ci/intelligence', labelKey: T.ci.intelligence },
   { path: '/ci/landscape', labelKey: T.ci.landscape },
   { path: '/ci/competitors', labelKey: T.ci.competitors },
   { path: '/ci/settings', labelKey: T.ci.settings },

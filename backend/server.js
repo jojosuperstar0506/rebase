@@ -579,6 +579,28 @@ app.post("/api/admin/approve", (req, res) => {
 
 // ── CI vFinal API endpoints ──────────────────────────────────────────────────
 
+// Domain mapping for metric_types → Intelligence page sections
+const METRIC_DOMAINS = {
+  // Core (existing scoring metrics)
+  momentum: 'core', threat: 'core', wtp: 'core',
+  // Consumer
+  consumer_mindshare: 'consumer', keywords: 'consumer',
+  // Product
+  trending_products: 'product', design_profile: 'product', price_positioning: 'product', launch_frequency: 'product',
+  // Marketing
+  voice_volume: 'marketing', content_strategy: 'marketing', kol_strategy: 'marketing',
+  // Fallback
+  brand_insight: 'insight',
+};
+
+const DOMAIN_LABELS = {
+  core: '核心指标',
+  consumer: '消费者洞察',
+  product: '产品洞察',
+  marketing: '营销洞察',
+  insight: '品牌洞察',
+};
+
 // GET /api/ci/workspace — get current user's workspace
 app.get('/api/ci/workspace', async (req, res) => {
   try {
@@ -796,6 +818,87 @@ app.get('/api/ci/dashboard', async (req, res) => {
   }
 });
 
+// GET /api/ci/intelligence — all metrics for all competitors, grouped by domain
+app.get('/api/ci/intelligence', async (req, res) => {
+  try {
+    const workspaceId = req.query.workspace_id;
+    if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+
+    // Get ALL latest results per competitor × metric_type
+    const { rows } = await pool.query(
+      `SELECT DISTINCT ON (competitor_name, metric_type)
+         competitor_name, metric_type, score, raw_inputs, ai_narrative, analyzed_at
+       FROM analysis_results
+       WHERE workspace_id = $1
+       ORDER BY competitor_name, metric_type, analyzed_at DESC`,
+      [workspaceId]
+    );
+
+    // Collect available metric types
+    const availableMetrics = [...new Set(rows.map(r => r.metric_type))];
+
+    // Build domains structure
+    const domains = {};
+    for (const row of rows) {
+      const domain = METRIC_DOMAINS[row.metric_type] || 'insight';
+      if (!domains[domain]) {
+        domains[domain] = {
+          label: DOMAIN_LABELS[domain] || domain,
+          metrics: {},
+        };
+      }
+      const metricKey = row.metric_type;
+      if (!domains[domain].metrics[metricKey]) {
+        domains[domain].metrics[metricKey] = {
+          score: null,
+          brands: {},
+        };
+      }
+
+      // Parse raw_inputs if stored as string
+      let rawInputs = row.raw_inputs;
+      if (typeof rawInputs === 'string') {
+        try { rawInputs = JSON.parse(rawInputs); } catch { /* leave as-is */ }
+      }
+
+      domains[domain].metrics[metricKey].brands[row.competitor_name] = {
+        score: row.score,
+        raw_inputs: rawInputs,
+        ai_narrative: row.ai_narrative,
+        analyzed_at: row.analyzed_at,
+      };
+    }
+
+    // Compute aggregate score per metric (average across brands)
+    for (const domain of Object.values(domains)) {
+      for (const [, metric] of Object.entries(domain.metrics)) {
+        const brandScores = Object.values(metric.brands)
+          .map(b => b.score)
+          .filter(s => s != null);
+        metric.score = brandScores.length > 0
+          ? Math.round(brandScores.reduce((a, b) => a + b, 0) / brandScores.length)
+          : null;
+      }
+    }
+
+    // Find the most recent analyzed_at across all rows
+    const lastUpdated = rows.length > 0
+      ? rows.reduce((latest, r) => (r.analyzed_at > latest ? r.analyzed_at : latest), rows[0].analyzed_at)
+      : new Date().toISOString();
+
+    res.json({
+      workspace_id: workspaceId,
+      last_updated: lastUpdated,
+      domains,
+      available_metrics: availableMetrics,
+      total_metrics: availableMetrics.length,
+    });
+  } catch (err) {
+    console.error('[CI] GET intelligence error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch intelligence data' });
+  }
+});
+
 // GET /api/ci/connections — list platform connections for a workspace
 app.get('/api/ci/connections', async (req, res) => {
   try {
@@ -976,6 +1079,26 @@ app.post('/api/ci/run-analysis', async (req, res) => {
       stdio: 'ignore',
     });
     proc.unref();
+
+    // Spawn additional intelligence pipelines (detached, fire-and-forget)
+    const pipelineCwd = process.cwd().replace('/backend', '');
+    const pipelineEnv = { ...process.env };
+    const pipelineOpts = { cwd: pipelineCwd, env: pipelineEnv, detached: true, stdio: 'ignore' };
+
+    const extraPipelines = [
+      'services.competitor_intel.pipelines.keyword_pipeline',
+      'services.competitor_intel.pipelines.voice_volume_pipeline',
+      'services.competitor_intel.pipelines.product_ranking_pipeline',
+    ];
+    for (const mod of extraPipelines) {
+      try {
+        const p = spawn(pythonBin, ['-m', mod, '--workspace-id', workspace_id], pipelineOpts);
+        p.unref();
+        console.log(`[CI] Spawned ${mod} for workspace ${workspace_id}`);
+      } catch (spawnErr) {
+        console.warn(`[CI] Failed to spawn ${mod}: ${spawnErr.message}`);
+      }
+    }
 
     console.log(`[CI] Started analysis job ${job.id} for workspace ${workspace_id} (${totalBrands} brands)`);
 

@@ -447,6 +447,37 @@ export async function getAnalysisStatus(workspaceId: string): Promise<AnalysisJo
   return await tryApi<AnalysisJob>(`/analysis/status?workspace_id=${encodeURIComponent(workspaceId)}`);
 }
 
+// ─── Intelligence Layer ─────────────────────────────────────────
+
+export interface MetricBrandData {
+  score: number;
+  raw_inputs: Record<string, any> | null;
+  ai_narrative: string | null;
+  analyzed_at: string;
+}
+
+export interface MetricData {
+  score: number;
+  brands: Record<string, MetricBrandData>;
+}
+
+export interface IntelligenceDomain {
+  label: string;
+  metrics: Record<string, MetricData>;
+}
+
+export interface IntelligenceData {
+  workspace_id: string;
+  last_updated: string;
+  domains: Record<string, IntelligenceDomain>;
+  available_metrics: string[];
+  total_metrics: number;
+}
+
+export async function getIntelligence(workspaceId: string): Promise<IntelligenceData | null> {
+  return await tryApi<IntelligenceData>(`/intelligence?workspace_id=${encodeURIComponent(workspaceId)}`);
+}
+
 // ─── TASK-25: Alerts ──────────────────────────────────────────────
 
 export interface CIAlert {
