@@ -46,8 +46,8 @@ export interface Workspace {
 }
 
 export async function getWorkspace(): Promise<{ data: Workspace | null; source: 'api' | 'local' }> {
-  // Try API first (maps to Vercel serverless: api/ci/workspace-me.js)
-  const apiData = await tryApi<Workspace>('/workspace-me');
+  // Try API first — backend route is /api/ci/workspace/me
+  const apiData = await tryApi<Workspace>('/workspace/me');
   if (apiData && apiData.id) {
     return { data: apiData, source: 'api' };
   }

@@ -627,7 +627,9 @@ app.get('/api/ci/workspace/me', async (req, res) => {
 // POST /api/ci/workspace — create workspace (from onboarding)
 app.post('/api/ci/workspace', async (req, res) => {
   try {
-    const { user_id, brand_name, brand_category, brand_price_range, brand_platforms } = req.body;
+    const { brand_name, brand_category, brand_price_range, brand_platforms } = req.body;
+    // user_id can come from body (direct API) or x-user-id header (via Vercel proxy)
+    const user_id = req.body.user_id || req.headers['x-user-id'];
 
     if (!user_id || !brand_name || !brand_category) {
       return res.status(400).json({ error: 'Missing required fields: user_id, brand_name, brand_category' });
