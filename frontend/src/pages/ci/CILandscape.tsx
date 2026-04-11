@@ -127,6 +127,22 @@ export default function CILandscape() {
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [hoveredBrand, setHoveredBrand] = useState<string | null>(null);
 
+  function toggleZone(key: string) {
+    setActiveZones(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleGroup(g: string) {
+    setActiveGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(g)) next.delete(g); else next.add(g);
+      return next;
+    });
+  }
+
   const visibleBrands = useMemo(() => {
     return allBrands.filter(b => {
       if (!activeZones.has(getPriceZone(b.avg_price))) return false;
