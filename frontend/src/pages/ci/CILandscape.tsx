@@ -72,7 +72,7 @@ export default function CILandscape() {
   const isMobile = bp === 'mobile';
   const { workspace, competitors: userCompetitors, loading } = useCIData();
 
-  if (loading) return <CILandscapeSkeleton />;
+  // ── ALL HOOKS MUST BE ABOVE ANY EARLY RETURN (React Rules of Hooks) ────────
 
   const watchlistNames = useMemo(
     () => new Set(userCompetitors.filter(c => c.tier === 'watchlist').map(c => c.brand_name)),
@@ -126,6 +126,9 @@ export default function CILandscape() {
   const [sortKey, setSortKey] = useState<SortKey>('avg_price');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [hoveredBrand, setHoveredBrand] = useState<string | null>(null);
+
+  // ── Early return AFTER all hooks ────────────────────────────────────────────
+  if (loading) return <CILandscapeSkeleton />;
 
   function toggleZone(z: string) {
     setActiveZones(s => { const n = new Set(s); n.has(z) ? n.delete(z) : n.add(z); return n; });

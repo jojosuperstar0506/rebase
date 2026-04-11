@@ -456,8 +456,7 @@ export default function CICompetitors() {
   const isMobile = bp === 'mobile';
   const { competitors: rawCompetitors, workspace, loading } = useCIData();
 
-  if (loading) return <CICompetitorsSkeleton />;
-
+  // ── ALL HOOKS MUST BE ABOVE ANY EARLY RETURN (React Rules of Hooks) ────────
   const [viewMode, setViewMode] = useState<'cards' | 'compare'>('cards');
   const [tierFilter, setTierFilter] = useState<'all' | 'watchlist' | 'landscape'>('all');
   const [sortBy, setSortBy] = useState<'name' | 'threat' | 'momentum' | 'price'>('name');
@@ -474,6 +473,9 @@ export default function CICompetitors() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [deepDiveOpen, setDeepDiveOpen] = useState<string | null>(null);
+
+  // ── Early return AFTER all hooks ────────────────────────────────────────────
+  if (loading) return <CICompetitorsSkeleton />;
 
   const seedMap = useMemo(() => {
     const m = new Map<string, LandscapeBrand>();

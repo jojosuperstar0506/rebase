@@ -482,7 +482,27 @@ export default function CIDashboard() {
           {/* TASK-36: Analysis progress bar with stages */}
           {(() => {
             const job = analysisJob;
-            const showProgress = (analysisStarted || isJobActive) && !hasRealScores;
+            // Show progress bar only if there's a real tracked job running
+            const hasTrackedJob = job && job.status !== 'none' && job.job_id;
+            const showProgress = hasTrackedJob && !hasRealScores;
+
+            // Fallback: old-style banner for pre-TASK-36 analysis runs (no job tracking yet)
+            if (!showProgress && analysisStarted && !hasRealScores) {
+              return (
+                <div style={{
+                  background: `${C.ac}12`, border: `1px solid ${C.ac}44`, borderRadius: 10,
+                  padding: '12px 20px', marginBottom: 20,
+                  display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: C.t2,
+                }}>
+                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={C.ac} strokeWidth={2.5} strokeLinecap="round" style={{ flexShrink: 0, animation: 'spin 1.5s linear infinite' }}>
+                    <circle cx={12} cy={12} r={10} strokeDasharray="31.4" strokeDashoffset="10" />
+                  </svg>
+                  <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+                  <span><strong style={{ color: C.ac }}>{t(T.ci.analysisInProgress, lang)}</strong> — {t(T.ci.analysisStartedBanner, lang)}</span>
+                </div>
+              );
+            }
+
             if (!showProgress) return null;
 
             const isFailed = job?.status === 'failed';
