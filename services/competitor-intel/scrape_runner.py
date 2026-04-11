@@ -100,15 +100,29 @@ async def scrape_brand(platform: str, brand_name: str, keyword: str, tier: str, 
             return True
         else:
             status = result.scrape_status if result else 'no_result'
+            error_msg = getattr(result, 'error_message', '') or str(result) if result else ''
             print(f"[FAIL] {platform} / {brand_name}: {status}")
 
+            # Detect auth failures — signals that cookies have expired
             if cookies and status == 'failed':
+                auth_failure_signals = ['login', '登录', '401', '403', 'unauthorized', 'redirect', 'expired', '过期']
+                if any(signal in error_msg.lower() for signal in auth_failure_signals):
+                    print(f"[AUTH] Cookie expired for {platform}, marking connection as expired")
                 mark_connection_expired(platform)
 
             return False
     except Exception as e:
+        error_str = str(e).lower()
         print(f"[ERROR] {platform} / {brand_name}: {e}")
         traceback.print_exc()
+
+        # Also check exceptions for auth failure signals
+        if cookies:
+            auth_failure_signals = ['login', '登录', '401', '403', 'unauthorized', 'redirect', 'expired', '过期']
+            if any(signal in error_str for signal in auth_failure_signals):
+                print(f"[AUTH] Cookie expired for {platform} (exception), marking connection as expired")
+                mark_connection_expired(platform)
+
         return False
 
 
