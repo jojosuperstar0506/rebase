@@ -110,7 +110,12 @@ function generateTrendData(
 
 // ── Score bar ─────────────────────────────────────────────────────────────────
 
-function ScoreBar({ value, C }: { value: number; C: Record<string, string> }) {
+function ScoreBar({ value, pending, C }: { value: number; pending?: boolean; C: Record<string, string> }) {
+  if (pending || value === 0) {
+    return (
+      <span style={{ fontSize: 12, color: C.t3, fontWeight: 500, fontStyle: 'italic' }}>—</span>
+    );
+  }
   const color = value >= 70 ? C.danger : value >= 40 ? '#f59e0b' : C.success;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -156,8 +161,30 @@ export default function CIDashboard() {
   const [trendDays, setTrendDays] = useState<30 | 90>(30);
 
   // Enrich dashboard brands with tier from competitors list
+  // TASK-32: Never show DEMO_DATA when workspace/competitors exist. Only use DEMO_DATA for true no-workspace state.
   const data: LocalDashboardData = useMemo(() => {
-    if (!dashboard) return DEMO_DATA;
+    // Workspace exists but no API data yet → show local competitor list with pending scores
+    if (!dashboard || ciSource === 'demo') {
+      if (workspace || competitors.length > 0) {
+        // Build from local competitors — pending state (scores will show as 0 = "—")
+        const localBrands: BrandScore[] = competitors.map(comp => ({
+          brand_name: comp.brand_name,
+          group: 'C',
+          momentum_score: 0,
+          threat_index: 0,
+          wtp_score: 0,
+          trend_signals: [],
+          tier: (comp.tier ?? 'watchlist') as 'watchlist' | 'landscape',
+        }));
+        return {
+          narrative: '',
+          last_updated: new Date().toISOString(),
+          brands: localBrands,
+          action_items: [],
+        };
+      }
+      return DEMO_DATA;
+    }
     return {
       ...dashboard,
       action_items: dashboard.action_items.map(a => ({ ...a, dept: a.dept ?? '' })),
@@ -166,9 +193,16 @@ export default function CIDashboard() {
         return { ...b, tier: comp?.tier ?? 'watchlist' } as BrandScore;
       }),
     };
-  }, [dashboard, competitors]);
+  }, [dashboard, ciSource, competitors, workspace]);
 
   const source = ciSource; // 'api' | 'local' | 'demo'
+
+  // TASK-32: Real scores only from API. Local = pending.
+  const hasRealScores = source === 'api';
+
+  // Clear analysis_started flag once real data is in
+  if (hasRealScores) localStorage.removeItem('rebase_ci_analysis_started');
+  const analysisStarted = localStorage.getItem('rebase_ci_analysis_started') === 'true';
   const connectedCount = connections.filter(c => c.status === 'active').length;
 
   async function handleSync() {
@@ -241,34 +275,10 @@ export default function CIDashboard() {
 
   if (loading) return <CIDashboardSkeleton />;
 
-  // Welcome prompt: no workspace AND no competitors anywhere (neither API nor localStorage)
+  // New user: no workspace AND no competitors — redirect to settings (TASK-32)
   if (!workspace && competitors.length === 0) {
-    return (
-      <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: isMobile ? '16px 12px' : '32px 24px', fontFamily: 'system-ui, sans-serif' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-          <CISubNav />
-          <div style={{
-            maxWidth: 560, margin: '80px auto', textAlign: 'center',
-            background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 16, padding: '48px 40px',
-          }}>
-            <div style={{ fontSize: 48, marginBottom: 20 }}>🏪</div>
-            <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 12, marginTop: 0 }}>
-              {t(T.ci.welcomeTitle, lang)}
-            </h2>
-            <p style={{ fontSize: 15, color: C.t2, lineHeight: 1.7, marginBottom: 28 }}>
-              {t(T.ci.welcomeDesc, lang)}
-            </p>
-            <Link to="/ci/settings" style={{
-              display: 'inline-block', background: C.ac, color: '#fff',
-              padding: '12px 28px', borderRadius: 8, fontSize: 15, fontWeight: 600,
-              textDecoration: 'none',
-            }}>
-              {t(T.ci.setupMyBrand, lang)}
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
+    window.location.href = '/ci/settings';
+    return null;
   }
 
   // Shared export button style
@@ -411,6 +421,138 @@ export default function CIDashboard() {
             </button>
           </div>
 
+          {/* ── TASK-32 NEW ORDER: AI Analysis + Action Items FIRST ─── */}
+
+          {/* Analysis in progress banner */}
+          {analysisStarted && !hasRealScores && (
+            <div style={{
+              background: `${C.ac}12`, border: `1px solid ${C.ac}44`, borderRadius: 10,
+              padding: '12px 20px', marginBottom: 20,
+              display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: C.t2,
+            }}>
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={C.ac} strokeWidth={2.5} strokeLinecap="round" style={{ flexShrink: 0, animation: 'spin 1.5s linear infinite' }}>
+                <circle cx={12} cy={12} r={10} strokeDasharray="31.4" strokeDashoffset="10" />
+              </svg>
+              <span><strong style={{ color: C.ac }}>{t(T.ci.analysisInProgress, lang)}</strong> — {t(T.ci.analysisStartedBanner, lang)}</span>
+              <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+            </div>
+          )}
+
+          {/* AI Strategic Analysis — HERO POSITION (TASK-32) */}
+          {(() => {
+            const narrative = data.narrative ?? '';
+            const TRUNCATE = 200;
+            const isLong = narrative.length > TRUNCATE;
+            const displayText = isLong && !narrativeExpanded
+              ? narrative.slice(0, TRUNCATE).trimEnd() + '…'
+              : narrative;
+
+            if (!hasRealScores) {
+              // No real data yet — show CTA to run first analysis
+              return (
+                <div style={{
+                  ...card,
+                  borderLeft: `3px solid ${C.ac}`,
+                  padding: isMobile ? '16px' : '24px',
+                  textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: 32, marginBottom: 12 }}>✨</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.tx, marginBottom: 8 }}>
+                    {t(T.ci.aiAnalysis, lang)}
+                  </div>
+                  <p style={{ fontSize: 13, color: C.t2, lineHeight: 1.7, marginBottom: 16, maxWidth: 460, margin: '0 auto 16px' }}>
+                    {t(T.ci.runFirstAnalysis, lang)}
+                  </p>
+                  <Link to="/ci/settings" style={{
+                    display: 'inline-block', background: C.ac, color: '#fff',
+                    padding: '9px 22px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                    textDecoration: 'none',
+                  }}>
+                    {t(T.ci.goToSettings, lang)} →
+                  </Link>
+                </div>
+              );
+            }
+
+            return (
+              <div style={{
+                ...card,
+                borderLeft: `3px solid ${C.ac}`,
+                padding: isMobile ? '14px 16px' : '20px 24px',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <AIIcon color={C.ac} />
+                    <span style={{ fontSize: 14, fontWeight: 700, color: C.tx }}>
+                      {t(T.ci.aiAnalysis, lang)}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: 11, color: C.t3 }}>
+                    {new Date(data.last_updated).toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                  </span>
+                </div>
+                {narrative ? (
+                  <>
+                    <p style={{ fontSize: 14, color: C.tx, lineHeight: 1.8, margin: 0, marginBottom: isLong ? 12 : 0 }}>
+                      {displayText}
+                    </p>
+                    {isLong && (
+                      <button
+                        onClick={() => setNarrativeExpanded(e => !e)}
+                        style={{ background: 'none', border: 'none', padding: 0, color: C.ac, fontSize: 13, cursor: 'pointer', fontWeight: 600 }}
+                      >
+                        {narrativeExpanded ? t(T.ci.collapse, lang) : t(T.ci.readMore, lang)}
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <p style={{ fontSize: 13, color: C.t3, fontStyle: 'italic', margin: 0 }}>
+                    {t(T.ci.noAnalysisYet, lang)}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Action Items — HERO POSITION (TASK-32) */}
+          {hasRealScores && data.action_items.length > 0 && (
+            <div style={card}>
+              <div style={sectionTitle}>
+                {t(T.ci.actionItems, lang)}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {data.action_items.map((item, i) => {
+                  const pColor = item.priority === 'high' ? C.danger : item.priority === 'medium' ? C.ac : C.t2;
+                  return (
+                    <div key={i} style={{
+                      display: 'flex', gap: 14, padding: isMobile ? '10px 12px' : '14px 16px',
+                      background: C.s2, borderRadius: 8, border: `1px solid ${C.bd}`,
+                      borderLeft: `3px solid ${pColor}`,
+                    }}>
+                      <div style={{ flexShrink: 0, marginTop: 2 }}>
+                        <span style={{
+                          fontSize: 11, fontWeight: 700, color: pColor,
+                          background: `${pColor}18`, border: `1px solid ${pColor}44`,
+                          borderRadius: 4, padding: '2px 8px',
+                          textTransform: 'uppercase', letterSpacing: '0.04em',
+                        }}>
+                          {item.priority}
+                        </span>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{item.title}</div>
+                        <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.7 }}>{item.description}</div>
+                      </div>
+                      {item.dept && <span style={{ fontSize: 12, color: C.t3, flexShrink: 0 }}>[{item.dept}]</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Divider to "Show me the data" section ──────────── */}
+
         {/* Quick stats row — 2x2 grid on mobile, 4-in-a-row on desktop */}
         <div style={{
           display: 'grid',
@@ -419,30 +561,54 @@ export default function CIDashboard() {
           marginBottom: isMobile ? 16 : 24,
         }}>
           <StatCard label={t(T.ci.competitorsTracked, lang)} value={data.brands.length} C={C as unknown as Record<string, string>} />
-          <StatCard label={t(T.ci.avgThreat, lang)} value={avgThreat} C={C as unknown as Record<string, string>} />
-          <StatCard label={t(T.ci.highestMomentum, lang)} value={highestMomBrand?.brand_name ?? '—'} C={C as unknown as Record<string, string>} />
+          <StatCard label={t(T.ci.avgThreat, lang)} value={hasRealScores ? avgThreat : '—'} C={C as unknown as Record<string, string>} />
+          <StatCard label={t(T.ci.highestMomentum, lang)} value={hasRealScores && highestMomBrand ? highestMomBrand.brand_name : '—'} C={C as unknown as Record<string, string>} />
           <StatCard label={t(T.ci.platformsConnected, lang)} value={`${connectedCount}/3`} C={C as unknown as Record<string, string>} />
         </div>
 
-        {/* Empty state */}
-        {source === 'demo' && (
-          <div style={{ ...card, textAlign: 'center', padding: '48px 24px' }}>
-            <div style={{ fontSize: 40, marginBottom: 16 }}>📊</div>
-            <p style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
-              {t(T.ci.noCompetitors, lang)}
-            </p>
-            <Link to="/ci/settings" style={{
-              display: 'inline-block', background: C.ac, color: '#fff',
-              padding: '10px 24px', borderRadius: 8, fontSize: 14, fontWeight: 600,
-              textDecoration: 'none', marginTop: 8,
-            }}>
-              {t(T.ci.goToSettings, lang)}
-            </Link>
+        {/* Analysis not run state — show competitor list with pending indicators */}
+        {!hasRealScores && data.brands.length > 0 && (
+          <div style={{ ...card, marginBottom: isMobile ? 16 : 24 }}>
+            <div style={{ ...sectionTitle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>{lang === 'zh' ? '竞品列表' : 'Tracked Competitors'}</span>
+              <span style={{
+                fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20,
+                background: `${C.ac}15`, color: C.ac, border: `1px solid ${C.ac}33`,
+              }}>
+                {t(T.ci.analysisNotRun, lang)}
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {data.brands.map((brand, i) => (
+                <div key={`${brand.brand_name}-${i}`} style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '10px 14px', background: C.s2,
+                  border: `1px solid ${C.bd}`, borderRadius: 8,
+                }}>
+                  <span style={{ fontWeight: 600, fontSize: 14, flex: 1 }}>{brand.brand_name}</span>
+                  <span style={{
+                    fontSize: 11, color: C.t3, fontStyle: 'italic',
+                    background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 4, padding: '2px 8px',
+                  }}>
+                    {t(T.ci.pendingAnalysis, lang)}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 16, textAlign: 'center' }}>
+              <Link to="/ci/settings" style={{
+                display: 'inline-block', background: C.ac, color: '#fff',
+                padding: '9px 22px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                textDecoration: 'none',
+              }}>
+                {t(T.ci.goToSettingsToStart, lang)} →
+              </Link>
+            </div>
           </div>
         )}
 
-        {/* Bubble chart */}
-        {data.brands.length > 0 && (
+        {/* Bubble chart — only when real scores available */}
+        {hasRealScores && data.brands.length > 0 && (
           <div style={card}>
             <div style={sectionTitle}>
               {lang === 'zh' ? '竞品态势图' : 'Competitive Landscape'}
@@ -584,8 +750,8 @@ export default function CIDashboard() {
           </div>
         )}
 
-        {/* Rankings table */}
-        {data.brands.length > 0 && (
+        {/* Rankings table — only when real scores available */}
+        {hasRealScores && data.brands.length > 0 && (
           <div style={card}>
             <div style={sectionTitle}>
               {lang === 'zh' ? '竞品评分排名' : 'Competitor Rankings'}
@@ -619,21 +785,21 @@ export default function CIDashboard() {
                         <div style={{ fontWeight: 600 }}>{brand.brand_name}</div>
                         <span style={{
                           fontSize: 10, padding: '1px 7px', borderRadius: 4, fontWeight: 600,
-                          background: brand.tier === 'watchlist' ? `${C.ac}22` : C.s2,
-                          color: brand.tier === 'watchlist' ? C.ac : C.t2,
-                          border: `1px solid ${brand.tier === 'watchlist' ? C.ac : C.bd}`,
+                          background: `${C.success}18`,
+                          color: C.success,
+                          border: `1px solid ${C.success}44`,
                         }}>
-                          {brand.tier === 'watchlist' ? t(T.ci.watchlist, lang) : t(T.ci.landscapeTier, lang)}
+                          ✓ {t(T.ci.tracking, lang)}
                         </span>
                       </td>
                       <td style={{ ...tdStyle, fontSize: isMobile ? 12 : 13 }}>
-                        <ScoreBar value={brand.momentum_score} C={C as unknown as Record<string, string>} />
+                        <ScoreBar value={brand.momentum_score} pending={!hasRealScores} C={C as unknown as Record<string, string>} />
                       </td>
                       <td style={{ ...tdStyle, fontSize: isMobile ? 12 : 13 }}>
-                        <ScoreBar value={brand.threat_index} C={C as unknown as Record<string, string>} />
+                        <ScoreBar value={brand.threat_index} pending={!hasRealScores} C={C as unknown as Record<string, string>} />
                       </td>
                       <td style={{ ...tdStyle, fontSize: isMobile ? 12 : 13 }}>
-                        <ScoreBar value={brand.wtp_score} C={C as unknown as Record<string, string>} />
+                        <ScoreBar value={brand.wtp_score} pending={!hasRealScores} C={C as unknown as Record<string, string>} />
                       </td>
                       {!isMobile && (
                         <td style={tdStyle}>
@@ -656,63 +822,8 @@ export default function CIDashboard() {
           </div>
         )}
 
-        {/* ── AI Strategic Analysis ───────────────────────────── */}
-        {(() => {
-          const narrative = data.narrative ?? '';
-          const TRUNCATE = 200;
-          const isLong = narrative.length > TRUNCATE;
-          const displayText = isLong && !narrativeExpanded
-            ? narrative.slice(0, TRUNCATE).trimEnd() + '…'
-            : narrative;
-
-          return (
-            <div style={{
-              ...card,
-              borderLeft: `3px solid ${C.ac}`,
-              padding: isMobile ? '14px 16px' : '20px 24px',
-            }}>
-              {/* Header row */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <AIIcon color={C.ac} />
-                  <span style={{ fontSize: 14, fontWeight: 700, color: C.tx }}>
-                    {t(T.ci.aiAnalysis, lang)}
-                  </span>
-                </div>
-                <span style={{ fontSize: 11, color: C.t3 }}>
-                  {new Date(data.last_updated).toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
-                </span>
-              </div>
-
-              {/* Narrative text */}
-              {narrative ? (
-                <>
-                  <p style={{ fontSize: 14, color: C.tx, lineHeight: 1.8, margin: 0, marginBottom: isLong ? 12 : 0 }}>
-                    {displayText}
-                  </p>
-                  {isLong && (
-                    <button
-                      onClick={() => setNarrativeExpanded(e => !e)}
-                      style={{
-                        background: 'none', border: 'none', padding: 0,
-                        color: C.ac, fontSize: 13, cursor: 'pointer', fontWeight: 600,
-                      }}
-                    >
-                      {narrativeExpanded ? t(T.ci.collapse, lang) : t(T.ci.readMore, lang)}
-                    </button>
-                  )}
-                </>
-              ) : (
-                <p style={{ fontSize: 13, color: C.t3, fontStyle: 'italic', margin: 0 }}>
-                  {t(T.ci.noAnalysisYet, lang)}
-                </p>
-              )}
-            </div>
-          );
-        })()}
-
         {/* ── Score Trends ────────────────────────────────────── */}
-        {data.brands.length > 0 && (
+        {hasRealScores && data.brands.length > 0 && (
           <div style={card}>
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -802,43 +913,6 @@ export default function CIDashboard() {
           competitors={data.brands}
           source={source}
         />
-
-        {/* Action items (AI recommendations) */}
-        {data.action_items.length > 0 && (
-          <div style={card}>
-            <div style={sectionTitle}>
-              {t(T.ci.actionItems, lang)}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {data.action_items.map((item, i) => {
-                const pColor = item.priority === 'high' ? C.danger : item.priority === 'medium' ? C.ac : C.t2;
-                return (
-                  <div key={i} style={{
-                    display: 'flex', gap: 14, padding: isMobile ? '10px 12px' : '14px 16px',
-                    background: C.s2, borderRadius: 8, border: `1px solid ${C.bd}`,
-                    borderLeft: `3px solid ${pColor}`,
-                  }}>
-                    <div style={{ flexShrink: 0, marginTop: 2 }}>
-                      <span style={{
-                        fontSize: 11, fontWeight: 700, color: pColor,
-                        background: `${pColor}18`, border: `1px solid ${pColor}44`,
-                        borderRadius: 4, padding: '2px 8px',
-                        textTransform: 'uppercase', letterSpacing: '0.04em',
-                      }}>
-                        {item.priority}
-                      </span>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{item.title}</div>
-                      <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.7 }}>{item.description}</div>
-                    </div>
-                    {item.dept && <span style={{ fontSize: 12, color: C.t3, flexShrink: 0 }}>[{item.dept}]</span>}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
 
         </div>{/* end ci-print-area */}
       </div>

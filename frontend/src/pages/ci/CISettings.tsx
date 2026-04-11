@@ -13,6 +13,7 @@ import {
 } from '../../utils/ciStorage';
 import {
   resolveBrand, parseLink, suggestCompetitors, searchBrands,
+  requestDeepDive, getWorkspace,
   type BrandResolution, type CompetitorSuggestion,
 } from '../../services/ciApi';
 
@@ -281,6 +282,7 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
   const [linkParsing, setLinkParsing] = useState(false);
   const [linkResult, setLinkResult] = useState<{ platform: string; brandName: string; platformIds: Record<string, string> } | null>(null);
   const [linkError, setLinkError] = useState('');
+  const [linkBrandInput, setLinkBrandInput] = useState(''); // for unknown brand name prompt
 
   async function handleParseLink() {
     const url = linkInput.trim();
@@ -289,52 +291,61 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
     setLinkParsing(true);
     setLinkResult(null);
     setLinkError('');
+    setLinkBrandInput('');
     const result = await parseLink(url);
     setLinkParsing(false);
     if (!result || !result.parsed) {
-      setLinkError(result?.error ?? t(T.ci.unrecognizedUrl, lang as any));
-      setTimeout(() => setLinkError(''), 4000);
+      setLinkError(result?.error ?? t(T.ci.unrecognizedLink, lang as any));
       return;
     }
     const platformIds: Record<string, string> = result.platform_ids ?? (result.platform && result.identifier ? { [result.platform]: result.identifier } : {});
-    const brandName = result.brand_name ?? (result.platform && result.identifier ? `${PLATFORM_LABELS[result.platform] ?? result.platform}: ${result.identifier}` : url);
+    const brandName = result.brand_name ?? '';
     setLinkResult({ platform: result.platform ?? '', brandName, platformIds });
-    // Auto-add after 1s
-    setTimeout(() => {
-      onAdd({
-        id: crypto.randomUUID(),
-        brand_name: brandName,
-        tier: watchlistCount < MAX_WATCHLIST ? 'watchlist' : 'landscape',
-        platform_ids: platformIds,
-        added_via: 'link_paste',
-        created_at: new Date().toISOString(),
-      });
-      setLinkInput('');
-      setLinkResult(null);
-    }, 1200);
+    // If brand name couldn't be extracted, prompt user
+    if (!brandName) setLinkBrandInput('');
+  }
+
+  function handleConfirmLink() {
+    if (!linkResult) return;
+    const finalBrandName = linkResult.brandName || linkBrandInput.trim();
+    if (!finalBrandName) return;
+    onAdd({
+      id: crypto.randomUUID(),
+      brand_name: finalBrandName,
+      tier: watchlistCount < MAX_WATCHLIST ? 'watchlist' : 'landscape',
+      platform_ids: linkResult.platformIds,
+      added_via: 'link_paste',
+      created_at: new Date().toISOString(),
+    });
+    setLinkInput('');
+    setLinkResult(null);
+    setLinkBrandInput('');
   }
 
   // ── AI tab state ────────────────────────────────────────────────
   const [aiSuggestions, setAiSuggestions] = useState<CompetitorSuggestion[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiLoaded, setAiLoaded] = useState(false);
+  const [aiError, setAiError] = useState('');
 
   async function loadAiSuggestions() {
     const ws = getCIWorkspace();
     if (!ws?.brand_name) return;
     setAiLoading(true);
-    const result = await suggestCompetitors(ws.brand_name, ws.brand_category, ws.price_range);
-    setAiSuggestions(result.suggestions);
+    setAiError('');
+    try {
+      const result = await suggestCompetitors(ws.brand_name, ws.brand_category, ws.price_range);
+      setAiSuggestions(result?.suggestions ?? []);
+      if (!result?.suggestions?.length) {
+        setAiError(t(T.ci.suggestionsUnavailable, lang as any));
+      }
+    } catch {
+      setAiError(t(T.ci.suggestionsUnavailable, lang as any));
+    }
     setAiLoading(false);
     setAiLoaded(true);
   }
-
-  // Auto-load when AI tab first activated
-  useEffect(() => {
-    if (activeTab === 'ai' && !aiLoaded && !aiLoading) {
-      loadAiSuggestions();
-    }
-  }, [activeTab]);
+  // No auto-load — user must click "Generate Suggestions" button (TASK-32)
 
   const trackedNames = new Set(competitors.map(c => c.brand_name));
   const workspace = getCIWorkspace();
@@ -497,44 +508,96 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
           </div>
 
           {/* Parse result */}
+          {/* Confirmation card with "Confirm & Track" */}
           {linkResult && (
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 8, marginTop: 8,
-              padding: '8px 12px', background: `${C.success}10`,
-              border: `1px solid ${C.success}44`, borderRadius: 8,
+              marginTop: 10, padding: '14px 16px',
+              background: `${C.success}10`, border: `1px solid ${C.success}44`, borderRadius: 10,
             }}>
-              <svg width={14} height={14} viewBox="0 0 12 12" fill="none">
-                <circle cx={6} cy={6} r={6} fill={C.success} />
-                <polyline points="2.5,6 5,8.5 9.5,3.5" stroke="#fff" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <span style={{ fontSize: 13, color: C.success, fontWeight: 600 }}>
-                {t(T.ci.detected, lang as any)}:
-              </span>
-              {linkResult.platform && (
-                <span style={{
-                  background: PLATFORM_COLORS[linkResult.platform] ?? C.ac,
-                  color: '#fff', padding: '1px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600,
-                }}>
-                  {PLATFORM_LABELS[linkResult.platform] ?? linkResult.platform}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <svg width={14} height={14} viewBox="0 0 12 12" fill="none">
+                  <circle cx={6} cy={6} r={6} fill={C.success} />
+                  <polyline points="2.5,6 5,8.5 9.5,3.5" stroke="#fff" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span style={{ fontSize: 13, color: C.success, fontWeight: 600 }}>
+                  {t(T.ci.foundOn, lang as any)}:
                 </span>
+                {linkResult.platform && (
+                  <span style={{
+                    background: PLATFORM_COLORS[linkResult.platform] ?? C.ac,
+                    color: '#fff', padding: '1px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600,
+                  }}>
+                    {PLATFORM_LABELS[linkResult.platform] ?? linkResult.platform}
+                  </span>
+                )}
+                {linkResult.brandName && (
+                  <span style={{ fontSize: 13, color: C.tx, fontWeight: 600 }}>{linkResult.brandName}</span>
+                )}
+              </div>
+
+              {/* Brand name input if unknown */}
+              {!linkResult.brandName && (
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ fontSize: 12, color: C.t2, display: 'block', marginBottom: 4 }}>
+                    {t(T.ci.whatBrandName, lang as any)}
+                  </label>
+                  <input
+                    style={{ ...inputStyle, fontSize: 13 }}
+                    value={linkBrandInput}
+                    onChange={e => setLinkBrandInput(e.target.value)}
+                    placeholder={lang === 'zh' ? '输入品牌名称' : 'Enter brand name'}
+                    autoFocus
+                  />
+                </div>
               )}
-              <span style={{ fontSize: 13, color: C.tx }}>{linkResult.brandName}</span>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={handleConfirmLink}
+                  disabled={!linkResult.brandName && !linkBrandInput.trim()}
+                  style={{
+                    background: (!linkResult.brandName && !linkBrandInput.trim()) ? C.t3 : C.ac,
+                    border: 'none', borderRadius: 8, padding: '8px 18px',
+                    color: '#fff', fontSize: 13, fontWeight: 600,
+                    cursor: (!linkResult.brandName && !linkBrandInput.trim()) ? 'default' : 'pointer',
+                  }}
+                >
+                  {t(T.ci.confirmTrack, lang as any)}
+                </button>
+                <button
+                  onClick={() => { setLinkResult(null); setLinkBrandInput(''); }}
+                  style={{
+                    background: 'transparent', border: `1px solid ${C.bd}`, borderRadius: 8,
+                    padding: '8px 18px', color: C.t2, fontSize: 13, cursor: 'pointer',
+                  }}
+                >
+                  {lang === 'zh' ? '取消' : 'Cancel'}
+                </button>
+              </div>
             </div>
           )}
 
-          {/* Parse error */}
+          {/* Parse error — unrecognized URL + example links */}
           {linkError && (
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 8, marginTop: 8,
-              padding: '8px 12px', background: `${C.danger}10`,
-              border: `1px solid ${C.danger}44`, borderRadius: 8,
+              marginTop: 10, padding: '12px 16px',
+              background: `${C.danger}08`, border: `1px solid ${C.danger}33`, borderRadius: 10,
             }}>
-              <svg width={14} height={14} viewBox="0 0 12 12" fill="none">
-                <circle cx={6} cy={6} r={6} fill={C.danger} />
-                <line x1={4} y1={4} x2={8} y2={8} stroke="#fff" strokeWidth={1.5} strokeLinecap="round" />
-                <line x1={8} y1={4} x2={4} y2={8} stroke="#fff" strokeWidth={1.5} strokeLinecap="round" />
-              </svg>
-              <span style={{ fontSize: 13, color: C.danger }}>{linkError}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                <svg width={14} height={14} viewBox="0 0 12 12" fill="none">
+                  <circle cx={6} cy={6} r={6} fill={C.danger} />
+                  <line x1={4} y1={4} x2={8} y2={8} stroke="#fff" strokeWidth={1.5} strokeLinecap="round" />
+                  <line x1={8} y1={4} x2={4} y2={8} stroke="#fff" strokeWidth={1.5} strokeLinecap="round" />
+                </svg>
+                <span style={{ fontSize: 13, color: C.danger, fontWeight: 600 }}>{linkError}</span>
+                <button onClick={() => setLinkError('')} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: C.t3, cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+              </div>
+              <p style={{ fontSize: 12, color: C.t2, margin: '0 0 6px' }}>{t(T.ci.tryPasting, lang as any)}</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {['xiaohongshu.com', 'douyin.com', 'item.taobao.com', 'item.jd.com'].map(d => (
+                  <code key={d} style={{ fontSize: 11, background: C.s2, border: `1px solid ${C.bd}`, borderRadius: 4, padding: '2px 6px', color: C.t3 }}>{d}</code>
+                ))}
+              </div>
             </div>
           )}
 
@@ -550,12 +613,22 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
       {activeTab === 'ai' && (
         <div>
           {!workspace?.brand_name ? (
-            <div style={{ padding: '20px 16px', background: C.s2, borderRadius: 10, fontSize: 13, color: C.t3, textAlign: 'center' }}>
+            <div style={{
+              padding: '28px 20px', background: C.s2, borderRadius: 10, fontSize: 13,
+              color: C.t3, textAlign: 'center', border: `1px solid ${C.bd}`,
+            }}>
+              <div style={{ fontSize: 22, marginBottom: 8 }}>👆</div>
               {t(T.ci.setupBrandFirst, lang as any)}
             </div>
           ) : aiLoading ? (
             <div>
-              <div style={{ fontSize: 13, color: C.t2, marginBottom: 12 }}>{t(T.ci.loadingSuggestions, lang as any)}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: C.t2, marginBottom: 12 }}>
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }}>
+                  <circle cx={12} cy={12} r={10} strokeDasharray="31.4" strokeDashoffset="10" />
+                </svg>
+                <span>{t(T.ci.loadingSuggestions, lang as any)}</span>
+                <span style={{ color: C.t3, fontSize: 12 }}>— {t(T.ci.generatingTakes, lang as any)}</span>
+              </div>
               {[0, 1, 2].map(i => (
                 <div key={i} style={{
                   height: 80, background: C.s2, borderRadius: 10, marginBottom: 10,
@@ -563,6 +636,22 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
                   opacity: 1 - i * 0.15,
                 }} />
               ))}
+            </div>
+          ) : aiError ? (
+            <div style={{
+              padding: '24px 20px', textAlign: 'center',
+              background: `${C.danger}08`, border: `1px solid ${C.danger}22`, borderRadius: 10,
+            }}>
+              <div style={{ fontSize: 14, color: C.t2, marginBottom: 16 }}>{aiError}</div>
+              <button
+                onClick={loadAiSuggestions}
+                style={{
+                  background: C.ac, border: 'none', borderRadius: 8,
+                  padding: '9px 20px', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                {t(T.ci.refreshSuggestions, lang as any)}
+              </button>
             </div>
           ) : aiSuggestions.length > 0 ? (
             <div>
@@ -648,15 +737,36 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
                 {t(T.ci.refreshSuggestions, lang as any)}
               </button>
             </div>
-          ) : aiLoaded ? (
-            <div style={{ padding: '24px 0', textAlign: 'center', color: C.t3, fontSize: 13 }}>
-              {lang === 'zh' ? '暂无AI推荐，请稍后重试' : 'No suggestions available. Try again later.'}
-              <br />
-              <button onClick={loadAiSuggestions} style={{ marginTop: 12, background: C.ac, border: 'none', borderRadius: 6, padding: '7px 16px', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                {t(T.ci.refreshSuggestions, lang as any)}
+          ) : (
+            /* Not yet loaded — show manual generate button */
+            <div style={{
+              padding: '32px 20px', textAlign: 'center',
+              background: C.s2, borderRadius: 12, border: `1px solid ${C.bd}`,
+            }}>
+              <div style={{ fontSize: 28, marginBottom: 12 }}>🤖</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: C.tx, marginBottom: 6 }}>
+                {lang === 'zh' ? 'AI竞品推荐' : 'AI Competitor Suggestions'}
+              </div>
+              <div style={{ fontSize: 13, color: C.t2, marginBottom: 20, lineHeight: 1.6 }}>
+                {lang === 'zh'
+                  ? `根据 ${workspace.brand_name} 的品类和价格带，AI将为您推荐值得关注的竞品。`
+                  : `Based on ${workspace.brand_name}'s category and price range, AI will suggest competitors worth tracking.`}
+              </div>
+              <button
+                onClick={loadAiSuggestions}
+                style={{
+                  background: C.ac, border: 'none', borderRadius: 8,
+                  padding: '11px 28px', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                }}
+              >
+                ✨ {t(T.ci.generateSuggestions, lang as any)}
               </button>
+              <div style={{ fontSize: 11, color: C.t3, marginTop: 10 }}>
+                {t(T.ci.generatingTakes, lang as any)}
+              </div>
             </div>
-          ) : null}
+          )}
         </div>
       )}
 
@@ -678,27 +788,16 @@ function CompetitorList({ C, lang, competitors, onChange, isMobile }: {
   onChange: (updated: CICompetitor[]) => void;
   isMobile: boolean;
 }) {
-  const watchlistCount = competitors.filter(c => c.tier === 'watchlist').length;
-
-  function toggleTier(id: string) {
-    const updated = competitors.map(c => {
-      if (c.id !== id) return c;
-      if (c.tier === 'landscape') {
-        // Promote to watchlist only if under limit
-        if (watchlistCount >= MAX_WATCHLIST) return c;
-        return { ...c, tier: 'watchlist' as const };
-      }
-      return { ...c, tier: 'landscape' as const };
-    });
-    onChange(updated);
-  }
-
   function remove(id: string) {
     onChange(competitors.filter(c => c.id !== id));
   }
 
   if (competitors.length === 0) {
-    return <p style={{ color: C.t3, fontSize: 14 }}>No competitors added yet.</p>;
+    return (
+      <p style={{ color: C.t3, fontSize: 14, margin: '12px 0 0' }}>
+        {lang === 'zh' ? '还没有竞品，请在上方添加。' : 'No competitors added yet. Add one above.'}
+      </p>
+    );
   }
 
   return (
@@ -710,12 +809,13 @@ function CompetitorList({ C, lang, competitors, onChange, isMobile }: {
           gap: 12,
           padding: '12px 16px',
           background: C.s2,
+          border: `1px solid ${C.bd}`,
           borderRadius: 8,
           fontSize: 13,
         }}>
           {/* Brand name + platform keyword labels */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ fontWeight: 600, fontSize: 13 }}>{c.brand_name}</span>
+            <span style={{ fontWeight: 600, fontSize: 14 }}>{c.brand_name}</span>
             {Object.keys(c.platform_ids).length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
                 {Object.entries(c.platform_ids).map(([plat, id]) => (
@@ -727,23 +827,14 @@ function CompetitorList({ C, lang, competitors, onChange, isMobile }: {
             )}
           </div>
 
-          {/* Tier toggle */}
-          <button
-            onClick={() => toggleTier(c.id)}
-            title={c.tier === 'watchlist' ? 'Click to move to Landscape' : 'Click to promote to Watchlist'}
-            style={{
-              background: c.tier === 'watchlist' ? C.ac : C.s1,
-              border: `1px solid ${c.tier === 'watchlist' ? C.ac : C.bd}`,
-              borderRadius: 4,
-              padding: '3px 10px',
-              fontSize: 11,
-              fontWeight: 600,
-              color: c.tier === 'watchlist' ? '#fff' : C.t2,
-              cursor: 'pointer',
-            }}
-          >
-            {c.tier === 'watchlist' ? t(T.ci.watchlist, lang as any) : t(T.ci.landscapeTier, lang as any)}
-          </button>
+          {/* "Tracking" status pill — replaces tier toggle (TASK-32) */}
+          <span style={{
+            fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20,
+            background: `${C.success}18`, color: C.success, border: `1px solid ${C.success}44`,
+            flexShrink: 0,
+          }}>
+            ✓ {t(T.ci.tracking, lang as any)}
+          </span>
 
           {/* Added date — hidden on mobile */}
           {!isMobile && (
@@ -772,6 +863,8 @@ function CompetitorList({ C, lang, competitors, onChange, isMobile }: {
 }
 
 // ── Platform connections ──────────────────────────────────────────
+// Cookie connection UI removed for beta. See TASK-17 for backend. Bring back with browser extension in v2.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function ConnectionsSection({ C, lang, isMobile }: { C: ReturnType<typeof useApp>['colors']; lang: string; isMobile: boolean }) {
   const [connections, setConnections] = useState<CIConnection[]>(getCIConnections());
   const [modalPlatform, setModalPlatform] = useState<CIConnection['platform'] | null>(null);
@@ -914,15 +1007,98 @@ function ConnectionsSection({ C, lang, isMobile }: { C: ReturnType<typeof useApp
   );
 }
 
+// ── Start Analysis card ───────────────────────────────────────────
+function StartAnalysisCard({ C, lang, competitorCount, workspaceName, isMobile }: {
+  C: ReturnType<typeof useApp>['colors'];
+  lang: string;
+  competitorCount: number;
+  workspaceName: string;
+  isMobile: boolean;
+}) {
+  const [starting, setStarting] = useState(false);
+
+  async function handleStart() {
+    setStarting(true);
+    const ws = await getWorkspace();
+    const wsId = ws.data?.id ?? 'local';
+    const comps = getCICompetitors();
+    // Fire off deep dives for each tracked competitor (don't await all — fire and forget)
+    for (const comp of comps) {
+      requestDeepDive(wsId, comp.brand_name).catch(() => {});
+    }
+    localStorage.setItem('rebase_ci_analysis_started', 'true');
+    window.location.href = '/ci';
+  }
+
+  const workspace = getCIWorkspace();
+  const priceMin = workspace?.price_range?.min;
+  const priceMax = workspace?.price_range?.max;
+  const priceLabel = priceMin && priceMax ? `, ¥${priceMin}–${priceMax}` : '';
+  const catLabel = workspace?.brand_category ? `, ${workspace.brand_category}` : '';
+
+  return (
+    <div style={{
+      background: `linear-gradient(135deg, ${C.s1} 0%, ${C.s2} 100%)`,
+      border: `2px solid ${C.ac}44`,
+      borderRadius: 16,
+      padding: isMobile ? '20px 16px' : '28px 32px',
+      marginBottom: 24,
+      textAlign: 'center',
+    }}>
+      {/* Status checks */}
+      <div style={{ display: 'inline-flex', flexDirection: 'column', gap: 6, marginBottom: 20, textAlign: 'left' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: C.success }}>
+          <span>✓</span>
+          <span>
+            {lang === 'zh' ? '品牌档案：' : 'Brand profile: '}
+            <strong>{workspaceName}{catLabel}{priceLabel}</strong>
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: C.success }}>
+          <span>✓</span>
+          <span>
+            <strong>{competitorCount}</strong>
+            {lang === 'zh' ? ' 个竞品已加入追踪' : ` competitor${competitorCount === 1 ? '' : 's'} tracked`}
+          </span>
+        </div>
+      </div>
+
+      <p style={{ fontSize: 14, color: C.tx, marginBottom: 20, lineHeight: 1.7, maxWidth: 480, margin: '0 auto 20px' }}>
+        {t(T.ci.readyToAnalyze, lang as any)}
+      </p>
+
+      <button
+        onClick={handleStart}
+        disabled={starting}
+        style={{
+          background: starting ? C.t3 : C.ac,
+          border: 'none', borderRadius: 10, padding: '13px 32px',
+          color: '#fff', fontSize: 16, fontWeight: 700,
+          cursor: starting ? 'default' : 'pointer',
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          boxShadow: starting ? 'none' : `0 4px 14px ${C.ac}44`,
+        }}
+      >
+        {starting ? (lang === 'zh' ? '启动中...' : 'Starting...') : t(T.ci.startAnalysis, lang as any)}
+      </button>
+
+      <p style={{ fontSize: 12, color: C.t3, marginTop: 12, marginBottom: 0 }}>
+        {t(T.ci.takesAbout, lang as any)}
+      </p>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────
 export default function CISettings() {
   const { colors: C, lang } = useApp();
   const bp = useBreakpoint();
   const isMobile = bp === 'mobile';
   const [competitors, setCompetitors] = useState<CICompetitor[]>(getCICompetitors());
+  const [recentlyAdded, setRecentlyAdded] = useState<string | null>(null);
   // Brief skeleton on first mount so the page feels consistent with other CI pages
   const [ready, setReady] = useState(false);
-  useEffect(() => { const t = setTimeout(() => setReady(true), 200); return () => clearTimeout(t); }, []);
+  useEffect(() => { const timer = setTimeout(() => setReady(true), 200); return () => clearTimeout(timer); }, []);
 
   if (!ready) return <CISettingsSkeleton />;
 
@@ -930,12 +1106,19 @@ export default function CISettings() {
     const updated = [...competitors, c];
     setCompetitors(updated);
     saveCICompetitors(updated);
+    // Show "Now tracking" toast for 2s
+    setRecentlyAdded(c.brand_name);
+    setTimeout(() => setRecentlyAdded(null), 2000);
   }
 
   function handleCompetitorsChange(updated: CICompetitor[]) {
     setCompetitors(updated);
     saveCICompetitors(updated);
   }
+
+  const workspace = getCIWorkspace();
+  const analysisStarted = localStorage.getItem('rebase_ci_analysis_started') === 'true';
+  const showStartCard = !!(workspace?.brand_name) && competitors.length > 0 && !analysisStarted;
 
   return (
     <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: isMobile ? '16px 12px' : '32px 24px', fontFamily: 'system-ui, sans-serif' }}>
@@ -954,14 +1137,28 @@ export default function CISettings() {
         {/* 1 — Brand Profile */}
         <BrandProfileSection C={C} lang={lang} isMobile={isMobile} />
 
-        {/* 2 — Competitor Management */}
-        <Section title={t(T.ci.manageCompetitors, lang as any)} C={C}>
+        {/* 2 — My Competitors (renamed from "Manage Competitors") */}
+        <Section title={t(T.ci.myCompetitors, lang as any)} C={C}>
           <AddCompetitorSection
             C={C}
             lang={lang}
             competitors={competitors}
             onAdd={handleAddCompetitor}
           />
+
+          {/* "Now tracking" toast */}
+          {recentlyAdded && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '8px 14px', background: `${C.success}15`,
+              border: `1px solid ${C.success}44`, borderRadius: 8,
+              marginBottom: 12, fontSize: 13, color: C.success, fontWeight: 600,
+            }}>
+              <span>✓</span>
+              <span>{t(T.ci.nowTracking, lang as any)}: <strong>{recentlyAdded}</strong></span>
+            </div>
+          )}
+
           <CompetitorList
             C={C}
             lang={lang}
@@ -971,8 +1168,20 @@ export default function CISettings() {
           />
         </Section>
 
-        {/* 3 — Platform Connections */}
-        <ConnectionsSection C={C} lang={lang} isMobile={isMobile} />
+        {/* 3 — Start Analysis card (shown when ready) */}
+        {showStartCard && (
+          <StartAnalysisCard
+            C={C}
+            lang={lang}
+            competitorCount={competitors.length}
+            workspaceName={workspace!.brand_name}
+            isMobile={isMobile}
+          />
+        )}
+
+        {/* 4 — Platform Connections: removed for beta (TASK-32) */}
+        {/* Cookie connection UI removed for beta. See TASK-17 for backend. Bring back with browser extension in v2. */}
+        {/* <ConnectionsSection C={C} lang={lang} isMobile={isMobile} /> */}
       </div>
     </div>
   );
