@@ -923,13 +923,13 @@ app.post('/api/ci/scrape', async (req, res) => {
   try {
     const { spawn } = require('child_process');
     const args = [
-      '-m', 'services.competitor-intel.scrape_runner',
+      '-m', 'services.competitor_intel.scrape_runner',
       '--platform', platform,
       '--brand', brand_name,
     ];
 
     const repoRoot = path.resolve(__dirname, '..');
-    const pythonBin = process.env.PYTHON_BIN || 'python3.9';
+    const pythonBin = process.env.PYTHON_BIN || 'python3';
     const proc = spawn(pythonBin, args, {
       cwd: repoRoot,
       env: { ...process.env },
@@ -1477,27 +1477,48 @@ async function callLLM(prompt, maxTokens = 1000) {
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
 
   if (deepseekKey) {
-    const resp = await fetch(process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${deepseekKey}` },
-      body: JSON.stringify({
-        model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: maxTokens,
-      }),
-    });
-    const data = await resp.json();
-    return data.choices?.[0]?.message?.content || '';
+    try {
+      const baseUrl = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '');
+      const url = baseUrl.includes('/chat/completions') ? baseUrl : `${baseUrl}/v1/chat/completions`;
+
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${deepseekKey}` },
+        body: JSON.stringify({
+          model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: maxTokens,
+        }),
+      });
+
+      if (!resp.ok) {
+        const errText = await resp.text().catch(() => 'unknown');
+        console.error(`[callLLM] DeepSeek HTTP ${resp.status}: ${errText.slice(0, 200)}`);
+        throw new Error(`DeepSeek API returned ${resp.status}`);
+      }
+
+      const data = await resp.json();
+      return data.choices?.[0]?.message?.content || '';
+    } catch (err) {
+      console.error('[callLLM] DeepSeek failed:', err.message);
+      // Fall through to Anthropic if available
+      if (!anthropicKey) throw err;
+    }
   }
 
   if (anthropicKey) {
-    const client = new Anthropic({ apiKey: anthropicKey });
-    const msg = await client.messages.create({
-      model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
-      max_tokens: maxTokens,
-      messages: [{ role: 'user', content: prompt }],
-    });
-    return msg.content[0].text;
+    try {
+      const client = new Anthropic({ apiKey: anthropicKey });
+      const msg = await client.messages.create({
+        model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+        max_tokens: maxTokens,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      return msg.content[0].text;
+    } catch (err) {
+      console.error('[callLLM] Anthropic failed:', err.message);
+      throw err;
+    }
   }
 
   throw new Error('No LLM API key configured (DEEPSEEK_API_KEY or ANTHROPIC_API_KEY)');
@@ -1574,27 +1595,59 @@ app.post('/api/ci/parse-link', async (req, res) => {
     const host = parsed.hostname.toLowerCase();
     const urlPath = parsed.pathname;
 
+    // ── XHS (xiaohongshu.com, xhslink.com) ──
     if (host.includes('xiaohongshu.com') || host.includes('xhslink.com')) {
       platform = 'xhs';
+
+      // Profile URL: /user/profile/62848d2700000000210271174?xsec_token=...
       const userMatch = urlPath.match(/\/user\/profile\/([a-zA-Z0-9]+)/);
       if (userMatch) identifier = userMatch[1];
+
+      // Note/explore URL: /explore/6789abc
+      const noteMatch = urlPath.match(/\/explore\/([a-zA-Z0-9]+)/);
+      if (noteMatch) identifier = noteMatch[1];
+
+      // Search URL: /search_result?keyword=Songmont
       const kwMatch = parsed.searchParams.get('keyword');
       if (kwMatch) { identifier = kwMatch; brand_name = kwMatch; }
+
+      // Short link (xhslink.com/abc123) — just detect platform
+      if (host.includes('xhslink.com') && !identifier) {
+        identifier = urlPath.replace(/^\//, '') || null;
+      }
     }
+    // ── Taobao / Tmall ──
     else if (host.includes('taobao.com') || host.includes('tmall.com')) {
       platform = 'taobao';
+
+      // Subdomain shop: shop123456.taobao.com or songmont.tmall.com
+      const subdomain = host.split('.')[0];
+      if (subdomain && subdomain !== 'www' && subdomain !== 'item' && subdomain !== 'detail') {
+        identifier = subdomain;
+        brand_name = subdomain.replace(/^shop/, '');
+      }
+
+      // Path shop: /shop/xxx
       const shopMatch = urlPath.match(/\/shop\/([^\/\?]+)/);
       if (shopMatch) identifier = shopMatch[1];
+
+      // Item ID: ?id=12345
       const itemMatch = parsed.searchParams.get('id');
       if (itemMatch) identifier = itemMatch;
     }
+    // ── Douyin ──
     else if (host.includes('douyin.com')) {
       platform = 'douyin';
-      const userMatch = urlPath.match(/\/user\/([a-zA-Z0-9]+)/);
+
+      // User profile: /user/MS4wLjABAAAA... (base64 IDs with special chars)
+      const userMatch = urlPath.match(/\/user\/([a-zA-Z0-9_\-]+)/);
       if (userMatch) identifier = userMatch[1];
+
+      // Search: /search/品牌名
       const kwMatch = urlPath.match(/\/search\/([^\/\?]+)/);
       if (kwMatch) { identifier = decodeURIComponent(kwMatch[1]); brand_name = identifier; }
     }
+    // ── JD ──
     else if (host.includes('jd.com')) {
       platform = 'jd';
       const shopMatch = urlPath.match(/\/([a-zA-Z0-9]+)\.html/);
