@@ -7,7 +7,9 @@ export default async function handler(req, res) {
 
   // Extract the sub-path: /api/ci/dashboard → /api/ci/dashboard
   // Vercel rewrites /api/ci/xxx to /api/ci?path=xxx
-  const subPath = req.query.path || '';
+  // :path* may come as a string or array for nested paths like deep-dive/status
+  const rawPath = req.query.path;
+  const subPath = Array.isArray(rawPath) ? rawPath.join('/') : (rawPath || '');
   const backendPath = `/api/ci/${subPath}`;
 
   // Build query string (exclude our routing param)
