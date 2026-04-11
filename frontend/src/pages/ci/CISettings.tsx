@@ -13,7 +13,7 @@ import {
 } from '../../utils/ciStorage';
 import {
   resolveBrand, parseLink, suggestCompetitors, searchBrands,
-  requestDeepDive, getWorkspace, runAnalysis,
+  requestDeepDive, getWorkspace, runAnalysis, saveWorkspace, addCompetitor,
   type BrandResolution, type CompetitorSuggestion,
 } from '../../services/ciApi';
 
@@ -1017,22 +1017,77 @@ function StartAnalysisCard({ C, lang, competitorCount, workspaceName, isMobile }
 }) {
   const [starting, setStarting] = useState(false);
 
+  const [startError, setStartError] = useState('');
+
   async function handleStart() {
     setStarting(true);
-    const ws = await getWorkspace();
-    const wsId = ws.data?.id ?? 'local';
-    const comps = getCICompetitors();
+    setStartError('');
 
-    // Start the tracked analysis job (new TASK-36 endpoint)
-    const job = await runAnalysis(wsId);
-    if (job?.job_id) {
-      localStorage.setItem('rebase_ci_analysis_job_id', job.job_id);
+    // Step 1: Get or create workspace on API
+    let ws = await getWorkspace();
+    let wsId = ws.data?.id;
+
+    // If workspace only exists locally, sync it to the API first
+    if (!wsId || wsId === 'local') {
+      const localWs = getCIWorkspace();
+      if (localWs?.brand_name) {
+        console.log('[CI] Workspace is local-only, syncing to API...');
+        const apiWs = await saveWorkspace({
+          brand_name: localWs.brand_name,
+          brand_category: localWs.brand_category || null,
+          brand_price_range: localWs.price_range || null,
+          brand_platforms: null,
+        });
+        if (apiWs && apiWs.id && apiWs.id !== 'local') {
+          wsId = apiWs.id;
+          console.log(`[CI] Workspace synced to API: ${wsId}`);
+
+          // Sync competitors to API workspace
+          const localComps = getCICompetitors();
+          for (const comp of localComps) {
+            await addCompetitor({
+              workspace_id: wsId,
+              brand_name: comp.brand_name,
+              tier: comp.tier,
+              platform_ids: comp.platform_ids || {},
+              added_via: comp.added_via || 'manual',
+            });
+          }
+          console.log(`[CI] Synced ${localComps.length} competitors to API`);
+        }
+      }
     }
 
-    // Also fire off deep dives for each tracked competitor (don't await all — fire and forget)
+    // Step 2: Verify we have a real workspace ID
+    if (!wsId || wsId === 'local') {
+      console.error('[CI] Cannot start analysis: workspace not synced to API');
+      setStartError(lang === 'zh'
+        ? '无法连接后端服务器，请检查网络连接后重试。'
+        : 'Cannot connect to backend server. Please check your connection and try again.');
+      setStarting(false);
+      return;
+    }
+
+    // Step 3: Start the tracked analysis job
+    const job = await runAnalysis(wsId);
+    if (!job || !job.job_id) {
+      console.error('[CI] runAnalysis returned null — backend may be unreachable or no competitors in DB');
+      setStartError(lang === 'zh'
+        ? '启动分析失败。请确认已添加竞品，并检查网络连接。'
+        : 'Failed to start analysis. Make sure competitors are added and check your connection.');
+      setStarting(false);
+      return;
+    }
+
+    localStorage.setItem('rebase_ci_analysis_job_id', job.job_id);
+    console.log(`[CI] Analysis job started: ${job.job_id}`);
+
+    // Fire off deep dives for each tracked competitor (fire and forget)
+    const comps = getCICompetitors();
     for (const comp of comps) {
       requestDeepDive(wsId, comp.brand_name).catch(() => {});
     }
+
     localStorage.setItem('rebase_ci_analysis_started', 'true');
     window.location.href = '/ci';
   }
@@ -1092,6 +1147,16 @@ function StartAnalysisCard({ C, lang, competitorCount, workspaceName, isMobile }
       <p style={{ fontSize: 12, color: C.t3, marginTop: 12, marginBottom: 0 }}>
         {t(T.ci.takesAbout, lang as any)}
       </p>
+
+      {startError && (
+        <div style={{
+          marginTop: 16, padding: '10px 16px', borderRadius: 8,
+          background: `${C.danger || '#ef4444'}12`, border: `1px solid ${C.danger || '#ef4444'}44`,
+          color: C.danger || '#ef4444', fontSize: 13, textAlign: 'left',
+        }}>
+          ✗ {startError}
+        </div>
+      )}
     </div>
   );
 }

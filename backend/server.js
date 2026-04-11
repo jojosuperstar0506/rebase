@@ -635,14 +635,31 @@ app.post('/api/ci/workspace', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields: user_id, brand_name, brand_category' });
     }
 
-    const { rows } = await pool.query(
-      `INSERT INTO workspaces (user_id, brand_name, brand_category, brand_price_range, brand_platforms)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING *`,
-      [user_id, brand_name, brand_category, brand_price_range, brand_platforms]
+    // Upsert: check if workspace exists for this user, update if so, create if not
+    const existing = await pool.query(
+      'SELECT * FROM workspaces WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
+      [user_id]
     );
 
-    res.status(201).json(rows[0]);
+    let result;
+    if (existing.rows.length > 0) {
+      // Update existing workspace
+      result = await pool.query(
+        `UPDATE workspaces SET brand_name = $1, brand_category = $2, brand_price_range = $3, brand_platforms = $4
+         WHERE id = $5 RETURNING *`,
+        [brand_name, brand_category, brand_price_range, brand_platforms, existing.rows[0].id]
+      );
+    } else {
+      // Create new workspace
+      result = await pool.query(
+        `INSERT INTO workspaces (user_id, brand_name, brand_category, brand_price_range, brand_platforms)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING *`,
+        [user_id, brand_name, brand_category, brand_price_range, brand_platforms]
+      );
+    }
+
+    res.status(existing.rows.length > 0 ? 200 : 201).json(result.rows[0]);
   } catch (err) {
     console.error('[CI] POST workspace error:', err.message);
     res.status(500).json({ error: 'Failed to create workspace' });

@@ -215,7 +215,23 @@ export default function CIDashboard() {
   useEffect(() => {
     // On mount, check if there's an active analysis
     const wsId = workspace?.id;
-    if (!wsId || wsId === 'local') return;
+    if (!wsId) return;
+
+    if (wsId === 'local') {
+      // Workspace not synced to API — try to get status by saved job_id
+      const savedJobId = localStorage.getItem('rebase_ci_analysis_job_id');
+      if (savedJobId) {
+        // Use job_id query param — tryApi will hit /analysis/status?job_id=...
+        // but our getAnalysisStatus uses workspace_id param. Add a direct fetch:
+        fetch(`/api/ci/analysis/status?job_id=${encodeURIComponent(savedJobId)}`, {
+          headers: { 'Content-Type': 'application/json' },
+        })
+          .then(r => r.ok ? r.json() : null)
+          .then(job => { if (job && job.job_id) setAnalysisJob(job); })
+          .catch(() => {});
+      }
+      return;
+    }
 
     getAnalysisStatus(wsId).then(job => {
       if (job) setAnalysisJob(job);
@@ -253,8 +269,19 @@ export default function CIDashboard() {
   const connectedCount = connections.filter(c => c.status === 'active').length;
 
   async function handleRetryAnalysis() {
-    if (!workspace?.id || workspace.id === 'local') return;
-    const job = await runAnalysis(workspace.id);
+    let wsId = workspace?.id;
+
+    // If workspace is local, try to sync first
+    if (!wsId || wsId === 'local') {
+      await syncToApi();
+      // Re-check after sync
+      const freshWs = await import('../../services/ciApi').then(m => m.getWorkspace());
+      wsId = freshWs.data?.id;
+    }
+
+    if (!wsId || wsId === 'local') return;
+
+    const job = await runAnalysis(wsId);
     if (job) {
       setAnalysisJob(job);
       localStorage.setItem('rebase_ci_analysis_started', 'true');
@@ -486,19 +513,48 @@ export default function CIDashboard() {
             const hasTrackedJob = job && job.status !== 'none' && job.job_id;
             const showProgress = hasTrackedJob && !hasRealScores;
 
-            // Fallback: old-style banner for pre-TASK-36 analysis runs (no job tracking yet)
+            // Fallback: when analysis was started but no tracked job exists
             if (!showProgress && analysisStarted && !hasRealScores) {
+              const isLocal = workspace?.id === 'local' || !workspace?.id;
               return (
                 <div style={{
-                  background: `${C.ac}12`, border: `1px solid ${C.ac}44`, borderRadius: 10,
+                  background: isLocal ? `${C.danger || '#ef4444'}12` : `${C.ac}12`,
+                  border: `1px solid ${isLocal ? (C.danger || '#ef4444') + '44' : C.ac + '44'}`,
+                  borderRadius: 10,
                   padding: '12px 20px', marginBottom: 20,
-                  display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: C.t2,
+                  fontSize: 13, color: C.t2,
                 }}>
-                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={C.ac} strokeWidth={2.5} strokeLinecap="round" style={{ flexShrink: 0, animation: 'spin 1.5s linear infinite' }}>
-                    <circle cx={12} cy={12} r={10} strokeDasharray="31.4" strokeDashoffset="10" />
-                  </svg>
-                  <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-                  <span><strong style={{ color: C.ac }}>{t(T.ci.analysisInProgress, lang)}</strong> — {t(T.ci.analysisStartedBanner, lang)}</span>
+                  {isLocal ? (
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                        <span style={{ color: C.danger || '#ef4444', fontWeight: 600 }}>
+                          ✗ {lang === 'zh' ? '分析未启动 — 后端未连接' : 'Analysis not started — backend unreachable'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 12, color: C.t3, lineHeight: 1.6 }}>
+                        {lang === 'zh'
+                          ? '您的数据仅保存在本地浏览器。分析需要后端API连接（Vercel → ECS）。请前往"设置"页面重新点击"开始分析"。'
+                          : 'Your data is saved locally only. Analysis requires a backend API connection (Vercel → ECS). Go to Settings and click "Start Analysis" again.'}
+                      </div>
+                      <button
+                        onClick={() => { localStorage.removeItem('rebase_ci_analysis_started'); window.location.href = '/ci/settings'; }}
+                        style={{
+                          marginTop: 8, background: C.ac, color: '#fff', border: 'none', borderRadius: 6,
+                          padding: '6px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                        }}
+                      >
+                        {lang === 'zh' ? '前往设置' : 'Go to Settings'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={C.ac} strokeWidth={2.5} strokeLinecap="round" style={{ flexShrink: 0, animation: 'spin 1.5s linear infinite' }}>
+                        <circle cx={12} cy={12} r={10} strokeDasharray="31.4" strokeDashoffset="10" />
+                      </svg>
+                      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+                      <span><strong style={{ color: C.ac }}>{t(T.ci.analysisInProgress, lang)}</strong> — {t(T.ci.analysisStartedBanner, lang)}</span>
+                    </div>
+                  )}
                 </div>
               );
             }

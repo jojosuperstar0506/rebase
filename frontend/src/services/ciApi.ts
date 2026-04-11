@@ -12,6 +12,15 @@ function getHeaders(): Record<string, string> {
       userId = payload.sub || payload.id || payload.email || '';
     } catch {}
   }
+  // Fallback: generate a stable anonymous ID so workspace creation works without JWT
+  if (!userId) {
+    let anonId = localStorage.getItem('rebase_anon_id');
+    if (!anonId) {
+      anonId = 'anon-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+      localStorage.setItem('rebase_anon_id', anonId);
+    }
+    userId = anonId;
+  }
   return {
     'Content-Type': 'application/json',
     'x-user-id': userId,
@@ -25,9 +34,14 @@ async function tryApi<T>(path: string, options?: RequestInit): Promise<T | null>
       ...options,
       headers: { ...getHeaders(), ...(options?.headers as Record<string, string> | undefined) },
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => '');
+      console.warn(`[CI API] ${options?.method || 'GET'} ${path} → ${res.status}`, errorText.slice(0, 200));
+      return null;
+    }
     return await res.json() as T;
-  } catch {
+  } catch (err) {
+    console.warn(`[CI API] ${options?.method || 'GET'} ${path} → network error`, (err as Error).message);
     return null; // Network error, API not available
   }
 }
