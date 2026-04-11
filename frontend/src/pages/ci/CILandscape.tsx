@@ -127,16 +127,6 @@ export default function CILandscape() {
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [hoveredBrand, setHoveredBrand] = useState<string | null>(null);
 
-  // ── Early return AFTER all hooks ────────────────────────────────────────────
-  if (loading) return <CILandscapeSkeleton />;
-
-  function toggleZone(z: string) {
-    setActiveZones(s => { const n = new Set(s); n.has(z) ? n.delete(z) : n.add(z); return n; });
-  }
-  function toggleGroup(g: string) {
-    setActiveGroups(s => { const n = new Set(s); n.has(g) ? n.delete(g) : n.add(g); return n; });
-  }
-
   const visibleBrands = useMemo(() => {
     return allBrands.filter(b => {
       if (!activeZones.has(getPriceZone(b.avg_price))) return false;
@@ -229,6 +219,9 @@ export default function CILandscape() {
         return sortDir === 'asc' ? (av as number) - (bv as number) : (bv as number) - (av as number);
       });
   }, [visibleBrands, yourBrand, activeZones, sortKey, sortDir]);
+
+  // ── Early return AFTER all hooks (React Rules of Hooks) ─────────────────────
+  if (loading) return <CILandscapeSkeleton />;
 
   function handleSort(key: SortKey) {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');

@@ -474,9 +474,6 @@ export default function CICompetitors() {
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [deepDiveOpen, setDeepDiveOpen] = useState<string | null>(null);
 
-  // ── Early return AFTER all hooks ────────────────────────────────────────────
-  if (loading) return <CICompetitorsSkeleton />;
-
   const seedMap = useMemo(() => {
     const m = new Map<string, LandscapeBrand>();
     LANDSCAPE_SEED.forEach(b => m.set(b.brand_name, b));
@@ -515,6 +512,9 @@ export default function CICompetitors() {
     else if (sortBy === 'price') list = [...list].sort((a, b) => b.avg_price - a.avg_price);
     return list;
   }, [profiles, tierFilter, sortBy]);
+
+  // ── Early return AFTER all hooks (React Rules of Hooks) ─────────────────────
+  if (loading) return <CICompetitorsSkeleton />;
 
   const selectedProfiles = filtered.filter(p => selected.has(p.id)).slice(0, 3);
 
