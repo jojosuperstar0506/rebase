@@ -920,6 +920,98 @@ app.get('/api/ci/pipeline/status', async (req, res) => {
   }
 });
 
+// POST /api/ci/run-analysis — start the scoring pipeline with job tracking
+app.post('/api/ci/run-analysis', async (req, res) => {
+  const { workspace_id } = req.body;
+  if (!workspace_id) return res.status(400).json({ error: 'Missing workspace_id' });
+
+  try {
+    // Count competitors
+    const { rows: comps } = await pool.query(
+      'SELECT COUNT(*) as cnt FROM workspace_competitors WHERE workspace_id = $1',
+      [workspace_id]
+    );
+    const totalBrands = parseInt(comps[0]?.cnt || '0', 10);
+    if (totalBrands === 0) {
+      return res.status(400).json({ error: 'No competitors to analyze. Add competitors first.' });
+    }
+
+    // Create job record
+    const { rows } = await pool.query(`
+      INSERT INTO ci_analysis_jobs (workspace_id, status, total_brands)
+      VALUES ($1, 'queued', $2)
+      RETURNING *
+    `, [workspace_id, totalBrands]);
+
+    const job = rows[0];
+
+    // Spawn scoring pipeline with job-id for progress tracking
+    const { spawn } = require('child_process');
+    const pythonBin = process.env.PYTHON_BIN || 'python3';
+    const proc = spawn(pythonBin, [
+      '-m', 'services.competitor_intel.scoring_pipeline',
+      '--workspace-id', workspace_id,
+      '--job-id', job.id,
+    ], {
+      cwd: process.cwd().replace('/backend', ''),
+      env: { ...process.env },
+      detached: true,
+      stdio: 'ignore',
+    });
+    proc.unref();
+
+    console.log(`[CI] Started analysis job ${job.id} for workspace ${workspace_id} (${totalBrands} brands)`);
+
+    res.json({
+      job_id: job.id,
+      status: 'queued',
+      total_brands: totalBrands,
+      message: `Analysis started for ${totalBrands} competitors`,
+    });
+  } catch (err) {
+    console.error('[CI] POST run-analysis error:', err.message);
+    res.status(500).json({ error: 'Failed to start analysis' });
+  }
+});
+
+// GET /api/ci/analysis/status — check analysis job progress
+app.get('/api/ci/analysis/status', async (req, res) => {
+  const { workspace_id, job_id } = req.query;
+
+  let query, params;
+  if (job_id) {
+    query = 'SELECT * FROM ci_analysis_jobs WHERE id = $1';
+    params = [job_id];
+  } else if (workspace_id) {
+    query = 'SELECT * FROM ci_analysis_jobs WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT 1';
+    params = [workspace_id];
+  } else {
+    return res.status(400).json({ error: 'Missing workspace_id or job_id' });
+  }
+
+  try {
+    const { rows } = await pool.query(query, params);
+    if (rows.length === 0) {
+      return res.json({ status: 'none', message: 'No analysis has been run yet' });
+    }
+
+    const job = rows[0];
+    res.json({
+      job_id: job.id,
+      status: job.status,
+      total_brands: job.total_brands,
+      completed_brands: job.completed_brands,
+      current_brand: job.current_brand,
+      started_at: job.started_at,
+      completed_at: job.completed_at,
+      error: job.error_message,
+    });
+  } catch (err) {
+    console.error('[CI] GET analysis/status error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch analysis status' });
+  }
+});
+
 // POST /api/ci/scrape — trigger a scrape for a specific brand (background process)
 app.post('/api/ci/scrape', async (req, res) => {
   const { brand_name, platform, tier } = req.body;
@@ -1699,9 +1791,11 @@ app.post('/api/ci/suggest-competitors', async (req, res) => {
     `);
     const knownNames = existingBrands.map(r => r.brand_name);
 
-    const registryNames = KNOWN_BRANDS
-      .map(b => `${b.name} (${b.badge}, ${b.name_en || ''})`)
-      .join(', ');
+    // Filter registry brands to same category (if any match)
+    const sameCategoryBrands = KNOWN_BRANDS.filter(b => b.category === brand_category);
+    const registrySection = sameCategoryBrands.length > 0
+      ? `Some known brands in our database for the "${brand_category}" category:\n${sameCategoryBrands.map(b => `${b.name} (${b.badge}, ${b.name_en || ''})`).join(', ')}`
+      : `Our database currently has brands in the 女包 category only. No pre-loaded brands for "${brand_category}".`;
 
     const prompt = `You are a competitive intelligence analyst for the Chinese consumer goods market.
 
@@ -1711,12 +1805,16 @@ A brand is setting up competitive tracking. Here is their profile:
 - Price range: ${priceStr}
 - Platforms: ${JSON.stringify(brand_platforms || [])}
 
-Known brands in our database that could be competitors:
-${registryNames}
+${registrySection}
 
 Other brands currently being tracked by users: ${knownNames.join(', ')}
 
-Based on this brand's category, price range, and positioning, suggest 5-8 competitors they should track. For each, explain in one sentence WHY they should track this competitor (in Chinese/简体中文).
+IMPORTANT RULES:
+1. You MUST suggest competitors in the "${brand_category}" category ONLY. Do NOT suggest brands from other categories.
+2. You are NOT limited to our database — suggest any real, well-known brand that competes in "${brand_category}" within the ${priceStr} price range in the Chinese market.
+3. All suggested brands must be real brands that actually exist and sell products on Chinese e-commerce platforms.
+
+Suggest 5-8 competitors they should track. For each, explain in one sentence WHY they should track this competitor (in Chinese/简体中文).
 
 Prioritize:
 1. Direct price-range competitors (same category, similar pricing)
@@ -1758,8 +1856,9 @@ Respond in this exact JSON format, no markdown:
   } catch (err) {
     console.error('[SUGGEST] AI suggestion failed:', err.message);
 
-    // Fallback: return known brands in the same category with differentiated priorities
-    const fallback = searchBrands(brand_category).slice(0, 5).map((b, idx) => ({
+    // Fallback: return known brands only if they match the user's category
+    const sameCat = KNOWN_BRANDS.filter(b => b.category === brand_category);
+    const fallback = sameCat.slice(0, 5).map((b, idx) => ({
       brand_name: b.name,
       reason: `${b.badge} — 同品类品牌`,
       priority: idx === 0 ? 'high' : idx < 3 ? 'medium' : 'low',
@@ -1767,6 +1866,16 @@ Respond in this exact JSON format, no markdown:
       platform_ids: { xhs: b.xhs_keyword, douyin: b.douyin_keyword },
       badge: b.badge,
     }));
+
+    // If no category-matching brands in registry, return empty with helpful message
+    if (fallback.length === 0) {
+      return res.json({
+        suggestions: [],
+        count: 0,
+        source: 'fallback',
+        message: `暂无"${brand_category}"品类的预置品牌数据。AI推荐暂时不可用，请使用搜索或粘贴链接添加竞品。`,
+      });
+    }
 
     res.json({ suggestions: fallback, count: fallback.length, source: 'fallback' });
   }

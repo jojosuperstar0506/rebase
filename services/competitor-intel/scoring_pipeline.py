@@ -1,21 +1,52 @@
 """
 Scoring pipeline for CI vFinal.
 Reads scraped data from PostgreSQL, computes metrics, writes results back.
+Optionally tracks progress via ci_analysis_jobs table when --job-id is provided.
 
 Usage:
   python -m services.competitor_intel.scoring_pipeline --workspace-id UUID
+  python -m services.competitor_intel.scoring_pipeline --workspace-id UUID --job-id UUID
   python -m services.competitor_intel.scoring_pipeline --all
 """
 
 import argparse
 import json
 import sys
+import traceback
 from .db_bridge import get_conn
 
 METRIC_VERSION = "v1.0"
 
 
-def compute_scores_for_workspace(workspace_id: str):
+def update_job(job_id: str, **fields):
+    """Update ci_analysis_jobs row. No-op if job_id is None.
+    Special values: 'NOW()' is treated as SQL NOW() for timestamp columns."""
+    if not job_id:
+        return
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            sets = []
+            vals = []
+            for k, v in fields.items():
+                if v == "NOW()":
+                    sets.append(f"{k} = NOW()")
+                else:
+                    sets.append(f"{k} = %s")
+                    vals.append(v)
+            vals.append(job_id)
+            cur.execute(
+                f"UPDATE ci_analysis_jobs SET {', '.join(sets)} WHERE id = %s",
+                vals,
+            )
+        conn.commit()
+    except Exception as e:
+        print(f"[WARN] Failed to update job {job_id}: {e}")
+    finally:
+        conn.close()
+
+
+def compute_scores_for_workspace(workspace_id: str, job_id: str = None):
     """Compute all scores for all competitors in a workspace."""
     conn = get_conn()
     try:
@@ -25,6 +56,7 @@ def compute_scores_for_workspace(workspace_id: str):
             workspace = cur.fetchone()
             if not workspace:
                 print(f"[WARN] Workspace {workspace_id} not found")
+                update_job(job_id, status="failed", error_message="Workspace not found", completed_at="NOW()")
                 return
 
             # Get all competitors for this workspace
@@ -36,15 +68,23 @@ def compute_scores_for_workspace(workspace_id: str):
 
             if not competitors:
                 print(f"[INFO] No competitors for workspace {workspace_id}")
+                update_job(job_id, status="failed", error_message="No competitors found", completed_at="NOW()")
                 return
 
+            total = len(competitors)
             print(
-                f"[SCORE] Computing scores for {len(competitors)} competitors "
+                f"[SCORE] Computing scores for {total} competitors "
                 f"in workspace {workspace_id}"
             )
 
-            for comp in competitors:
+            # Mark job as scoring
+            update_job(job_id, status="scoring", started_at="NOW()", total_brands=total)
+
+            for idx, comp in enumerate(competitors):
                 brand = comp["brand_name"]
+
+                # Update progress
+                update_job(job_id, completed_brands=idx, current_brand=brand)
 
                 # Get latest scraped profile for this brand (any platform)
                 cur.execute(
@@ -98,12 +138,23 @@ def compute_scores_for_workspace(workspace_id: str):
                     )
 
                 print(
-                    f"  {brand}: momentum={momentum['score']}, "
+                    f"  [{idx+1}/{total}] {brand}: momentum={momentum['score']}, "
                     f"threat={threat['score']}, wtp={wtp['score']}"
                 )
 
+            # Mark scoring complete, move to narrating
+            update_job(job_id, status="narrating", completed_brands=total, current_brand=None)
+
             conn.commit()
             print(f"[DONE] Scores saved for workspace {workspace_id}")
+
+            # Mark job complete
+            update_job(job_id, status="complete", completed_at="NOW()")
+
+    except Exception as e:
+        print(f"[ERROR] Scoring failed: {e}")
+        traceback.print_exc()
+        update_job(job_id, status="failed", error_message=str(e)[:500], completed_at="NOW()")
     finally:
         conn.close()
 
@@ -317,11 +368,12 @@ def compute_all_workspaces():
 def main():
     parser = argparse.ArgumentParser(description="Run CI scoring pipeline")
     parser.add_argument("--workspace-id", help="Score a specific workspace")
+    parser.add_argument("--job-id", help="Analysis job ID for progress tracking")
     parser.add_argument("--all", action="store_true", help="Score all workspaces")
     args = parser.parse_args()
 
     if args.workspace_id:
-        compute_scores_for_workspace(args.workspace_id)
+        compute_scores_for_workspace(args.workspace_id, job_id=args.job_id)
     elif args.all:
         compute_all_workspaces()
     else:

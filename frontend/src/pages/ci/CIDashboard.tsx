@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import type { CSSProperties } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
@@ -11,6 +11,7 @@ import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { exportDashboardCSV, exportDashboardPDF, showExportToast } from '../../utils/ciExport';
 import { MiniTrendChart } from '../../components/ci/CITrendChart';
 import CIAlertFeed from '../../components/ci/CIAlertFeed';
+import { getAnalysisStatus, runAnalysis, type AnalysisJob } from '../../services/ciApi';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -197,13 +198,69 @@ export default function CIDashboard() {
 
   const source = ciSource; // 'api' | 'local' | 'demo'
 
-  // TASK-32/35: Real scores only when API responded AND scoring pipeline has completed.
+  // TASK-32/35/36: Real scores only when API responded AND scoring pipeline has completed.
   const hasRealScores = source === 'api' && !dashboard?.analysis_pending;
 
+  // ── TASK-36: Analysis job polling ──────────────────────────────────
+  const [analysisJob, setAnalysisJob] = useState<AnalysisJob | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  }, []);
+
+  // Poll analysis status while job is active
+  const isJobActive = analysisJob && !['complete', 'failed', 'none'].includes(analysisJob.status);
+
+  useEffect(() => {
+    // On mount, check if there's an active analysis
+    const wsId = workspace?.id;
+    if (!wsId || wsId === 'local') return;
+
+    getAnalysisStatus(wsId).then(job => {
+      if (job) setAnalysisJob(job);
+    });
+  }, [workspace?.id]);
+
+  useEffect(() => {
+    if (!isJobActive || !workspace?.id) { stopPolling(); return; }
+
+    pollRef.current = setInterval(async () => {
+      const status = await getAnalysisStatus(workspace.id!);
+      if (status) {
+        setAnalysisJob(status);
+        if (status.status === 'complete' || status.status === 'failed') {
+          stopPolling();
+          if (status.status === 'complete') {
+            // Auto-refresh dashboard to pick up new scores
+            localStorage.removeItem('rebase_ci_analysis_started');
+            localStorage.removeItem('rebase_ci_analysis_job_id');
+            refresh();
+          }
+        }
+      }
+    }, 3000);
+
+    return () => stopPolling();
+  }, [isJobActive, workspace?.id, stopPolling, refresh]);
+
   // Clear analysis_started flag once real data is in
-  if (hasRealScores) localStorage.removeItem('rebase_ci_analysis_started');
+  if (hasRealScores) {
+    localStorage.removeItem('rebase_ci_analysis_started');
+    localStorage.removeItem('rebase_ci_analysis_job_id');
+  }
   const analysisStarted = localStorage.getItem('rebase_ci_analysis_started') === 'true';
   const connectedCount = connections.filter(c => c.status === 'active').length;
+
+  async function handleRetryAnalysis() {
+    if (!workspace?.id || workspace.id === 'local') return;
+    const job = await runAnalysis(workspace.id);
+    if (job) {
+      setAnalysisJob(job);
+      localStorage.setItem('rebase_ci_analysis_started', 'true');
+      if (job.job_id) localStorage.setItem('rebase_ci_analysis_job_id', job.job_id);
+    }
+  }
 
   async function handleSync() {
     setSyncing(true);
@@ -422,20 +479,101 @@ export default function CIDashboard() {
 
           {/* ── TASK-32 NEW ORDER: AI Analysis + Action Items FIRST ─── */}
 
-          {/* Analysis in progress banner */}
-          {analysisStarted && !hasRealScores && (
-            <div style={{
-              background: `${C.ac}12`, border: `1px solid ${C.ac}44`, borderRadius: 10,
-              padding: '12px 20px', marginBottom: 20,
-              display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: C.t2,
-            }}>
-              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={C.ac} strokeWidth={2.5} strokeLinecap="round" style={{ flexShrink: 0, animation: 'spin 1.5s linear infinite' }}>
-                <circle cx={12} cy={12} r={10} strokeDasharray="31.4" strokeDashoffset="10" />
-              </svg>
-              <span><strong style={{ color: C.ac }}>{t(T.ci.analysisInProgress, lang)}</strong> — {t(T.ci.analysisStartedBanner, lang)}</span>
-              <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-            </div>
-          )}
+          {/* TASK-36: Analysis progress bar with stages */}
+          {(() => {
+            const job = analysisJob;
+            const showProgress = (analysisStarted || isJobActive) && !hasRealScores;
+            if (!showProgress) return null;
+
+            const isFailed = job?.status === 'failed';
+            const isComplete = job?.status === 'complete';
+            const statusLabel = !job || job.status === 'none' || job.status === 'queued'
+              ? (lang === 'zh' ? '排队中...' : 'Queued...')
+              : job.status === 'scoring'
+              ? (lang === 'zh'
+                ? `评分中 (${job.completed_brands ?? 0}/${job.total_brands ?? '?'})${job.current_brand ? ` — ${job.current_brand}` : ''}`
+                : `Scoring (${job.completed_brands ?? 0}/${job.total_brands ?? '?'})${job.current_brand ? ` — ${job.current_brand}` : ''}`)
+              : job.status === 'narrating'
+              ? (lang === 'zh' ? '生成洞察报告...' : 'Generating insights...')
+              : isComplete
+              ? (lang === 'zh' ? '分析完成 ✓' : 'Analysis complete ✓')
+              : isFailed
+              ? (lang === 'zh' ? '分析失败' : 'Analysis failed')
+              : (lang === 'zh' ? '分析进行中...' : 'Analyzing...');
+
+            const progressPct = !job || job.status === 'queued' || job.status === 'none' ? 5
+              : job.status === 'scoring' && job.total_brands
+              ? Math.round(10 + ((job.completed_brands ?? 0) / job.total_brands) * 70)
+              : job.status === 'narrating' ? 85
+              : isComplete ? 100
+              : 50;
+
+            const barColor = isFailed ? (C.danger || '#ef4444') : isComplete ? (C.success || '#22c55e') : C.ac;
+            const bgColor = isFailed ? `${C.danger || '#ef4444'}12` : `${C.ac}12`;
+            const borderColor = isFailed ? `${C.danger || '#ef4444'}44` : `${C.ac}44`;
+
+            return (
+              <div style={{
+                background: bgColor, border: `1px solid ${borderColor}`, borderRadius: 10,
+                padding: '14px 20px', marginBottom: 20,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: C.t2 }}>
+                    {!isFailed && !isComplete && (
+                      <>
+                        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={C.ac} strokeWidth={2.5} strokeLinecap="round" style={{ flexShrink: 0, animation: 'spin 1.5s linear infinite' }}>
+                          <circle cx={12} cy={12} r={10} strokeDasharray="31.4" strokeDashoffset="10" />
+                        </svg>
+                        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+                      </>
+                    )}
+                    {isFailed && <span style={{ fontSize: 14 }}>✗</span>}
+                    {isComplete && <span style={{ fontSize: 14 }}>✓</span>}
+                    <strong style={{ color: isFailed ? (C.danger || '#ef4444') : C.ac }}>{statusLabel}</strong>
+                  </div>
+                  {isFailed && (
+                    <button
+                      onClick={handleRetryAnalysis}
+                      style={{
+                        background: C.ac, color: '#fff', border: 'none', borderRadius: 6,
+                        padding: '5px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                      }}
+                    >
+                      {lang === 'zh' ? '重试' : 'Retry'}
+                    </button>
+                  )}
+                </div>
+                {/* Progress bar */}
+                <div style={{ height: 6, background: C.bd, borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{
+                    width: `${progressPct}%`, height: '100%', background: barColor, borderRadius: 3,
+                    transition: 'width 0.5s ease',
+                  }} />
+                </div>
+                {/* Stage indicators */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11, color: C.t3 }}>
+                  <span style={{ color: progressPct >= 5 ? barColor : C.t3, fontWeight: progressPct < 15 && !isFailed ? 600 : 400 }}>
+                    {lang === 'zh' ? '排队' : 'Queued'}
+                  </span>
+                  <span style={{ color: progressPct >= 15 ? barColor : C.t3, fontWeight: progressPct >= 15 && progressPct < 85 ? 600 : 400 }}>
+                    {lang === 'zh' ? '评分' : 'Scoring'}
+                  </span>
+                  <span style={{ color: progressPct >= 85 ? barColor : C.t3, fontWeight: progressPct >= 85 && progressPct < 100 ? 600 : 400 }}>
+                    {lang === 'zh' ? '洞察' : 'Insights'}
+                  </span>
+                  <span style={{ color: progressPct >= 100 ? barColor : C.t3, fontWeight: progressPct >= 100 ? 600 : 400 }}>
+                    {lang === 'zh' ? '完成' : 'Done'}
+                  </span>
+                </div>
+                {/* Error message */}
+                {isFailed && job?.error && (
+                  <div style={{ marginTop: 8, fontSize: 12, color: C.danger || '#ef4444', fontFamily: 'monospace', background: `${C.danger || '#ef4444'}08`, padding: '6px 10px', borderRadius: 4 }}>
+                    {job.error}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* AI Strategic Analysis — HERO POSITION (TASK-32) */}
           {(() => {

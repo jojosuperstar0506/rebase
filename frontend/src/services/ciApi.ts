@@ -408,6 +408,31 @@ export async function getDeepDiveResult(workspaceId: string, brandName: string):
   );
 }
 
+// ─── TASK-36: Analysis Job Tracking ──────────────────────────────
+
+export interface AnalysisJob {
+  job_id: string;
+  status: 'none' | 'queued' | 'scoring' | 'narrating' | 'complete' | 'failed';
+  total_brands: number;
+  completed_brands: number;
+  current_brand: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  error: string | null;
+  message?: string;
+}
+
+export async function runAnalysis(workspaceId: string): Promise<AnalysisJob | null> {
+  return await tryApi<AnalysisJob>('/run-analysis', {
+    method: 'POST',
+    body: JSON.stringify({ workspace_id: workspaceId }),
+  });
+}
+
+export async function getAnalysisStatus(workspaceId: string): Promise<AnalysisJob | null> {
+  return await tryApi<AnalysisJob>(`/analysis/status?workspace_id=${encodeURIComponent(workspaceId)}`);
+}
+
 // ─── TASK-25: Alerts ──────────────────────────────────────────────
 
 export interface CIAlert {

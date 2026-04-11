@@ -13,7 +13,7 @@ import {
 } from '../../utils/ciStorage';
 import {
   resolveBrand, parseLink, suggestCompetitors, searchBrands,
-  requestDeepDive, getWorkspace,
+  requestDeepDive, getWorkspace, runAnalysis,
   type BrandResolution, type CompetitorSuggestion,
 } from '../../services/ciApi';
 
@@ -1022,7 +1022,14 @@ function StartAnalysisCard({ C, lang, competitorCount, workspaceName, isMobile }
     const ws = await getWorkspace();
     const wsId = ws.data?.id ?? 'local';
     const comps = getCICompetitors();
-    // Fire off deep dives for each tracked competitor (don't await all — fire and forget)
+
+    // Start the tracked analysis job (new TASK-36 endpoint)
+    const job = await runAnalysis(wsId);
+    if (job?.job_id) {
+      localStorage.setItem('rebase_ci_analysis_job_id', job.job_id);
+    }
+
+    // Also fire off deep dives for each tracked competitor (don't await all — fire and forget)
     for (const comp of comps) {
       requestDeepDive(wsId, comp.brand_name).catch(() => {});
     }
@@ -1103,6 +1110,7 @@ function ResetDataSection({ C, lang, onReset }: {
     localStorage.removeItem('rebase_ci_competitors');
     localStorage.removeItem('rebase_ci_connections');
     localStorage.removeItem('rebase_ci_analysis_started');
+    localStorage.removeItem('rebase_ci_analysis_job_id');
     localStorage.removeItem('rebase_ci_welcome_dismissed');
     localStorage.removeItem('rebase_ci_last_visit');
     // Notify parent + other listeners
