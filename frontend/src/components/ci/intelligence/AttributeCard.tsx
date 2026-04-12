@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
-import type { MetricData } from '../../../services/ciApi';
+import type { MetricData, TrendDataPoint } from '../../../services/ciApi';
+import ScoreTrendLine from './ScoreTrendLine';
 
 // ── Metric display config ────────────────────────────────────────
 
@@ -76,9 +77,11 @@ interface AttributeCardProps {
   isWave4?: boolean;
   /** Called when card is expanded/selected (optional parent callback) */
   onExpand?: (metricType: string, expanded: boolean) => void;
+  /** Optional trend data for sparkline (empty array = dashed placeholder, upgrades automatically when TASK-23 ships) */
+  trendData?: TrendDataPoint[];
 }
 
-export default function AttributeCard({ metricType, data, lang, C, isMobile, isWave4 = false, onExpand }: AttributeCardProps) {
+export default function AttributeCard({ metricType, data, lang, C, isMobile, isWave4 = false, onExpand, trendData }: AttributeCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [hovered, setHovered] = useState(false);
   const config = METRIC_CONFIG[metricType] || DEFAULT_CONFIG;
@@ -207,6 +210,16 @@ export default function AttributeCard({ metricType, data, lang, C, isMobile, isW
               </span>
             </div>
           ))}
+
+          {/* Score trend sparkline */}
+          {trendData !== undefined && (
+            <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${C.bd}08` }}>
+              <div style={{ fontSize: 10, color: C.t3, marginBottom: 4 }}>
+                {lang === 'zh' ? '30天走势' : '30-day trend'}
+              </div>
+              <ScoreTrendLine data={trendData} color={config.color} height={28} width={150} />
+            </div>
+          )}
 
           {/* AI narrative for this metric (from first brand) */}
           {topInsight && (

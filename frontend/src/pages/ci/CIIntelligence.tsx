@@ -148,6 +148,7 @@ export default function CIIntelligence() {
   const [intelLoading, setIntelLoading] = useState(true);
   const [comparePair, setComparePair] = useState<[string, string]>(['', '']);
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
+  const [selectedBrand, setSelectedBrand] = useState<string>('');
 
   // Fetch intelligence data
   useEffect(() => {
@@ -187,6 +188,18 @@ export default function CIIntelligence() {
     }
     return map;
   }, [intel]);
+
+  // Handle metric card expand — sets active metric + default brand
+  const handleMetricExpand = (metric: string, expanded: boolean) => {
+    setSelectedMetric(expanded ? metric : null);
+    if (expanded) {
+      const data = metricMap[metric];
+      const firstBrand = data
+        ? (Object.entries(data.brands).find(([, b]) => b.raw_inputs)?.[0] ?? Object.keys(data.brands)[0] ?? '')
+        : '';
+      setSelectedBrand(firstBrand);
+    }
+  };
 
   // Available metric count
   const availableCount = intel?.available_metrics?.length ?? 0;
@@ -354,7 +367,8 @@ export default function CIIntelligence() {
                     C={C as unknown as Record<string, string>}
                     isMobile={isMobile}
                     isWave4={WAVE4_METRICS.has(metric)}
-                    onExpand={(m, expanded) => setSelectedMetric(expanded ? m : null)}
+                    onExpand={handleMetricExpand}
+                    trendData={[]}
                   />
                 ))}
               </div>
@@ -440,12 +454,14 @@ export default function CIIntelligence() {
           const DetailView = DETAIL_VIEWS[selectedMetric];
           if (!DetailView) return null;
           const metricData: MetricData | null = metricMap[selectedMetric] ?? null;
-          // Use first brand that has raw_inputs, or the first brand overall
           const brandEntries = metricData ? Object.entries(metricData.brands) : [];
-          const brandWithData = brandEntries.find(([, b]) => b.raw_inputs)?.[1];
-          const rawInputs = brandWithData?.raw_inputs ?? null;
-          const aiNarrative = brandWithData?.ai_narrative ?? brandEntries[0]?.[1]?.ai_narrative ?? '';
-          const score = metricData?.score ?? 0;
+          // Active brand: use selectedBrand if valid, else fall back to first brand with raw_inputs
+          const activeBrandData = (selectedBrand && metricData?.brands[selectedBrand])
+            ? metricData.brands[selectedBrand]
+            : brandEntries.find(([, b]) => b.raw_inputs)?.[1] ?? brandEntries[0]?.[1];
+          const rawInputs = activeBrandData?.raw_inputs ?? null;
+          const aiNarrative = activeBrandData?.ai_narrative ?? '';
+          const score = activeBrandData?.score ?? metricData?.score ?? 0;
           const config = METRIC_CONFIG[selectedMetric];
           return (
             <div style={{
@@ -476,17 +492,28 @@ export default function CIIntelligence() {
                   ✕
                 </button>
               </div>
-              {/* Brand tabs */}
+              {/* Brand tabs — interactive, switches which brand's data the detail view shows */}
               {brandEntries.length > 1 && (
                 <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
-                  {brandEntries.slice(0, 6).map(([name]) => (
-                    <span key={name} style={{
-                      padding: '4px 12px', borderRadius: 16, fontSize: 12,
-                      background: C.s2, color: C.t2, border: `1px solid ${C.bd}`,
-                    }}>
-                      {name}
-                    </span>
-                  ))}
+                  {brandEntries.slice(0, 6).map(([name]) => {
+                    const isActive = selectedBrand === name || (!selectedBrand && name === brandEntries[0]?.[0]);
+                    return (
+                      <button
+                        key={name}
+                        onClick={() => setSelectedBrand(name)}
+                        style={{
+                          padding: '4px 12px', borderRadius: 16, fontSize: 12, cursor: 'pointer',
+                          background: isActive ? (config?.color ?? C.ac) + '20' : C.s2,
+                          color: isActive ? (config?.color ?? C.ac) : C.t2,
+                          border: `1px solid ${isActive ? (config?.color ?? C.ac) + '55' : C.bd}`,
+                          fontWeight: isActive ? 600 : 400,
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        {name}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
               <DetailView
