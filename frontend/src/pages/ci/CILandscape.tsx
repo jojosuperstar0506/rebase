@@ -72,7 +72,7 @@ export default function CILandscape() {
   const isMobile = bp === 'mobile';
   const { workspace, competitors: userCompetitors, loading } = useCIData();
 
-  if (loading) return <CILandscapeSkeleton />;
+  // ── ALL HOOKS MUST BE ABOVE ANY EARLY RETURN (React Rules of Hooks) ────────
 
   const watchlistNames = useMemo(
     () => new Set(userCompetitors.filter(c => c.tier === 'watchlist').map(c => c.brand_name)),
@@ -127,11 +127,20 @@ export default function CILandscape() {
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [hoveredBrand, setHoveredBrand] = useState<string | null>(null);
 
-  function toggleZone(z: string) {
-    setActiveZones(s => { const n = new Set(s); n.has(z) ? n.delete(z) : n.add(z); return n; });
+  function toggleZone(key: string) {
+    setActiveZones(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
   }
+
   function toggleGroup(g: string) {
-    setActiveGroups(s => { const n = new Set(s); n.has(g) ? n.delete(g) : n.add(g); return n; });
+    setActiveGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(g)) next.delete(g); else next.add(g);
+      return next;
+    });
   }
 
   const visibleBrands = useMemo(() => {
@@ -226,6 +235,9 @@ export default function CILandscape() {
         return sortDir === 'asc' ? (av as number) - (bv as number) : (bv as number) - (av as number);
       });
   }, [visibleBrands, yourBrand, activeZones, sortKey, sortDir]);
+
+  // ── Early return AFTER all hooks (React Rules of Hooks) ─────────────────────
+  if (loading) return <CILandscapeSkeleton />;
 
   function handleSort(key: SortKey) {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');

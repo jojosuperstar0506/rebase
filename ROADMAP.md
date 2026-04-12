@@ -58,6 +58,7 @@ Converts prospects to believers               Proves intelligence layer works on
 | Product Structure Agent (ERP intelligence demo) | Joanna | ✅ v0.1 Done | 2 | 3-file ERP export analysis, Streamlit UI |
 | 3-screen visualization dashboard | Joanna | ✅ Done | 2 | Department map, before/after toggle, ROI summary — on Vercel |
 | **OMI Competitive Intelligence** | **Joanna** | **✅ v2 Done** | **3** | **Full pipeline: scrape → temporal → scoring → narrative → dashboard → WeChat delivery** |
+| **Competitive Intelligence vFinal** | **Both** | **✅ Complete** | **—** | **Full CI platform: dashboard, landscape, competitors, deep dive, alerts, export, mobile, AI narratives, local scraping agent** |
 | FRD (functional requirements) | Joanna | In progress | All | Defining overall product features |
 | AI Intake Agent (Dify build) | William | TODO | 2 | Next: bring prompt architecture to life in Dify |
 | XHS Virtual Employee (Joanna VE) | Joanna | TODO | 3 | Next: one-button XHS content creator |

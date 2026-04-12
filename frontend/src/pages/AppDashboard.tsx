@@ -220,6 +220,11 @@ export default function AppDashboard() {
           signal: AbortSignal.timeout(4000),
         });
         if (!cancelled && res.ok) {
+          const ct = res.headers.get("content-type") ?? "";
+          if (!ct.includes("application/json") && !ct.includes("text/json")) {
+            console.warn("[AppDashboard] Static JSON returned non-JSON content-type:", ct);
+            return;
+          }
           const raw = await res.json();
           const mapped = mapStaticJson(raw);
           // Only use static data if it has real scores (otherwise keep demo)
@@ -254,7 +259,7 @@ export default function AppDashboard() {
     }
   }
 
-  const sortedBrands = [...data.competitors].sort((a, b) => {
+  const sortedBrands = [...(data.competitors ?? [])].sort((a, b) => {
     const av = a[sortKey];
     const bv = b[sortKey];
     if (typeof av === "string" && typeof bv === "string") {
@@ -439,7 +444,7 @@ export default function AppDashboard() {
               ))}
 
               {/* Bubbles */}
-              {data.competitors.map((brand, i) => {
+              {(data.competitors ?? []).map((brand, i) => {
                 const cx = bubbleCx(brand.threat_index);
                 const cy = bubbleCy(brand.momentum_score);
                 const r = bubbleR(brand.wtp_score);
@@ -606,11 +611,11 @@ export default function AppDashboard() {
         </div>
 
         {/* ── Action Items ─────────────────────────────────────────────────── */}
-        {data.action_items.length > 0 && (
+        {(data.action_items?.length ?? 0) > 0 && (
           <div style={cardStyle}>
             <div style={sectionTitle}>行动建议</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {data.action_items.map((item, i) => {
+              {(data.action_items ?? []).map((item, i) => {
                 const pColor = priorityColor(item.priority, C as unknown as Record<string, string>);
                 const priorityLabel: Record<string, string> = {
                   high: "本周必做",

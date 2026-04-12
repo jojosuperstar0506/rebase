@@ -21,6 +21,7 @@ export const T = {
     title: { en: "Competitive Intelligence", zh: "竞品情报系统" },
     subtitle: { en: "Track, analyze, and outmaneuver your competitors", zh: "追踪、分析、超越竞争对手" },
     dashboard: { en: "Dashboard", zh: "总览" },
+    intelligence: { en: "Intelligence", zh: "竞品洞察" },
     landscape: { en: "Market Landscape", zh: "市场全景" },
     competitors: { en: "Competitors", zh: "竞品追踪" },
     deepDive: { en: "Deep Dive", zh: "深度分析" },
@@ -237,8 +238,7 @@ export const T = {
     analysisStartedBanner: { en: "Analysis in progress — scores and insights will appear here when complete.", zh: "分析进行中——评分和洞察完成后将显示在此处。" },
     runFirstAnalysis: { en: "Run your first analysis in Settings to see AI-powered competitive insights.", zh: "在设置中运行首次分析，查看AI驱动的竞品洞察。" },
 
-    // Intelligence page (Wave 1–3)
-    intelligence: { en: "Intelligence", zh: "竞品洞察" },
+    // Intelligence page (Wave 1–3) — metric labels + states
     intelligenceTitle: { en: "Competitive Intelligence", zh: "竞品洞察总览" },
     executiveSummary: { en: "AI Executive Summary", zh: "AI战略摘要" },
     consumerIntel: { en: "Consumer Intelligence", zh: "消费者洞察" },

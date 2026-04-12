@@ -456,8 +456,7 @@ export default function CICompetitors() {
   const isMobile = bp === 'mobile';
   const { competitors: rawCompetitors, workspace, loading } = useCIData();
 
-  if (loading) return <CICompetitorsSkeleton />;
-
+  // ── ALL HOOKS MUST BE ABOVE ANY EARLY RETURN (React Rules of Hooks) ────────
   const [viewMode, setViewMode] = useState<'cards' | 'compare'>('cards');
   const [tierFilter, setTierFilter] = useState<'all' | 'watchlist' | 'landscape'>('all');
   const [sortBy, setSortBy] = useState<'name' | 'threat' | 'momentum' | 'price'>('name');
@@ -513,6 +512,9 @@ export default function CICompetitors() {
     else if (sortBy === 'price') list = [...list].sort((a, b) => b.avg_price - a.avg_price);
     return list;
   }, [profiles, tierFilter, sortBy]);
+
+  // ── Early return AFTER all hooks (React Rules of Hooks) ─────────────────────
+  if (loading) return <CICompetitorsSkeleton />;
 
   const selectedProfiles = filtered.filter(p => selected.has(p.id)).slice(0, 3);
 

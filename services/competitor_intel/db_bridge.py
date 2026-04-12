@@ -36,7 +36,9 @@ def get_scrape_targets(tier='watchlist'):
 
 
 def get_brand_cookies(platform):
-    """Get active cookies for a platform from any workspace that has them."""
+    """Get decrypted active cookies for a platform."""
+    from .crypto_utils import decrypt_cookies
+
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -44,11 +46,20 @@ def get_brand_cookies(platform):
                 SELECT cookies_encrypted, workspace_id
                 FROM platform_connections
                 WHERE platform = %s AND status = 'active'
+                AND (expires_at IS NULL OR expires_at > NOW())
                 ORDER BY last_successful_scrape DESC NULLS LAST
                 LIMIT 1
             """, (platform,))
             row = cur.fetchone()
-            return row['cookies_encrypted'] if row else None
+            if not row or not row['cookies_encrypted']:
+                return None
+            try:
+                decrypted = decrypt_cookies(row['cookies_encrypted'])
+                print(f"[DB] Cookies loaded for platform {platform}")
+                return decrypted
+            except Exception as e:
+                print(f"[WARN] Failed to decrypt cookies for {platform}: {e}")
+                return None
     finally:
         conn.close()
 

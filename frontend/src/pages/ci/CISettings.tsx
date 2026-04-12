@@ -13,7 +13,7 @@ import {
 } from '../../utils/ciStorage';
 import {
   resolveBrand, parseLink, suggestCompetitors, searchBrands,
-  requestDeepDive, getWorkspace,
+  requestDeepDive, getWorkspace, runAnalysis, saveWorkspace, addCompetitor,
   type BrandResolution, type CompetitorSuggestion,
 } from '../../services/ciApi';
 
@@ -1017,15 +1017,77 @@ function StartAnalysisCard({ C, lang, competitorCount, workspaceName, isMobile }
 }) {
   const [starting, setStarting] = useState(false);
 
+  const [startError, setStartError] = useState('');
+
   async function handleStart() {
     setStarting(true);
-    const ws = await getWorkspace();
-    const wsId = ws.data?.id ?? 'local';
+    setStartError('');
+
+    // Step 1: Get or create workspace on API
+    let ws = await getWorkspace();
+    let wsId = ws.data?.id;
+
+    // If workspace only exists locally, sync it to the API first
+    if (!wsId || wsId === 'local') {
+      const localWs = getCIWorkspace();
+      if (localWs?.brand_name) {
+        console.log('[CI] Workspace is local-only, syncing to API...');
+        const apiWs = await saveWorkspace({
+          brand_name: localWs.brand_name,
+          brand_category: localWs.brand_category || null,
+          brand_price_range: localWs.price_range || null,
+          brand_platforms: null,
+        });
+        if (apiWs && apiWs.id && apiWs.id !== 'local') {
+          wsId = apiWs.id;
+          console.log(`[CI] Workspace synced to API: ${wsId}`);
+
+          // Sync competitors to API workspace
+          const localComps = getCICompetitors();
+          for (const comp of localComps) {
+            await addCompetitor({
+              workspace_id: wsId,
+              brand_name: comp.brand_name,
+              tier: comp.tier,
+              platform_ids: comp.platform_ids || {},
+              added_via: comp.added_via || 'manual',
+            });
+          }
+          console.log(`[CI] Synced ${localComps.length} competitors to API`);
+        }
+      }
+    }
+
+    // Step 2: Verify we have a real workspace ID
+    if (!wsId || wsId === 'local') {
+      console.error('[CI] Cannot start analysis: workspace not synced to API');
+      setStartError(lang === 'zh'
+        ? '无法连接后端服务器，请检查网络连接后重试。'
+        : 'Cannot connect to backend server. Please check your connection and try again.');
+      setStarting(false);
+      return;
+    }
+
+    // Step 3: Start the tracked analysis job
+    const job = await runAnalysis(wsId);
+    if (!job || !job.job_id) {
+      console.error('[CI] runAnalysis returned null — backend may be unreachable or no competitors in DB');
+      setStartError(lang === 'zh'
+        ? '启动分析失败。请确认已添加竞品，并检查网络连接。'
+        : 'Failed to start analysis. Make sure competitors are added and check your connection.');
+      setStarting(false);
+      return;
+    }
+
+    localStorage.setItem('rebase_ci_analysis_job_id', job.job_id);
+    console.log(`[CI] Analysis job started: ${job.job_id}`);
+
+    // Fire off deep dives for each tracked competitor (fire and forget)
     const comps = getCICompetitors();
-    // Fire off deep dives for each tracked competitor (don't await all — fire and forget)
     for (const comp of comps) {
       requestDeepDive(wsId, comp.brand_name).catch(() => {});
     }
+
     localStorage.setItem('rebase_ci_analysis_started', 'true');
     window.location.href = '/ci';
   }
@@ -1085,7 +1147,105 @@ function StartAnalysisCard({ C, lang, competitorCount, workspaceName, isMobile }
       <p style={{ fontSize: 12, color: C.t3, marginTop: 12, marginBottom: 0 }}>
         {t(T.ci.takesAbout, lang as any)}
       </p>
+
+      {startError && (
+        <div style={{
+          marginTop: 16, padding: '10px 16px', borderRadius: 8,
+          background: `${C.danger || '#ef4444'}12`, border: `1px solid ${C.danger || '#ef4444'}44`,
+          color: C.danger || '#ef4444', fontSize: 13, textAlign: 'left',
+        }}>
+          ✗ {startError}
+        </div>
+      )}
     </div>
+  );
+}
+
+// ── Reset Data Section ───────────────────────────────────────────
+function ResetDataSection({ C, lang, onReset }: {
+  C: ReturnType<typeof useApp>['colors'];
+  lang: string;
+  onReset: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+
+  function handleReset() {
+    // Clear all CI localStorage keys
+    localStorage.removeItem('rebase_ci_workspace');
+    localStorage.removeItem('rebase_ci_competitors');
+    localStorage.removeItem('rebase_ci_connections');
+    localStorage.removeItem('rebase_ci_analysis_started');
+    localStorage.removeItem('rebase_ci_analysis_job_id');
+    localStorage.removeItem('rebase_ci_welcome_dismissed');
+    localStorage.removeItem('rebase_ci_last_visit');
+    // Notify parent + other listeners
+    onReset();
+    window.dispatchEvent(new CustomEvent('ci-data-updated'));
+    setConfirming(false);
+    // Redirect to fresh settings
+    window.location.href = '/ci/settings';
+  }
+
+  return (
+    <Section title={lang === 'zh' ? '重置数据' : 'Reset Data'} C={C}>
+      <p style={{ fontSize: 13, color: C.t2, lineHeight: 1.7, marginTop: 0, marginBottom: 16 }}>
+        {lang === 'zh'
+          ? '清除所有本地保存的品牌资料、竞品列表和分析状态，重新开始设置。此操作不可撤销。'
+          : 'Clear all locally saved brand profile, competitor list, and analysis state. Start fresh. This cannot be undone.'}
+      </p>
+      {!confirming ? (
+        <button
+          onClick={() => setConfirming(true)}
+          style={{
+            background: 'transparent',
+            border: `1px solid ${C.danger}`,
+            color: C.danger,
+            padding: '8px 20px',
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          {lang === 'zh' ? '重置所有CI数据' : 'Reset All CI Data'}
+        </button>
+      ) : (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <span style={{ fontSize: 13, color: C.danger, fontWeight: 600 }}>
+            {lang === 'zh' ? '确定要重置吗？' : 'Are you sure?'}
+          </span>
+          <button
+            onClick={handleReset}
+            style={{
+              background: C.danger,
+              border: 'none',
+              color: '#fff',
+              padding: '8px 20px',
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            {lang === 'zh' ? '确认重置' : 'Yes, Reset'}
+          </button>
+          <button
+            onClick={() => setConfirming(false)}
+            style={{
+              background: 'transparent',
+              border: `1px solid ${C.bd}`,
+              color: C.t2,
+              padding: '8px 16px',
+              borderRadius: 8,
+              fontSize: 13,
+              cursor: 'pointer',
+            }}
+          >
+            {lang === 'zh' ? '取消' : 'Cancel'}
+          </button>
+        </div>
+      )}
+    </Section>
   );
 }
 
@@ -1182,6 +1342,11 @@ export default function CISettings() {
         {/* 4 — Platform Connections: removed for beta (TASK-32) */}
         {/* Cookie connection UI removed for beta. See TASK-17 for backend. Bring back with browser extension in v2. */}
         {/* <ConnectionsSection C={C} lang={lang} isMobile={isMobile} /> */}
+
+        {/* 5 — Reset All Data */}
+        <ResetDataSection C={C} lang={lang} onReset={() => {
+          setCompetitors([]);
+        }} />
       </div>
     </div>
   );

@@ -12,6 +12,15 @@ function getHeaders(): Record<string, string> {
       userId = payload.sub || payload.id || payload.email || '';
     } catch {}
   }
+  // Fallback: generate a stable anonymous ID so workspace creation works without JWT
+  if (!userId) {
+    let anonId = localStorage.getItem('rebase_anon_id');
+    if (!anonId) {
+      anonId = 'anon-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+      localStorage.setItem('rebase_anon_id', anonId);
+    }
+    userId = anonId;
+  }
   return {
     'Content-Type': 'application/json',
     'x-user-id': userId,
@@ -25,9 +34,14 @@ async function tryApi<T>(path: string, options?: RequestInit): Promise<T | null>
       ...options,
       headers: { ...getHeaders(), ...(options?.headers as Record<string, string> | undefined) },
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => '');
+      console.warn(`[CI API] ${options?.method || 'GET'} ${path} → ${res.status}`, errorText.slice(0, 200));
+      return null;
+    }
     return await res.json() as T;
-  } catch {
+  } catch (err) {
+    console.warn(`[CI API] ${options?.method || 'GET'} ${path} → network error`, (err as Error).message);
     return null; // Network error, API not available
   }
 }
@@ -46,8 +60,8 @@ export interface Workspace {
 }
 
 export async function getWorkspace(): Promise<{ data: Workspace | null; source: 'api' | 'local' }> {
-  // Try API first (maps to Vercel serverless: api/ci/workspace-me.js)
-  const apiData = await tryApi<Workspace>('/workspace-me');
+  // Try API first — backend route is /api/ci/workspace/me
+  const apiData = await tryApi<Workspace>('/workspace/me');
   if (apiData && apiData.id) {
     return { data: apiData, source: 'api' };
   }
@@ -164,6 +178,7 @@ export interface DashboardData {
     dept: string;
     priority: 'high' | 'medium' | 'low';
   }>;
+  analysis_pending?: boolean;
 }
 
 // Stable name-based score — same brand name → same score on every page
@@ -405,6 +420,62 @@ export async function getDeepDiveResult(workspaceId: string, brandName: string):
   return await tryApi<DeepDiveResult>(
     `/deep-dive/result?workspace_id=${encodeURIComponent(workspaceId)}&brand_name=${encodeURIComponent(brandName)}`
   );
+}
+
+// ─── TASK-36: Analysis Job Tracking ──────────────────────────────
+
+export interface AnalysisJob {
+  job_id: string;
+  status: 'none' | 'queued' | 'scoring' | 'narrating' | 'complete' | 'failed';
+  total_brands: number;
+  completed_brands: number;
+  current_brand: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  error: string | null;
+  message?: string;
+}
+
+export async function runAnalysis(workspaceId: string): Promise<AnalysisJob | null> {
+  return await tryApi<AnalysisJob>('/run-analysis', {
+    method: 'POST',
+    body: JSON.stringify({ workspace_id: workspaceId }),
+  });
+}
+
+export async function getAnalysisStatus(workspaceId: string): Promise<AnalysisJob | null> {
+  return await tryApi<AnalysisJob>(`/analysis/status?workspace_id=${encodeURIComponent(workspaceId)}`);
+}
+
+// ─── Intelligence Layer ─────────────────────────────────────────
+
+export interface MetricBrandData {
+  score: number;
+  raw_inputs: Record<string, any> | null;
+  ai_narrative: string | null;
+  analyzed_at: string;
+}
+
+export interface MetricData {
+  score: number;
+  brands: Record<string, MetricBrandData>;
+}
+
+export interface IntelligenceDomain {
+  label: string;
+  metrics: Record<string, MetricData>;
+}
+
+export interface IntelligenceData {
+  workspace_id: string;
+  last_updated: string;
+  domains: Record<string, IntelligenceDomain>;
+  available_metrics: string[];
+  total_metrics: number;
+}
+
+export async function getIntelligence(workspaceId: string): Promise<IntelligenceData | null> {
+  return await tryApi<IntelligenceData>(`/intelligence?workspace_id=${encodeURIComponent(workspaceId)}`);
 }
 
 // ─── TASK-25: Alerts ──────────────────────────────────────────────

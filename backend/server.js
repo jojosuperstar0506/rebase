@@ -10,6 +10,7 @@ const { startScheduler, runDailyReport, generateFeedbackToken } = require("./sch
 const fs = require("fs");
 const path = require("path");
 const { pool } = require("./db");
+const { getKnownBrands, searchBrands, KNOWN_BRANDS } = require("./brand_registry");
 
 const app = express();
 
@@ -56,6 +57,16 @@ app.use(express.json());
 // Apply rate limiting + secret check to all /api routes
 app.use('/api', apiLimiter);
 app.use('/api', requireSecret);
+
+// CI endpoints get a higher rate limit (dashboard loads 4-5 calls at once)
+const ciRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: { error: 'Too many requests. Please try again in a minute.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/ci/', ciRateLimit);
 
 // ── Anthropic client ────────────────────────────────────────────────────────
 const anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -568,6 +579,28 @@ app.post("/api/admin/approve", (req, res) => {
 
 // ── CI vFinal API endpoints ──────────────────────────────────────────────────
 
+// Domain mapping for metric_types → Intelligence page sections
+const METRIC_DOMAINS = {
+  // Core (existing scoring metrics)
+  momentum: 'core', threat: 'core', wtp: 'core',
+  // Consumer
+  consumer_mindshare: 'consumer', keywords: 'consumer',
+  // Product
+  trending_products: 'product', design_profile: 'product', price_positioning: 'product', launch_frequency: 'product',
+  // Marketing
+  voice_volume: 'marketing', content_strategy: 'marketing', kol_strategy: 'marketing',
+  // Fallback
+  brand_insight: 'insight',
+};
+
+const DOMAIN_LABELS = {
+  core: '核心指标',
+  consumer: '消费者洞察',
+  product: '产品洞察',
+  marketing: '营销洞察',
+  insight: '品牌洞察',
+};
+
 // GET /api/ci/workspace — get current user's workspace
 app.get('/api/ci/workspace', async (req, res) => {
   try {
@@ -616,16 +649,39 @@ app.get('/api/ci/workspace/me', async (req, res) => {
 // POST /api/ci/workspace — create workspace (from onboarding)
 app.post('/api/ci/workspace', async (req, res) => {
   try {
-    const { user_id, brand_name, brand_category, brand_price_range, brand_platforms } = req.body;
+    const { brand_name, brand_category, brand_price_range, brand_platforms } = req.body;
+    // user_id can come from body (direct API) or x-user-id header (via Vercel proxy)
+    const user_id = req.body.user_id || req.headers['x-user-id'];
 
-    const { rows } = await pool.query(
-      `INSERT INTO workspaces (user_id, brand_name, brand_category, brand_price_range, brand_platforms)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING *`,
-      [user_id, brand_name, brand_category, brand_price_range, brand_platforms]
+    if (!user_id || !brand_name || !brand_category) {
+      return res.status(400).json({ error: 'Missing required fields: user_id, brand_name, brand_category' });
+    }
+
+    // Upsert: check if workspace exists for this user, update if so, create if not
+    const existing = await pool.query(
+      'SELECT * FROM workspaces WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
+      [user_id]
     );
 
-    res.status(201).json(rows[0]);
+    let result;
+    if (existing.rows.length > 0) {
+      // Update existing workspace
+      result = await pool.query(
+        `UPDATE workspaces SET brand_name = $1, brand_category = $2, brand_price_range = $3, brand_platforms = $4
+         WHERE id = $5 RETURNING *`,
+        [brand_name, brand_category, brand_price_range, brand_platforms, existing.rows[0].id]
+      );
+    } else {
+      // Create new workspace
+      result = await pool.query(
+        `INSERT INTO workspaces (user_id, brand_name, brand_category, brand_price_range, brand_platforms)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING *`,
+        [user_id, brand_name, brand_category, brand_price_range, brand_platforms]
+      );
+    }
+
+    res.status(existing.rows.length > 0 ? 200 : 201).json(result.rows[0]);
   } catch (err) {
     console.error('[CI] POST workspace error:', err.message);
     res.status(500).json({ error: 'Failed to create workspace' });
@@ -709,6 +765,23 @@ app.get('/api/ci/dashboard', async (req, res) => {
       [workspaceId]
     );
 
+    // If no analysis results exist but competitors do, trigger scoring in background
+    if (scores.length === 0 && competitors.length > 0) {
+      const { spawn } = require('child_process');
+      const pythonBin = process.env.PYTHON_BIN || 'python3';
+      const proc = spawn(pythonBin, [
+        '-m', 'services.competitor_intel.scoring_pipeline',
+        '--workspace-id', workspaceId,
+      ], {
+        cwd: process.cwd().replace('/backend', ''),
+        env: { ...process.env },
+        detached: true,
+        stdio: 'ignore',
+      });
+      proc.unref();
+      console.log(`[CI] Triggered scoring pipeline for workspace ${workspaceId}`);
+    }
+
     // Assemble into dashboard format
     const brands = competitors.map(comp => {
       const brandScores = scores.filter(s => s.competitor_name === comp.brand_name);
@@ -718,19 +791,111 @@ app.get('/api/ci/dashboard', async (req, res) => {
         momentum_score: brandScores.find(s => s.metric_type === 'momentum')?.score || 0,
         threat_index: brandScores.find(s => s.metric_type === 'threat')?.score || 0,
         wtp_score: brandScores.find(s => s.metric_type === 'wtp')?.score || 0,
-        trend_signals: [],
+        trend_signals: (() => {
+          const narr = brandScores.find(s => s.ai_narrative)?.ai_narrative || '';
+          if (!narr) return [];
+          return narr.split(/[，。；,;]/).filter(s => s.trim().length > 2 && s.trim().length < 20).slice(0, 3).map(s => s.trim());
+        })(),
       };
     });
 
+    const narrative = narratives[0]?.narrative || '';
+    let actionItems = narratives[0]?.action_items || [];
+    if (typeof actionItems === 'string') {
+      try { actionItems = JSON.parse(actionItems); } catch {}
+    }
+
     res.json({
-      narrative: narratives[0]?.narrative || '',
+      narrative,
       last_updated: narratives[0]?.analyzed_at || new Date().toISOString(),
       brands,
-      action_items: narratives[0]?.action_items || [],
+      action_items: actionItems,
+      analysis_pending: scores.length === 0,
     });
   } catch (err) {
     console.error('[CI] GET dashboard error:', err.message);
     res.status(500).json({ error: 'Failed to fetch dashboard' });
+  }
+});
+
+// GET /api/ci/intelligence — all metrics for all competitors, grouped by domain
+app.get('/api/ci/intelligence', async (req, res) => {
+  try {
+    const workspaceId = req.query.workspace_id;
+    if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+
+    // Get ALL latest results per competitor × metric_type
+    const { rows } = await pool.query(
+      `SELECT DISTINCT ON (competitor_name, metric_type)
+         competitor_name, metric_type, score, raw_inputs, ai_narrative, analyzed_at
+       FROM analysis_results
+       WHERE workspace_id = $1
+       ORDER BY competitor_name, metric_type, analyzed_at DESC`,
+      [workspaceId]
+    );
+
+    // Collect available metric types
+    const availableMetrics = [...new Set(rows.map(r => r.metric_type))];
+
+    // Build domains structure
+    const domains = {};
+    for (const row of rows) {
+      const domain = METRIC_DOMAINS[row.metric_type] || 'insight';
+      if (!domains[domain]) {
+        domains[domain] = {
+          label: DOMAIN_LABELS[domain] || domain,
+          metrics: {},
+        };
+      }
+      const metricKey = row.metric_type;
+      if (!domains[domain].metrics[metricKey]) {
+        domains[domain].metrics[metricKey] = {
+          score: null,
+          brands: {},
+        };
+      }
+
+      // Parse raw_inputs if stored as string
+      let rawInputs = row.raw_inputs;
+      if (typeof rawInputs === 'string') {
+        try { rawInputs = JSON.parse(rawInputs); } catch { /* leave as-is */ }
+      }
+
+      domains[domain].metrics[metricKey].brands[row.competitor_name] = {
+        score: row.score,
+        raw_inputs: rawInputs,
+        ai_narrative: row.ai_narrative,
+        analyzed_at: row.analyzed_at,
+      };
+    }
+
+    // Compute aggregate score per metric (average across brands)
+    for (const domain of Object.values(domains)) {
+      for (const [, metric] of Object.entries(domain.metrics)) {
+        const brandScores = Object.values(metric.brands)
+          .map(b => b.score)
+          .filter(s => s != null);
+        metric.score = brandScores.length > 0
+          ? Math.round(brandScores.reduce((a, b) => a + b, 0) / brandScores.length)
+          : null;
+      }
+    }
+
+    // Find the most recent analyzed_at across all rows
+    const lastUpdated = rows.length > 0
+      ? rows.reduce((latest, r) => (r.analyzed_at > latest ? r.analyzed_at : latest), rows[0].analyzed_at)
+      : new Date().toISOString();
+
+    res.json({
+      workspace_id: workspaceId,
+      last_updated: lastUpdated,
+      domains,
+      available_metrics: availableMetrics,
+      total_metrics: availableMetrics.length,
+    });
+  } catch (err) {
+    console.error('[CI] GET intelligence error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch intelligence data' });
   }
 });
 
@@ -750,25 +915,244 @@ app.get('/api/ci/connections', async (req, res) => {
   }
 });
 
+// --- Cookie encryption helpers (AES-256-CBC, PBKDF2 key derivation) ---
+const COOKIE_KEY = process.env.COOKIE_ENCRYPTION_KEY || 'dev-key-change-in-production';
+const COOKIE_SALT = 'rebase-ci-cookie-salt';
+
+function encryptCookie(plaintext) {
+  const key = crypto.pbkdf2Sync(COOKIE_KEY, COOKIE_SALT, 100000, 32, 'sha256');
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+  let encrypted = cipher.update(plaintext, 'utf8', 'base64');
+  encrypted += cipher.final('base64');
+  return iv.toString('base64') + ':' + encrypted;
+}
+
+function decryptCookie(stored) {
+  const key = crypto.pbkdf2Sync(COOKIE_KEY, COOKIE_SALT, 100000, 32, 'sha256');
+  const [ivB64, encB64] = stored.split(':');
+  const iv = Buffer.from(ivB64, 'base64');
+  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+  let decrypted = decipher.update(encB64, 'base64', 'utf8');
+  decrypted += decipher.final('utf8');
+  return decrypted;
+}
+
 // POST /api/ci/connections — connect a platform (store encrypted cookies)
 app.post('/api/ci/connections', async (req, res) => {
   try {
     const { workspace_id, platform, cookies } = req.body;
+    if (!workspace_id || !platform || !cookies) {
+      return res.status(400).json({ error: 'Missing workspace_id, platform, or cookies' });
+    }
 
-    // TODO TASK-10: Implement AES-256-GCM encryption for cookies
-    // For now, store as-is (TEMPORARY — must encrypt before production)
+    const encrypted = encryptCookie(cookies);
+
     const { rows } = await pool.query(
-      `INSERT INTO platform_connections (workspace_id, platform, cookies_encrypted, status)
-       VALUES ($1, $2, $3, 'active')
-       ON CONFLICT (workspace_id, platform) DO UPDATE SET cookies_encrypted = $3, status = 'active', updated_at = NOW()
-       RETURNING id, workspace_id, platform, status, created_at`,
-      [workspace_id, platform, cookies]
+      `INSERT INTO platform_connections (workspace_id, platform, cookies_encrypted, status, expires_at)
+       VALUES ($1, $2, $3, 'active', NOW() + INTERVAL '24 hours')
+       ON CONFLICT (workspace_id, platform) DO UPDATE
+         SET cookies_encrypted = $3, status = 'active', updated_at = NOW(),
+             expires_at = NOW() + INTERVAL '24 hours'
+       RETURNING id, workspace_id, platform, status, expires_at, created_at`,
+      [workspace_id, platform, encrypted]
     );
 
+    console.log(`[CI] Cookies saved for ${platform} (workspace ${workspace_id})`);
     res.status(201).json(rows[0]);
   } catch (err) {
     console.error('[CI] POST connections error:', err.message);
     res.status(500).json({ error: 'Failed to save connection' });
+  }
+});
+
+// POST /api/ci/connections/check — check if cookies are still valid
+app.post('/api/ci/connections/check', async (req, res) => {
+  try {
+    const { workspace_id, platform } = req.body;
+    if (!workspace_id || !platform) {
+      return res.status(400).json({ error: 'Missing workspace_id or platform' });
+    }
+
+    const { rows } = await pool.query(
+      'SELECT * FROM platform_connections WHERE workspace_id = $1 AND platform = $2',
+      [workspace_id, platform]
+    );
+
+    if (rows.length === 0) return res.json({ status: 'not_connected' });
+
+    const conn = rows[0];
+
+    // Check expiry
+    if (conn.expires_at && new Date(conn.expires_at) < new Date()) {
+      await pool.query(
+        "UPDATE platform_connections SET status = 'expired' WHERE id = $1",
+        [conn.id]
+      );
+      return res.json({ status: 'expired', expired_at: conn.expires_at });
+    }
+
+    // Check if approaching expiry (within 6 hours)
+    if (conn.expires_at) {
+      const hoursLeft = (new Date(conn.expires_at) - new Date()) / (1000 * 60 * 60);
+      if (hoursLeft < 6) {
+        await pool.query(
+          "UPDATE platform_connections SET status = 'expiring' WHERE id = $1",
+          [conn.id]
+        );
+        return res.json({ status: 'expiring', hours_left: Math.round(hoursLeft) });
+      }
+    }
+
+    res.json({
+      status: conn.status,
+      last_scrape: conn.last_successful_scrape,
+      expires_at: conn.expires_at,
+    });
+  } catch (err) {
+    console.error('[CI] POST connections/check error:', err.message);
+    res.status(500).json({ error: 'Failed to check connection' });
+  }
+});
+
+// GET /api/ci/pipeline/status — last pipeline run status
+app.get('/api/ci/pipeline/status', async (req, res) => {
+  const statusFile = '/tmp/rebase-pipeline-status.json';
+
+  try {
+    if (fs.existsSync(statusFile)) {
+      const raw = fs.readFileSync(statusFile, 'utf8');
+      const status = JSON.parse(raw);
+      res.json(status);
+    } else {
+      // Check database for last analysis timestamp
+      const { rows } = await pool.query(
+        'SELECT MAX(analyzed_at) as last_run FROM analysis_results'
+      );
+      res.json({
+        status: 'unknown',
+        last_analysis: rows[0]?.last_run || null,
+        message: 'No pipeline status file found. Pipeline may not have run yet.',
+      });
+    }
+  } catch (err) {
+    res.json({ status: 'error', message: err.message });
+  }
+});
+
+// POST /api/ci/run-analysis — start the scoring pipeline with job tracking
+app.post('/api/ci/run-analysis', async (req, res) => {
+  const { workspace_id } = req.body;
+  if (!workspace_id) return res.status(400).json({ error: 'Missing workspace_id' });
+
+  try {
+    // Count competitors
+    const { rows: comps } = await pool.query(
+      'SELECT COUNT(*) as cnt FROM workspace_competitors WHERE workspace_id = $1',
+      [workspace_id]
+    );
+    const totalBrands = parseInt(comps[0]?.cnt || '0', 10);
+    if (totalBrands === 0) {
+      return res.status(400).json({ error: 'No competitors to analyze. Add competitors first.' });
+    }
+
+    // Create job record
+    const { rows } = await pool.query(`
+      INSERT INTO ci_analysis_jobs (workspace_id, status, total_brands)
+      VALUES ($1, 'queued', $2)
+      RETURNING *
+    `, [workspace_id, totalBrands]);
+
+    const job = rows[0];
+
+    // Spawn scoring pipeline with job-id for progress tracking
+    const { spawn } = require('child_process');
+    const pythonBin = process.env.PYTHON_BIN || 'python3';
+    const proc = spawn(pythonBin, [
+      '-m', 'services.competitor_intel.scoring_pipeline',
+      '--workspace-id', workspace_id,
+      '--job-id', job.id,
+    ], {
+      cwd: process.cwd().replace('/backend', ''),
+      env: { ...process.env },
+      detached: true,
+      stdio: 'ignore',
+    });
+    proc.unref();
+
+    // Spawn additional intelligence pipelines (detached, fire-and-forget)
+    const pipelineCwd = process.cwd().replace('/backend', '');
+    const pipelineEnv = { ...process.env };
+    const pipelineOpts = { cwd: pipelineCwd, env: pipelineEnv, detached: true, stdio: 'ignore' };
+
+    const extraPipelines = [
+      'services.competitor_intel.pipelines.keyword_pipeline',
+      'services.competitor_intel.pipelines.voice_volume_pipeline',
+      'services.competitor_intel.pipelines.product_ranking_pipeline',
+      'services.competitor_intel.pipelines.price_analysis_pipeline',
+      'services.competitor_intel.pipelines.launch_tracker_pipeline',
+      'services.competitor_intel.pipelines.mindshare_pipeline',
+      'services.competitor_intel.pipelines.content_strategy_pipeline',
+    ];
+    for (const mod of extraPipelines) {
+      try {
+        const p = spawn(pythonBin, ['-m', mod, '--workspace-id', workspace_id], pipelineOpts);
+        p.unref();
+        console.log(`[CI] Spawned ${mod} for workspace ${workspace_id}`);
+      } catch (spawnErr) {
+        console.warn(`[CI] Failed to spawn ${mod}: ${spawnErr.message}`);
+      }
+    }
+
+    console.log(`[CI] Started analysis job ${job.id} for workspace ${workspace_id} (${totalBrands} brands)`);
+
+    res.json({
+      job_id: job.id,
+      status: 'queued',
+      total_brands: totalBrands,
+      message: `Analysis started for ${totalBrands} competitors`,
+    });
+  } catch (err) {
+    console.error('[CI] POST run-analysis error:', err.message);
+    res.status(500).json({ error: 'Failed to start analysis' });
+  }
+});
+
+// GET /api/ci/analysis/status — check analysis job progress
+app.get('/api/ci/analysis/status', async (req, res) => {
+  const { workspace_id, job_id } = req.query;
+
+  let query, params;
+  if (job_id) {
+    query = 'SELECT * FROM ci_analysis_jobs WHERE id = $1';
+    params = [job_id];
+  } else if (workspace_id) {
+    query = 'SELECT * FROM ci_analysis_jobs WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT 1';
+    params = [workspace_id];
+  } else {
+    return res.status(400).json({ error: 'Missing workspace_id or job_id' });
+  }
+
+  try {
+    const { rows } = await pool.query(query, params);
+    if (rows.length === 0) {
+      return res.json({ status: 'none', message: 'No analysis has been run yet' });
+    }
+
+    const job = rows[0];
+    res.json({
+      job_id: job.id,
+      status: job.status,
+      total_brands: job.total_brands,
+      completed_brands: job.completed_brands,
+      current_brand: job.current_brand,
+      started_at: job.started_at,
+      completed_at: job.completed_at,
+      error: job.error_message,
+    });
+  } catch (err) {
+    console.error('[CI] GET analysis/status error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch analysis status' });
   }
 });
 
@@ -779,29 +1163,886 @@ app.post('/api/ci/scrape', async (req, res) => {
     return res.status(400).json({ error: 'Missing brand_name or platform' });
   }
 
-  const { spawn } = require('child_process');
-  const args = [
-    '-m', 'services.competitor-intel.scrape_runner',
-    '--platform', platform,
-    '--brand', brand_name,
-  ];
+  try {
+    const { spawn } = require('child_process');
+    const args = [
+      '-m', 'services.competitor_intel.scrape_runner',
+      '--platform', platform,
+      '--brand', brand_name,
+    ];
 
-  const repoRoot = path.resolve(__dirname, '..');
-  const pythonBin = process.env.PYTHON_BIN || 'python3.9';
-  const proc = spawn(pythonBin, args, {
-    cwd: repoRoot,
-    env: { ...process.env },
-    detached: true,
-    stdio: 'ignore',
-  });
-  proc.unref();
+    const repoRoot = path.resolve(__dirname, '..');
+    const pythonBin = process.env.PYTHON_BIN || 'python3';
+    const proc = spawn(pythonBin, args, {
+      cwd: repoRoot,
+      env: { ...process.env },
+      detached: true,
+      stdio: 'ignore',
+    });
+    proc.unref();
 
-  console.log(`[CI] Spawned scraper: ${platform} / ${brand_name} (pid ${proc.pid})`);
+    console.log(`[CI] Spawned scraper: ${platform} / ${brand_name} (pid ${proc.pid})`);
+    res.json({
+      status: 'started',
+      message: `Scraping ${brand_name} on ${platform}`,
+      pid: proc.pid,
+    });
+  } catch (err) {
+    console.error('[CI] POST scrape error:', err.message);
+    res.status(500).json({ error: 'Failed to start scraper' });
+  }
+});
+
+// POST /api/ci/ingest — receive scraped data from local agents or server scrapers
+app.post('/api/ci/ingest', async (req, res) => {
+  const {
+    platform,
+    brand_name,
+    scrape_tier,
+    agent_id,
+    brand_profile,
+    products,
+    raw_dimensions,
+  } = req.body;
+
+  if (!platform || !brand_name) {
+    return res.status(400).json({ error: 'Missing platform or brand_name' });
+  }
+
+  try {
+    // Save brand profile
+    if (brand_profile && Object.keys(brand_profile).length > 0) {
+      await pool.query(`
+        INSERT INTO scraped_brand_profiles
+          (platform, brand_name, follower_count, total_products, avg_price,
+           price_range, engagement_metrics, content_metrics, scrape_tier, raw_dimensions)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `, [
+        platform, brand_name,
+        brand_profile.follower_count || null,
+        brand_profile.total_products || null,
+        brand_profile.avg_price || null,
+        JSON.stringify(brand_profile.price_range || null),
+        JSON.stringify(brand_profile.engagement_metrics || null),
+        JSON.stringify(brand_profile.content_metrics || null),
+        scrape_tier || 'watchlist',
+        JSON.stringify(raw_dimensions || null),
+      ]);
+    }
+
+    // Save products
+    let productsSaved = 0;
+    if (products && products.length > 0) {
+      for (const p of products) {
+        await pool.query(`
+          INSERT INTO scraped_products
+            (platform, brand_name, product_id, product_name, price, original_price,
+             sales_volume, review_count, rating, category, material_tags,
+             image_urls, product_url, scrape_tier, data_confidence)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          ON CONFLICT (platform, product_id, scraped_date)
+          DO UPDATE SET price = EXCLUDED.price, sales_volume = EXCLUDED.sales_volume,
+                        review_count = EXCLUDED.review_count, scraped_at = NOW()
+        `, [
+          platform, brand_name,
+          p.product_id || `${brand_name}-${Date.now()}-${productsSaved}`,
+          p.product_name || '',
+          p.price || null, p.original_price || null,
+          p.sales_volume || null, p.review_count || null, p.rating || null,
+          p.category || null, p.material_tags || [],
+          p.image_urls || [], p.product_url || '',
+          scrape_tier || 'watchlist', 'direct_scrape',
+        ]);
+        productsSaved++;
+      }
+    }
+
+    console.log(`[INGEST] ${platform}/${brand_name}: profile=${!!brand_profile}, products=${productsSaved}, agent=${agent_id || 'unknown'}`);
+
+    res.json({ success: true, brand_name, platform, products_saved: productsSaved });
+
+    // Auto-trigger scoring in background (non-blocking)
+    setImmediate(async () => {
+      try {
+        const { rows: workspaces } = await pool.query(`
+          SELECT DISTINCT w.id FROM workspaces w
+          JOIN workspace_competitors wc ON wc.workspace_id = w.id
+          WHERE wc.brand_name = $1
+        `, [brand_name]);
+
+        if (workspaces.length > 0) {
+          const { spawn } = require('child_process');
+          const pythonBin = process.env.PYTHON_BIN || 'python3';
+          for (const ws of workspaces) {
+            spawn(pythonBin, [
+              '-m', 'services.competitor_intel.scoring_pipeline',
+              '--workspace-id', ws.id,
+            ], {
+              cwd: process.cwd().replace('/backend', ''),
+              env: { ...process.env },
+              detached: true,
+              stdio: 'ignore',
+            }).unref();
+          }
+          console.log(`[INGEST] Triggered scoring for ${workspaces.length} workspaces after ${brand_name} ingest`);
+
+          // After scoring, trigger alert detection (10s delay so scoring finishes first)
+          setTimeout(() => {
+            for (const ws of workspaces) {
+              spawn(pythonBin, [
+                '-m', 'services.competitor_intel.alert_detector',
+                '--workspace-id', ws.id,
+              ], {
+                cwd: process.cwd().replace('/backend', ''),
+                env: { ...process.env },
+                detached: true,
+                stdio: 'ignore',
+              }).unref();
+            }
+            console.log(`[INGEST] Triggered alert detection for ${workspaces.length} workspaces`);
+          }, 10000);
+        }
+      } catch (err) {
+        console.error('[INGEST] Scoring trigger failed:', err.message);
+      }
+    });
+
+  } catch (err) {
+    console.error('[INGEST] Error:', err.message);
+    res.status(500).json({ error: 'Failed to ingest data', detail: err.message });
+  }
+});
+
+// GET /api/ci/scrape-targets — list brands that need scraping
+app.get('/api/ci/scrape-targets', async (req, res) => {
+  const tier = req.query.tier || 'watchlist';
+  const platform = req.query.platform || 'xhs';
+
+  try {
+    // Get all unique brands at this tier across all workspaces
+    const { rows: brands } = await pool.query(`
+      SELECT DISTINCT wc.brand_name, wc.tier, wc.platform_ids
+      FROM workspace_competitors wc
+      WHERE wc.tier = $1
+      ORDER BY wc.brand_name
+    `, [tier]);
+
+    // Enrich with last scrape time so agents can skip fresh data
+    const targets = [];
+    for (const brand of brands) {
+      const { rows: lastScrape } = await pool.query(`
+        SELECT MAX(scraped_at) as last_scraped
+        FROM scraped_brand_profiles
+        WHERE brand_name = $1 AND platform = $2
+      `, [brand.brand_name, platform]);
+
+      targets.push({
+        brand_name: brand.brand_name,
+        tier: brand.tier,
+        keyword: (brand.platform_ids || {})[platform] || brand.brand_name,
+        last_scraped: lastScrape[0]?.last_scraped || null,
+      });
+    }
+
+    res.json({ targets, count: targets.length, platform, tier });
+  } catch (err) {
+    console.error('[CI] GET scrape-targets error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch scrape targets' });
+  }
+});
+
+// GET /api/ci/alerts — get alerts for a workspace
+app.get('/api/ci/alerts', async (req, res) => {
+  const { workspace_id, unread_only, limit } = req.query;
+  if (!workspace_id) return res.status(400).json({ error: 'Missing workspace_id' });
+
+  try {
+    let query = 'SELECT * FROM ci_alerts WHERE workspace_id = $1';
+    const params = [workspace_id];
+
+    if (unread_only === 'true') {
+      query += ' AND is_read = false';
+    }
+
+    query += ' ORDER BY created_at DESC';
+
+    const maxLimit = Math.min(parseInt(limit) || 20, 50);
+    query += ` LIMIT ${maxLimit}`;
+
+    const { rows } = await pool.query(query, params);
+
+    // Also get unread count
+    const { rows: countRows } = await pool.query(
+      'SELECT COUNT(*) as unread FROM ci_alerts WHERE workspace_id = $1 AND is_read = false',
+      [workspace_id]
+    );
+
+    res.json({
+      alerts: rows,
+      unread_count: parseInt(countRows[0].unread),
+      total_returned: rows.length,
+    });
+  } catch (err) {
+    console.error('[CI] GET alerts error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch alerts' });
+  }
+});
+
+// POST /api/ci/alerts/read — mark alerts as read
+app.post('/api/ci/alerts/read', async (req, res) => {
+  const { workspace_id, alert_ids } = req.body;
+
+  try {
+    if (alert_ids && alert_ids.length > 0) {
+      // Mark specific alerts as read
+      await pool.query(
+        'UPDATE ci_alerts SET is_read = true WHERE id = ANY($1) AND workspace_id = $2',
+        [alert_ids, workspace_id]
+      );
+    } else if (workspace_id) {
+      // Mark all as read for this workspace
+      await pool.query(
+        'UPDATE ci_alerts SET is_read = true WHERE workspace_id = $1 AND is_read = false',
+        [workspace_id]
+      );
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[CI] POST alerts/read error:', err.message);
+    res.status(500).json({ error: 'Failed to mark alerts as read' });
+  }
+});
+
+// GET /api/ci/alerts/count — just the unread count (lightweight, for nav badge)
+app.get('/api/ci/alerts/count', async (req, res) => {
+  const { workspace_id } = req.query;
+  if (!workspace_id) return res.status(400).json({ error: 'Missing workspace_id' });
+
+  try {
+    const { rows } = await pool.query(
+      'SELECT COUNT(*) as unread FROM ci_alerts WHERE workspace_id = $1 AND is_read = false',
+      [workspace_id]
+    );
+
+    res.json({ unread_count: parseInt(rows[0].unread) });
+  } catch (err) {
+    console.error('[CI] GET alerts/count error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch alert count' });
+  }
+});
+
+// GET /api/ci/trends — historical score data for trend charts
+// Query params: workspace_id, competitor, metric (momentum|threat|wtp), days (default 30)
+app.get('/api/ci/trends', async (req, res) => {
+  const { workspace_id, competitor, metric, days } = req.query;
+
+  if (!workspace_id || !competitor) {
+    return res.status(400).json({ error: 'Missing workspace_id or competitor' });
+  }
+
+  const metricType = metric || 'momentum';
+  const dayCount = Math.min(parseInt(days) || 30, 180); // Max 180 days
+
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        score,
+        analyzed_at::date as date,
+        metric_version
+      FROM analysis_results
+      WHERE workspace_id = $1
+        AND competitor_name = $2
+        AND metric_type = $3
+        AND analyzed_at > NOW() - make_interval(days => $4)
+      ORDER BY analyzed_at ASC
+    `, [workspace_id, competitor, metricType, dayCount]);
+
+    // Deduplicate by date (keep latest score per day)
+    const byDate = {};
+    for (const row of rows) {
+      const dateStr = row.date.toISOString().slice(0, 10);
+      byDate[dateStr] = {
+        date: dateStr,
+        value: parseFloat(row.score),
+        version: row.metric_version,
+      };
+    }
+
+    const dataPoints = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date));
+
+    res.json({
+      competitor,
+      metric: metricType,
+      days: dayCount,
+      data: dataPoints,
+      count: dataPoints.length,
+    });
+  } catch (err) {
+    console.error('[CI] GET trends error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch trends' });
+  }
+});
+
+// GET /api/ci/trends/summary — score changes for all competitors in a workspace
+// Returns: { competitors: [{ brand_name, momentum_current, momentum_7d_ago, momentum_direction, ... }] }
+app.get('/api/ci/trends/summary', async (req, res) => {
+  const { workspace_id } = req.query;
+  if (!workspace_id) return res.status(400).json({ error: 'Missing workspace_id' });
+
+  try {
+    // Get all competitors for this workspace
+    const { rows: competitors } = await pool.query(
+      'SELECT brand_name FROM workspace_competitors WHERE workspace_id = $1',
+      [workspace_id]
+    );
+
+    const summaries = [];
+
+    for (const comp of competitors) {
+      const summary = { brand_name: comp.brand_name };
+
+      for (const metric of ['momentum', 'threat', 'wtp']) {
+        // Current score (latest)
+        const { rows: current } = await pool.query(`
+          SELECT score FROM analysis_results
+          WHERE workspace_id = $1 AND competitor_name = $2 AND metric_type = $3
+          ORDER BY analyzed_at DESC LIMIT 1
+        `, [workspace_id, comp.brand_name, metric]);
+
+        // Score from ~7 days ago
+        const { rows: weekAgo } = await pool.query(`
+          SELECT score FROM analysis_results
+          WHERE workspace_id = $1 AND competitor_name = $2 AND metric_type = $3
+            AND analyzed_at < NOW() - INTERVAL '6 days'
+          ORDER BY analyzed_at DESC LIMIT 1
+        `, [workspace_id, comp.brand_name, metric]);
+
+        const currentScore = current[0] ? parseFloat(current[0].score) : null;
+        const pastScore = weekAgo[0] ? parseFloat(weekAgo[0].score) : null;
+
+        let direction = 'stable';
+        let change = 0;
+        if (currentScore !== null && pastScore !== null) {
+          change = currentScore - pastScore;
+          if (change > 2) direction = 'rising';
+          else if (change < -2) direction = 'falling';
+        }
+
+        summary[`${metric}_current`] = currentScore;
+        summary[`${metric}_7d_ago`] = pastScore;
+        summary[`${metric}_change`] = Math.round(change * 10) / 10;
+        summary[`${metric}_direction`] = direction;
+      }
+
+      summaries.push(summary);
+    }
+
+    res.json({ workspace_id, competitors: summaries });
+  } catch (err) {
+    console.error('[CI] GET trends/summary error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch trend summary' });
+  }
+});
+
+// POST /api/ci/deep-dive — request a full-depth analysis of one competitor
+app.post('/api/ci/deep-dive', async (req, res) => {
+  const { workspace_id, brand_name, platform } = req.body;
+
+  if (!workspace_id || !brand_name) {
+    return res.status(400).json({ error: 'Missing workspace_id or brand_name' });
+  }
+
+  try {
+    // Create a deep dive job record
+    const { rows } = await pool.query(`
+      INSERT INTO ci_deep_dive_jobs
+        (workspace_id, brand_name, platform, status)
+      VALUES ($1, $2, $3, 'queued')
+      RETURNING *
+    `, [workspace_id, brand_name, platform || 'all']);
+
+    const job = rows[0];
+
+    // Spawn the deep dive pipeline as a background process
+    const { spawn } = require('child_process');
+    const pythonBin = process.env.PYTHON_BIN || 'python3';
+
+    const proc = spawn(pythonBin, [
+      '-m', 'services.competitor_intel.deep_dive_runner',
+      '--job-id', job.id,
+      '--workspace-id', workspace_id,
+      '--brand', brand_name,
+      '--platform', platform || 'all',
+    ], {
+      cwd: process.cwd().replace('/backend', ''),
+      env: { ...process.env },
+      detached: true,
+      stdio: 'ignore',
+    });
+    proc.unref();
+
+    res.json({
+      job_id: job.id,
+      status: 'queued',
+      brand_name,
+      message: `Deep dive analysis started for ${brand_name}`,
+    });
+  } catch (err) {
+    console.error('[CI] POST deep-dive error:', err.message);
+    res.status(500).json({ error: 'Failed to start deep dive' });
+  }
+});
+
+// GET /api/ci/deep-dive/status — check deep dive job status
+app.get('/api/ci/deep-dive/status', async (req, res) => {
+  const { job_id, workspace_id, brand_name } = req.query;
+
+  let query, params;
+  if (job_id) {
+    query = 'SELECT * FROM ci_deep_dive_jobs WHERE id = $1';
+    params = [job_id];
+  } else if (workspace_id && brand_name) {
+    query = 'SELECT * FROM ci_deep_dive_jobs WHERE workspace_id = $1 AND brand_name = $2 ORDER BY created_at DESC LIMIT 1';
+    params = [workspace_id, brand_name];
+  } else {
+    return res.status(400).json({ error: 'Missing job_id or workspace_id+brand_name' });
+  }
+
+  try {
+    const { rows } = await pool.query(query, params);
+
+    if (rows.length === 0) {
+      return res.json({ status: 'none', message: 'No deep dive has been run for this competitor' });
+    }
+
+    const job = rows[0];
+    res.json({
+      job_id: job.id,
+      brand_name: job.brand_name,
+      platform: job.platform,
+      status: job.status,
+      started_at: job.started_at,
+      completed_at: job.completed_at,
+      error: job.error_message,
+      result_summary: job.result_summary,
+    });
+  } catch (err) {
+    console.error('[CI] GET deep-dive/status error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch deep dive status' });
+  }
+});
+
+// GET /api/ci/deep-dive/result — get the full deep dive data for a brand
+app.get('/api/ci/deep-dive/result', async (req, res) => {
+  const { workspace_id, brand_name } = req.query;
+  if (!workspace_id || !brand_name) {
+    return res.status(400).json({ error: 'Missing workspace_id or brand_name' });
+  }
+
+  try {
+    // Get latest deep dive profile
+    const { rows: profiles } = await pool.query(`
+      SELECT * FROM scraped_brand_profiles
+      WHERE brand_name = $1 AND scrape_tier = 'deep_dive'
+      ORDER BY scraped_at DESC LIMIT 1
+    `, [brand_name]);
+
+    // Get deep dive products
+    const { rows: products } = await pool.query(`
+      SELECT * FROM scraped_products
+      WHERE brand_name = $1 AND scrape_tier = 'deep_dive'
+      ORDER BY scraped_at DESC LIMIT 50
+    `, [brand_name]);
+
+    // Get all scores
+    const { rows: scores } = await pool.query(`
+      SELECT metric_type, score, raw_inputs, ai_narrative, analyzed_at
+      FROM analysis_results
+      WHERE workspace_id = $1 AND competitor_name = $2
+      ORDER BY analyzed_at DESC
+    `, [workspace_id, brand_name]);
+
+    // Get per-brand insight
+    const { rows: insights } = await pool.query(`
+      SELECT ai_narrative FROM analysis_results
+      WHERE workspace_id = $1 AND competitor_name = $2 AND metric_type = 'brand_insight'
+      ORDER BY analyzed_at DESC LIMIT 1
+    `, [workspace_id, brand_name]);
+
+    // Deduplicate scores by metric type (latest only)
+    const latestScores = {};
+    for (const s of scores) {
+      if (!latestScores[s.metric_type]) {
+        latestScores[s.metric_type] = s;
+      }
+    }
+
+    res.json({
+      brand_name,
+      profile: profiles[0] || null,
+      products,
+      scores: latestScores,
+      insight: insights[0]?.ai_narrative || null,
+      raw_dimensions: profiles[0]?.raw_dimensions || null,
+      last_deep_dive: profiles[0]?.scraped_at || null,
+    });
+  } catch (err) {
+    console.error('[CI] GET deep-dive/result error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch deep dive result' });
+  }
+});
+
+// GET /api/ci/brand-insights — per-brand AI insights for a workspace
+app.get('/api/ci/brand-insights', async (req, res) => {
+  const { workspace_id } = req.query;
+  if (!workspace_id) return res.status(400).json({ error: 'Missing workspace_id' });
+
+  try {
+    const { rows } = await pool.query(`
+      SELECT DISTINCT ON (competitor_name)
+        competitor_name, ai_narrative, analyzed_at
+      FROM analysis_results
+      WHERE workspace_id = $1 AND metric_type = 'brand_insight' AND ai_narrative IS NOT NULL
+      ORDER BY competitor_name, analyzed_at DESC
+    `, [workspace_id]);
+
+    res.json(rows);
+  } catch (err) {
+    console.error('[CI] GET brand-insights error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch brand insights' });
+  }
+});
+
+// ── LLM Helper ──────────────────────────────────────────────────────────────
+async function callLLM(prompt, maxTokens = 1000) {
+  const deepseekKey = process.env.DEEPSEEK_API_KEY;
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+
+  if (deepseekKey) {
+    try {
+      const baseUrl = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '');
+      const url = baseUrl.includes('/chat/completions') ? baseUrl : `${baseUrl}/v1/chat/completions`;
+
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${deepseekKey}` },
+        body: JSON.stringify({
+          model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: maxTokens,
+        }),
+      });
+
+      if (!resp.ok) {
+        const errText = await resp.text().catch(() => 'unknown');
+        console.error(`[callLLM] DeepSeek HTTP ${resp.status}: ${errText.slice(0, 200)}`);
+        throw new Error(`DeepSeek API returned ${resp.status}`);
+      }
+
+      const data = await resp.json();
+      return data.choices?.[0]?.message?.content || '';
+    } catch (err) {
+      console.error('[callLLM] DeepSeek failed:', err.message);
+      // Fall through to Anthropic if available
+      if (!anthropicKey) throw err;
+    }
+  }
+
+  if (anthropicKey) {
+    try {
+      const client = new Anthropic({ apiKey: anthropicKey });
+      const msg = await client.messages.create({
+        model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+        max_tokens: maxTokens,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      return msg.content[0].text;
+    } catch (err) {
+      console.error('[callLLM] Anthropic failed:', err.message);
+      throw err;
+    }
+  }
+
+  throw new Error('No LLM API key configured (DEEPSEEK_API_KEY or ANTHROPIC_API_KEY)');
+}
+
+// POST /api/ci/resolve-brand — auto-detect platform identifiers for a brand name
+app.post('/api/ci/resolve-brand', async (req, res) => {
+  const { brand_name } = req.body;
+  if (!brand_name) return res.status(400).json({ error: 'Missing brand_name' });
+
+  try {
+    // Step 1: Check if we've seen this brand before (any workspace)
+    const { rows: existing } = await pool.query(`
+      SELECT platform_ids FROM workspace_competitors
+      WHERE brand_name = $1 AND platform_ids IS NOT NULL
+      LIMIT 1
+    `, [brand_name]);
+
+    if (existing.length > 0 && existing[0].platform_ids) {
+      return res.json({
+        brand_name,
+        platform_ids: existing[0].platform_ids,
+        source: 'database',
+      });
+    }
+
+    // Step 2: Check against the known brand registry
+    const match = getKnownBrands().find(b =>
+      b.name === brand_name || b.name_en === brand_name ||
+      b.name.toLowerCase() === brand_name.toLowerCase() ||
+      (b.name_en && b.name_en.toLowerCase() === brand_name.toLowerCase())
+    );
+
+    if (match) {
+      return res.json({
+        brand_name,
+        platform_ids: {
+          xhs: match.xhs_keyword || brand_name,
+          douyin: match.douyin_keyword || brand_name,
+          taobao: match.tmall_store || null,
+        },
+        source: 'registry',
+        badge: match.badge,
+      });
+    }
+
+    // Step 3: Default — use brand name as keyword for all platforms
+    res.json({
+      brand_name,
+      platform_ids: {
+        xhs: brand_name,
+        douyin: brand_name,
+        taobao: null,
+      },
+      source: 'default',
+    });
+  } catch (err) {
+    console.error('[CI] POST resolve-brand error:', err.message);
+    res.status(500).json({ error: 'Failed to resolve brand' });
+  }
+});
+
+// POST /api/ci/parse-link — extract platform + brand from a URL
+app.post('/api/ci/parse-link', async (req, res) => {
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ error: 'Missing url' });
+
+  let platform = null;
+  let identifier = null;
+  let brand_name = null;
+
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    const urlPath = parsed.pathname;
+
+    // ── XHS (xiaohongshu.com, xhslink.com) ──
+    if (host.includes('xiaohongshu.com') || host.includes('xhslink.com')) {
+      platform = 'xhs';
+
+      // Profile URL: /user/profile/62848d2700000000210271174?xsec_token=...
+      const userMatch = urlPath.match(/\/user\/profile\/([a-zA-Z0-9]+)/);
+      if (userMatch) identifier = userMatch[1];
+
+      // Note/explore URL: /explore/6789abc
+      const noteMatch = urlPath.match(/\/explore\/([a-zA-Z0-9]+)/);
+      if (noteMatch) identifier = noteMatch[1];
+
+      // Search URL: /search_result?keyword=Songmont
+      const kwMatch = parsed.searchParams.get('keyword');
+      if (kwMatch) { identifier = kwMatch; brand_name = kwMatch; }
+
+      // Short link (xhslink.com/abc123) — just detect platform
+      if (host.includes('xhslink.com') && !identifier) {
+        identifier = urlPath.replace(/^\//, '') || null;
+      }
+    }
+    // ── Taobao / Tmall ──
+    else if (host.includes('taobao.com') || host.includes('tmall.com')) {
+      platform = 'taobao';
+
+      // Subdomain shop: shop123456.taobao.com or songmont.tmall.com
+      const subdomain = host.split('.')[0];
+      if (subdomain && subdomain !== 'www' && subdomain !== 'item' && subdomain !== 'detail') {
+        identifier = subdomain;
+        brand_name = subdomain.replace(/^shop/, '');
+      }
+
+      // Path shop: /shop/xxx
+      const shopMatch = urlPath.match(/\/shop\/([^\/\?]+)/);
+      if (shopMatch) identifier = shopMatch[1];
+
+      // Item ID: ?id=12345
+      const itemMatch = parsed.searchParams.get('id');
+      if (itemMatch) identifier = itemMatch;
+    }
+    // ── Douyin ──
+    else if (host.includes('douyin.com')) {
+      platform = 'douyin';
+
+      // User profile: /user/MS4wLjABAAAA... (base64 IDs with special chars)
+      const userMatch = urlPath.match(/\/user\/([a-zA-Z0-9_\-]+)/);
+      if (userMatch) identifier = userMatch[1];
+
+      // Search: /search/品牌名
+      const kwMatch = urlPath.match(/\/search\/([^\/\?]+)/);
+      if (kwMatch) { identifier = decodeURIComponent(kwMatch[1]); brand_name = identifier; }
+    }
+    // ── JD ──
+    else if (host.includes('jd.com')) {
+      platform = 'jd';
+      const shopMatch = urlPath.match(/\/([a-zA-Z0-9]+)\.html/);
+      if (shopMatch) identifier = shopMatch[1];
+    }
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid URL', detail: e.message });
+  }
+
+  if (!platform) {
+    return res.json({ parsed: false, error: 'Unrecognized platform URL' });
+  }
+
   res.json({
-    status: 'started',
-    message: `Scraping ${brand_name} on ${platform}`,
-    pid: proc.pid,
+    parsed: true,
+    platform,
+    identifier,
+    brand_name,
+    platform_ids: { [platform]: identifier },
   });
+});
+
+// POST /api/ci/suggest-competitors — AI-powered competitor suggestions
+app.post('/api/ci/suggest-competitors', async (req, res) => {
+  const { brand_name, brand_category, brand_price_range, brand_platforms } = req.body;
+
+  if (!brand_name || !brand_category) {
+    return res.status(400).json({ error: 'Missing brand_name or brand_category' });
+  }
+
+  const priceStr = brand_price_range
+    ? `¥${brand_price_range.min}-${brand_price_range.max}`
+    : 'unknown';
+
+  try {
+    // Get existing tracked brands for context
+    const { rows: existingBrands } = await pool.query(`
+      SELECT DISTINCT brand_name FROM scraped_brand_profiles
+      UNION
+      SELECT DISTINCT brand_name FROM workspace_competitors
+      ORDER BY brand_name
+    `);
+    const knownNames = existingBrands.map(r => r.brand_name);
+
+    // Filter registry brands to same category (if any match)
+    const sameCategoryBrands = KNOWN_BRANDS.filter(b => b.category === brand_category);
+    const registrySection = sameCategoryBrands.length > 0
+      ? `Some known brands in our database for the "${brand_category}" category:\n${sameCategoryBrands.map(b => `${b.name} (${b.badge}, ${b.name_en || ''})`).join(', ')}`
+      : `Our database currently has brands in the 女包 category only. No pre-loaded brands for "${brand_category}".`;
+
+    const prompt = `You are a competitive intelligence analyst for the Chinese consumer goods market.
+
+A brand is setting up competitive tracking. Here is their profile:
+- Brand name: ${brand_name}
+- Category: ${brand_category}
+- Price range: ${priceStr}
+- Platforms: ${JSON.stringify(brand_platforms || [])}
+
+${registrySection}
+
+Other brands currently being tracked by users: ${knownNames.join(', ')}
+
+IMPORTANT RULES:
+1. You MUST suggest competitors in the "${brand_category}" category ONLY. Do NOT suggest brands from other categories.
+2. You are NOT limited to our database — suggest any real, well-known brand that competes in "${brand_category}" within the ${priceStr} price range in the Chinese market.
+3. All suggested brands must be real brands that actually exist and sell products on Chinese e-commerce platforms.
+
+Suggest 5-8 competitors they should track. For each, explain in one sentence WHY they should track this competitor (in Chinese/简体中文).
+
+Prioritize:
+1. Direct price-range competitors (same category, similar pricing)
+2. Aspirational competitors (same category, higher tier)
+3. Emerging threats (same category, growing fast)
+
+Respond in this exact JSON format, no markdown:
+{
+  "suggestions": [
+    {"brand_name": "...", "reason": "...理由...", "priority": "high|medium|low", "group": "direct|aspirational|emerging"}
+  ]
+}`;
+
+    const llmResponse = await callLLM(prompt);
+
+    let suggestions;
+    try {
+      const raw = llmResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      suggestions = JSON.parse(raw).suggestions || [];
+    } catch {
+      suggestions = [];
+    }
+
+    // Enrich with platform_ids from registry
+    const registry = getKnownBrands();
+    for (const s of suggestions) {
+      const match = registry.find(b => b.name === s.brand_name || b.name_en === s.brand_name);
+      if (match) {
+        s.platform_ids = {
+          xhs: match.xhs_keyword,
+          douyin: match.douyin_keyword,
+          taobao: match.tmall_store || null,
+        };
+        s.badge = match.badge;
+      }
+    }
+
+    res.json({ suggestions, count: suggestions.length });
+  } catch (err) {
+    console.error('[SUGGEST] AI suggestion failed:', err.message);
+
+    // Fallback: return known brands only if they match the user's category
+    const sameCat = KNOWN_BRANDS.filter(b => b.category === brand_category);
+    const fallback = sameCat.slice(0, 5).map((b, idx) => ({
+      brand_name: b.name,
+      reason: `${b.badge} — 同品类品牌`,
+      priority: idx === 0 ? 'high' : idx < 3 ? 'medium' : 'low',
+      group: b.badge?.includes('国货') ? 'direct' : b.badge?.includes('轻奢') ? 'aspirational' : 'indirect',
+      platform_ids: { xhs: b.xhs_keyword, douyin: b.douyin_keyword },
+      badge: b.badge,
+    }));
+
+    // If no category-matching brands in registry, return empty with helpful message
+    if (fallback.length === 0) {
+      return res.json({
+        suggestions: [],
+        count: 0,
+        source: 'fallback',
+        message: `暂无"${brand_category}"品类的预置品牌数据。AI推荐暂时不可用，请使用搜索或粘贴链接添加竞品。`,
+      });
+    }
+
+    res.json({ suggestions: fallback, count: fallback.length, source: 'fallback' });
+  }
+});
+
+// GET /api/ci/brands/search — search known brands for autocomplete
+app.get('/api/ci/brands/search', async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q || q.length < 1) return res.json({ brands: [] });
+
+    const results = searchBrands(q).map(b => ({
+      brand_name: b.name,
+      name_en: b.name_en,
+      badge: b.badge,
+      platform_ids: { xhs: b.xhs_keyword, douyin: b.douyin_keyword, taobao: b.tmall_store },
+    }));
+
+    res.json({ brands: results, count: results.length });
+  } catch (err) {
+    console.error('[CI] GET brands/search error:', err.message);
+    res.status(500).json({ error: 'Failed to search brands' });
+  }
 });
 
 // ── Start server ────────────────────────────────────────────────────────────
