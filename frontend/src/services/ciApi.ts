@@ -446,6 +446,77 @@ export async function markAlertsRead(workspaceId: string, alertIds?: string[]): 
   });
 }
 
+// ─── Intelligence Layer ────────────────────────────────────────────
+
+export interface MetricSummary {
+  score: number;
+  ai_narrative: string;
+  analyzed_at?: string;
+}
+
+export interface CompetitorSummary {
+  brand_name: string;
+  metrics: Record<string, MetricSummary>; // keyed by metric_type
+}
+
+export interface IntelligenceSummary {
+  competitors: CompetitorSummary[];
+  executive_summary: string;
+  last_updated: string;
+}
+
+export interface MetricDetail extends MetricSummary {
+  raw_inputs: any;
+}
+
+/**
+ * Reorganizes existing getDashboard() API data into per-competitor metric maps.
+ * No new endpoint needed — piggybacks on /api/ci/dashboard which already returns
+ * all metric_types as a flat array when source === 'api'.
+ */
+export async function getIntelligenceSummary(workspaceId?: string): Promise<IntelligenceSummary | null> {
+  const { data: dashboard, source } = await getDashboard(workspaceId);
+  if (source !== 'api') return null; // no real intelligence data without live API
+
+  const byCompetitor: Record<string, Record<string, MetricSummary>> = {};
+  for (const entry of (dashboard.brands as any[])) {
+    if (!entry.metric_type) continue; // skip legacy BrandScore shape entries
+    const name: string = entry.competitor_name ?? entry.brand_name;
+    if (!name) continue;
+    if (!byCompetitor[name]) byCompetitor[name] = {};
+    byCompetitor[name][entry.metric_type] = {
+      score: entry.score ?? 0,
+      ai_narrative: entry.ai_narrative ?? '',
+      analyzed_at: entry.analyzed_at,
+    };
+  }
+
+  const competitors = Object.entries(byCompetitor).map(([brand_name, metrics]) => ({
+    brand_name,
+    metrics,
+  }));
+
+  return {
+    competitors,
+    executive_summary: dashboard.narrative ?? '',
+    last_updated: dashboard.last_updated ?? new Date().toISOString(),
+  };
+}
+
+/**
+ * Fetches raw_inputs for a specific competitor's metrics.
+ * Requires William to add GET /api/ci/intelligence/detail to server.js.
+ * Returns null gracefully until the endpoint is live.
+ */
+export async function getIntelligenceDetail(
+  workspaceId: string,
+  brandName: string,
+): Promise<Record<string, MetricDetail> | null> {
+  return tryApi<Record<string, MetricDetail>>(
+    `/intelligence/detail?workspace_id=${encodeURIComponent(workspaceId)}&brand_name=${encodeURIComponent(brandName)}`,
+  );
+}
+
 // ─── Demo Data (last resort fallback) ─────────────────────────────
 
 const DEMO_DATA: DashboardData = {

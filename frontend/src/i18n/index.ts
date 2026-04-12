@@ -236,6 +236,31 @@ export const T = {
     foundOn: { en: "Found on", zh: "已在以下平台找到" },
     analysisStartedBanner: { en: "Analysis in progress — scores and insights will appear here when complete.", zh: "分析进行中——评分和洞察完成后将显示在此处。" },
     runFirstAnalysis: { en: "Run your first analysis in Settings to see AI-powered competitive insights.", zh: "在设置中运行首次分析，查看AI驱动的竞品洞察。" },
+
+    // Intelligence page (Wave 1–3)
+    intelligence: { en: "Intelligence", zh: "竞品洞察" },
+    intelligenceTitle: { en: "Competitive Intelligence", zh: "竞品洞察总览" },
+    executiveSummary: { en: "AI Executive Summary", zh: "AI战略摘要" },
+    consumerIntel: { en: "Consumer Intelligence", zh: "消费者洞察" },
+    productIntel: { en: "Product Intelligence", zh: "产品洞察" },
+    marketingIntel: { en: "Marketing Intelligence", zh: "营销洞察" },
+    compareMode: { en: "Compare brands side-by-side", zh: "品牌横向对比" },
+    viewDetails: { en: "View details →", zh: "查看详情 →" },
+    noIntelligenceData: { en: "No analysis data yet — run a deep dive first.", zh: "暂无分析数据，请先运行深度分析。" },
+    // Metric labels
+    metricKeywords: { en: "Keywords", zh: "关键词分析" },
+    metricMindshare: { en: "Consumer Mindshare", zh: "消费心智" },
+    metricHotProducts: { en: "Hot Products", zh: "热门商品" },
+    metricDesign: { en: "Design DNA", zh: "设计基因" },
+    metricPrice: { en: "Price Positioning", zh: "价格定位" },
+    metricLaunch: { en: "Launch Pace", zh: "新品节奏" },
+    metricVoice: { en: "Brand Voice", zh: "品牌声量" },
+    metricContent: { en: "Content Strategy", zh: "内容策略" },
+    metricKol: { en: "KOL Strategy", zh: "KOL策略" },
+    // Intelligence states
+    wave4Coming: { en: "Coming in Wave 4", zh: "Wave 4 即将上线" },
+    runDeepDiveToUnlock: { en: "Run deep dive to unlock", zh: "运行深度分析解锁" },
+    detailLoading: { en: "Detailed data loading — backend endpoint coming soon.", zh: "详细数据加载中，后端接口即将上线。" },
   },
 
   // ── Home ────────────────────────────────────────────────────────
