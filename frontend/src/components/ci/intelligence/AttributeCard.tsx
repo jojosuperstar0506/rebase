@@ -246,7 +246,7 @@ function RawDataPreview({ rawInputs, config, C, lang }: {
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             padding: '4px 0', fontSize: 12, color: C.t2,
           }}>
-            <span>{i + 1}. {(p.name || p.product_name || '').slice(0, 30)}</span>
+            <span>{i + 1}. {(p.product_name || p.name || '').slice(0, 30)}</span>
             <span style={{ fontWeight: 600, color: C.tx }}>
               {p.price ? `¥${p.price}` : ''} {p.sales ? `· ${p.sales}销` : ''}
             </span>
@@ -257,6 +257,144 @@ function RawDataPreview({ rawInputs, config, C, lang }: {
   }
 
   // Voice volume: show growth rates
+  if (rawInputs.follower_growth !== undefined && rawInputs.voice_share_pct !== undefined) {
+    return (
+      <div style={{ marginTop: 10, display: 'flex', gap: 16, fontSize: 12 }}>
+        <GrowthStat label={lang === 'zh' ? '粉丝增长' : 'Followers'} value={rawInputs.follower_growth} color={config.color} C={C} />
+        <GrowthStat label={lang === 'zh' ? '内容增长' : 'Content'} value={rawInputs.content_growth} color={config.color} C={C} />
+        <GrowthStat label={lang === 'zh' ? '互动增长' : 'Engagement'} value={rawInputs.engagement_growth} color={config.color} C={C} />
+      </div>
+    );
+  }
+
+  // Price positioning: show price band distribution + key stats
+  if (rawInputs.price_band_distribution) {
+    const bands = rawInputs.price_band_distribution as Record<string, number>;
+    const maxBand = Math.max(...Object.values(bands), 1);
+    return (
+      <div style={{ marginTop: 10 }}>
+        <div style={{ fontSize: 11, color: C.t3, marginBottom: 6 }}>
+          {lang === 'zh' ? '价格带分布' : 'Price Band Distribution'}
+        </div>
+        <div style={{ display: 'flex', gap: 3, alignItems: 'flex-end', height: 36, marginBottom: 6 }}>
+          {Object.entries(bands).map(([band, count]) => (
+            <div key={band} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              <div style={{
+                width: '100%', background: config.color,
+                height: Math.max(2, (count / maxBand) * 30), borderRadius: 2,
+                opacity: count > 0 ? 1 : 0.15,
+              }} />
+              <span style={{ fontSize: 8, color: C.t3 }}>{band.replace('-', '–')}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 12, fontSize: 11, color: C.t2 }}>
+          <span>{lang === 'zh' ? '均价' : 'Avg'}: <b style={{ color: C.tx }}>¥{rawInputs.avg_price}</b></span>
+          <span>{lang === 'zh' ? '溢价占比' : 'Premium'}: <b style={{ color: config.color }}>{rawInputs.premium_ratio}%</b></span>
+          <span>{lang === 'zh' ? '折扣深度' : 'Discount'}: <b style={{ color: rawInputs.avg_discount_depth > 20 ? '#ef4444' : '#22c55e' }}>{rawInputs.avg_discount_depth}%</b></span>
+        </div>
+      </div>
+    );
+  }
+
+  // Launch frequency: show recent launches + pace
+  if (rawInputs.total_launches_90d !== undefined) {
+    const recent = (rawInputs.recent_launches as any[] || []).slice(0, 4);
+    return (
+      <div style={{ marginTop: 10 }}>
+        <div style={{ display: 'flex', gap: 14, fontSize: 11, color: C.t2, marginBottom: 6 }}>
+          <span>{lang === 'zh' ? '90天新品' : '90d Launches'}: <b style={{ color: C.tx }}>{rawInputs.total_launches_90d}</b></span>
+          <span>{lang === 'zh' ? '周均' : 'Avg/wk'}: <b style={{ color: C.tx }}>{rawInputs.avg_per_week}</b></span>
+          <span style={{ color: rawInputs.acceleration_pct > 0 ? '#22c55e' : rawInputs.acceleration_pct < -10 ? '#ef4444' : C.t3 }}>
+            {rawInputs.acceleration_pct > 0 ? '↑' : rawInputs.acceleration_pct < -10 ? '↓' : '→'} {rawInputs.acceleration_pct}%
+          </span>
+        </div>
+        {recent.length > 0 && (
+          <div style={{ fontSize: 11 }}>
+            {recent.map((r: any, i: number) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: C.t2 }}>
+                <span>{(r.name || '').slice(0, 35)}{(r.name || '').length > 35 ? '...' : ''}</span>
+                <span style={{ color: C.t3, fontSize: 10 }}>{r.date}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Consumer mindshare: show social engagement + sentiment
+  if (rawInputs.engagement_share_pct !== undefined) {
+    const sentimentPct = Math.round((rawInputs.sentiment_ratio || 0.5) * 100);
+    const posKw = (rawInputs.positive_keywords as string[] || []).slice(0, 4);
+    const negKw = (rawInputs.negative_keywords as string[] || []).slice(0, 3);
+    return (
+      <div style={{ marginTop: 10 }}>
+        <div style={{ display: 'flex', gap: 16, fontSize: 12, marginBottom: 6 }}>
+          <div>
+            <div style={{ color: C.t3, fontSize: 11 }}>{lang === 'zh' ? '互动占比' : 'Engagement Share'}</div>
+            <div style={{ fontWeight: 600, color: config.color, fontSize: 13 }}>{rawInputs.engagement_share_pct}%</div>
+          </div>
+          <div>
+            <div style={{ color: C.t3, fontSize: 11 }}>{lang === 'zh' ? '好感度' : 'Sentiment'}</div>
+            <div style={{ fontWeight: 600, color: sentimentPct >= 60 ? '#22c55e' : sentimentPct >= 40 ? '#f59e0b' : '#ef4444', fontSize: 13 }}>
+              {sentimentPct}% {sentimentPct >= 60 ? '👍' : sentimentPct >= 40 ? '😐' : '👎'}
+            </div>
+          </div>
+          <div>
+            <div style={{ color: C.t3, fontSize: 11 }}>{lang === 'zh' ? '篇均评论' : 'Avg Comments'}</div>
+            <div style={{ fontWeight: 600, color: C.tx, fontSize: 13 }}>{rawInputs.avg_comments_per_note || 0}</div>
+          </div>
+        </div>
+        {(posKw.length > 0 || negKw.length > 0) && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, fontSize: 10 }}>
+            {posKw.map((k: string) => (
+              <span key={k} style={{ padding: '2px 6px', borderRadius: 3, background: '#22c55e18', color: '#22c55e' }}>{k}</span>
+            ))}
+            {negKw.map((k: string) => (
+              <span key={k} style={{ padding: '2px 6px', borderRadius: 3, background: '#ef444418', color: '#ef4444' }}>{k}</span>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Content strategy: show engagement efficiency + content types
+  if (rawInputs.engagement_per_note !== undefined && rawInputs.total_notes !== undefined) {
+    const topContent = (rawInputs.top_content as any[] || []).slice(0, 3);
+    return (
+      <div style={{ marginTop: 10 }}>
+        <div style={{ display: 'flex', gap: 16, fontSize: 12, marginBottom: 6 }}>
+          <div>
+            <div style={{ color: C.t3, fontSize: 11 }}>{lang === 'zh' ? '内容总数' : 'Posts'}</div>
+            <div style={{ fontWeight: 600, color: C.tx, fontSize: 13 }}>{rawInputs.total_notes.toLocaleString()}</div>
+          </div>
+          <div>
+            <div style={{ color: C.t3, fontSize: 11 }}>{lang === 'zh' ? '篇均互动' : 'Eng/Post'}</div>
+            <div style={{ fontWeight: 600, color: config.color, fontSize: 13 }}>{Math.round(rawInputs.engagement_per_note).toLocaleString()}</div>
+          </div>
+          <div>
+            <div style={{ color: C.t3, fontSize: 11 }}>{lang === 'zh' ? '内容类型' : 'Types'}</div>
+            <div style={{ fontWeight: 600, color: C.tx, fontSize: 13 }}>{rawInputs.n_content_types || 0}</div>
+          </div>
+        </div>
+        {topContent.length > 0 && (
+          <div style={{ fontSize: 11 }}>
+            <div style={{ color: C.t3, marginBottom: 3 }}>{lang === 'zh' ? '热门内容' : 'Top Content'}</div>
+            {topContent.map((c: any, i: number) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: C.t2 }}>
+                <span>{(c.title || '').slice(0, 30)}{(c.title || '').length > 30 ? '...' : ''}</span>
+                <span style={{ color: config.color, fontWeight: 600, fontSize: 10 }}>♥ {c.likes || 0}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Fallback: voice volume growth without share (backwards compat)
   if (rawInputs.follower_growth !== undefined) {
     return (
       <div style={{ marginTop: 10, display: 'flex', gap: 16, fontSize: 12 }}>

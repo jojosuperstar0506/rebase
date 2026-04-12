@@ -92,6 +92,14 @@ else
   log "Step 4: Alert detection failed"
 fi
 
+# Step 5: Data retention cleanup (keeps DB lean)
+log "Step 5: Running data retention cleanup..."
+if psql "$DATABASE_URL" -f "$REPO_DIR/backend/migrations/005_data_retention.sql" >> "$LOG_FILE" 2>&1; then
+  log "Step 5: Data cleanup complete"
+else
+  log "Step 5: Data cleanup failed (non-critical)"
+fi
+
 # Write status: complete
 WORKSPACE_COUNT=$($PYTHON -c "
 from services.competitor_intel.db_bridge import get_conn

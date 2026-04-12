@@ -67,31 +67,98 @@ async def scrape_brand(platform: str, brand_name: str, keyword: str, tier: str, 
                     },
                     'd3': {
                         'content_types': getattr(result, 'd3_content_types', None),
-                        'top_notes': getattr(result, 'd3_top_notes', []),
+                        'top_notes': [
+                            {
+                                'title': n.get('title', ''),
+                                'body_text': n.get('body_text', ''),
+                                'likes': n.get('likes', 0),
+                                'comments_count': n.get('comments_count', 0),
+                                'shares': n.get('shares', 0),
+                                'hashtags': n.get('hashtags', []),
+                                'tagged_products': n.get('tagged_products', []),
+                                'is_sponsored': n.get('is_sponsored', False),
+                                'brand_collab': n.get('brand_collab', ''),
+                                'author_followers': n.get('author_followers', 0),
+                                'image_count': n.get('image_count', 0),
+                                'top_comments': n.get('top_comments', [])[:5],
+                                'note_id': n.get('note_id', ''),
+                                'type': n.get('type', ''),
+                            }
+                            for n in getattr(result, 'd3_top_notes', [])[:50]
+                        ],
+                        'catalog_size': len(getattr(result, 'full_note_catalog', [])),
                     },
                     'd4': {
                         'kols': getattr(result, 'd4_top_kols', []),
+                        # Extract KOL-like authors from enriched notes (followers > 10k)
+                        'note_authors': [
+                            {
+                                'name': n.get('author_name', n.get('author', '')),
+                                'followers': n.get('author_followers', 0),
+                                'is_sponsored': n.get('is_sponsored', False),
+                            }
+                            for n in getattr(result, 'full_note_catalog', [])
+                            if n.get('author_followers', 0) > 10000
+                        ][:20],
                     },
                     'd6': {
                         'sentiment_keywords': getattr(result, 'd6_sentiment_keywords', []),
+                        'positive_keywords': getattr(result, 'd6_positive_keywords', []),
+                        'negative_keywords': getattr(result, 'd6_negative_keywords', []),
+                        # Real consumer comments from enriched notes
+                        'consumer_comments': [
+                            comment
+                            for n in getattr(result, 'd3_top_notes', [])[:20]
+                            for comment in (n.get('top_comments', []) or [])[:3]
+                        ][:30],
                     },
                 },
             }
 
             save_brand_profile(platform, brand_name, data, scrape_tier=tier)
 
-            # Save top notes as products if available
-            top_notes = getattr(result, 'd3_top_notes', [])
-            if top_notes:
+            # Save full note catalog as products (if available), fallback to top notes
+            full_catalog = getattr(result, 'full_note_catalog', [])
+            notes_to_save = full_catalog if full_catalog else getattr(result, 'd3_top_notes', [])
+
+            if notes_to_save:
+                def parse_int(val, default=0):
+                    """Safely parse string/int like counts."""
+                    if isinstance(val, int):
+                        return val
+                    try:
+                        s = str(val).strip().replace(',', '')
+                        if '万' in s or 'w' in s.lower():
+                            return int(float(s.replace('万', '').replace('w', '').replace('W', '')) * 10000)
+                        return int(s)
+                    except (ValueError, TypeError):
+                        return default
+
                 products = [{
                     'product_id': note.get('note_id', f'{brand_name}-{i}'),
                     'product_name': note.get('title', ''),
-                    'sales_volume': note.get('likes', 0),
-                    'review_count': note.get('comments', 0),
-                    'product_url': note.get('url', ''),
+                    'sales_volume': parse_int(note.get('likes', 0)),
+                    'review_count': parse_int(note.get('comments', note.get('comments_count', 0))),
+                    'product_url': f"https://www.xiaohongshu.com/explore/{note.get('note_id', '')}" if note.get('note_id') else '',
+                    'image_urls': note.get('image_urls', [note['cover_url']] if note.get('cover_url') else []),
+                    'category': ', '.join(note.get('hashtags', [])[:5]) if note.get('hashtags') else None,
                     'data_confidence': 'direct_scrape',
-                } for i, note in enumerate(top_notes)]
+                } for i, note in enumerate(notes_to_save)]
                 save_products(platform, brand_name, products, scrape_tier=tier)
+                print(f"  Saved {len(products)} brand notes (source: {'full_catalog' if full_catalog else 'search_top'})")
+
+            # Also save UGC notes (consumer posts ABOUT the brand)
+            ugc_notes = getattr(result, 'd6_ugc_sample_notes', [])
+            if ugc_notes:
+                ugc_products = [{
+                    'product_id': f"ugc-{brand_name}-{i}",
+                    'product_name': note.get('title', ''),
+                    'sales_volume': parse_int(note.get('likes', 0)),
+                    'category': f"ugc:{note.get('variant', '')}",
+                    'data_confidence': 'direct_scrape',
+                } for i, note in enumerate(ugc_notes)]
+                save_products(platform, brand_name, ugc_products, scrape_tier=tier)
+                print(f"  Saved {len(ugc_products)} UGC notes about {brand_name}")
 
             if cookies:
                 mark_connection_success(platform)
