@@ -14,7 +14,7 @@ import sys
 import traceback
 from ..db_bridge import get_conn
 
-METRIC_VERSION = "v1.0"
+METRIC_VERSION = "v1.1"
 
 # New launch window: products first seen within this many days
 NEW_LAUNCH_DAYS = 14
@@ -76,9 +76,12 @@ def run_for_workspace(workspace_id: str):
                 top_products = []
                 for p in latest_products[:10]:
                     top_products.append({
-                        "name": p.get("product_name", ""),
+                        "title": p.get("product_name", ""),
+                        "name": p.get("product_name", ""),  # backwards compat
                         "price": float(p["price"]) if p.get("price") else None,
-                        "sales": int(p["sales_volume"]) if p.get("sales_volume") else 0,
+                        "likes": int(p["sales_volume"]) if p.get("sales_volume") else 0,
+                        "sales": int(p["sales_volume"]) if p.get("sales_volume") else 0,  # backwards compat
+                        "comments": int(p.get("review_count") or 0),
                     })
 
                 # Detect new launches: products first scraped within NEW_LAUNCH_DAYS
@@ -96,9 +99,11 @@ def run_for_workspace(workspace_id: str):
                 new_launch_rows = cur.fetchall()
                 new_launches = [
                     {
-                        "name": r.get("product_name", ""),
+                        "title": r.get("product_name", ""),
+                        "name": r.get("product_name", ""),  # backwards compat
                         "price": float(r["price"]) if r.get("price") else None,
-                        "sales": int(r["sales_volume"]) if r.get("sales_volume") else 0,
+                        "likes": int(r["sales_volume"]) if r.get("sales_volume") else 0,
+                        "sales": int(r["sales_volume"]) if r.get("sales_volume") else 0,  # backwards compat
                     }
                     for r in new_launch_rows
                 ]

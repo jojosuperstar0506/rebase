@@ -5,7 +5,7 @@ import { t, T } from '../../i18n';
 import CISubNav from '../../components/ci/CISubNav';
 import { useCIData } from '../../hooks/useCIData';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
-import { getIntelligence, type IntelligenceData, type MetricData } from '../../services/ciApi';
+import { getIntelligence, getScoreTrends, type IntelligenceData, type MetricData, type TrendDataPoint } from '../../services/ciApi';
 import AttributeCard, { METRIC_CONFIG } from '../../components/ci/intelligence/AttributeCard';
 import KeywordCloud from '../../components/ci/intelligence/KeywordCloud';
 import SentimentPanel from '../../components/ci/intelligence/SentimentPanel';
@@ -54,8 +54,8 @@ const DOMAINS: DomainConfig[] = [
 // Core metrics to show in the summary bar
 const CORE_METRICS = ['momentum', 'threat', 'wtp'];
 
-// Wave 4 metrics — not yet built by William
-const WAVE4_METRICS = new Set(['design_profile', 'kol_strategy']);
+// Wave 4 metrics — all pipelines now shipped, empty set
+const WAVE4_METRICS = new Set<string>();
 
 // Detail view map — metric_type → rich visualization component
 type DetailProps = { rawInputs: any; aiNarrative: string; score: number; C: any; lang: any };
@@ -149,6 +149,7 @@ export default function CIIntelligence() {
   const [comparePair, setComparePair] = useState<[string, string]>(['', '']);
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
   const [selectedBrand, setSelectedBrand] = useState<string>('');
+  const [trendCache, setTrendCache] = useState<Record<string, TrendDataPoint[]>>({});
 
   // Fetch intelligence data
   useEffect(() => {
@@ -161,6 +162,20 @@ export default function CIIntelligence() {
       .catch(() => { console.warn('[CI] Failed to fetch intelligence data'); })
       .finally(() => { setIntelLoading(false); });
   }, [workspace?.id]);
+
+  // Fetch trend data for expanded card (lazy — only fetches when a card is expanded)
+  useEffect(() => {
+    if (!selectedMetric || !selectedBrand || !workspace?.id || workspace.id === 'local') return;
+    const cacheKey = `${selectedBrand}:${selectedMetric}`;
+    if (trendCache[cacheKey]) return; // already fetched
+    getScoreTrends(workspace.id, selectedBrand, selectedMetric, 30)
+      .then(result => {
+        if (result.data.length > 0) {
+          setTrendCache(prev => ({ ...prev, [cacheKey]: result.data }));
+        }
+      })
+      .catch(() => { /* silent — sparkline stays as dashed placeholder */ });
+  }, [selectedMetric, selectedBrand, workspace?.id]);
 
   // Brand names for compare selector
   const brandNames = useMemo(() => {
@@ -358,19 +373,22 @@ export default function CIIntelligence() {
                 gridTemplateColumns: isMobile ? '1fr' : `repeat(${Math.min(domain.metrics.length, 2)}, 1fr)`,
                 gap: 12,
               }}>
-                {domain.metrics.map(metric => (
-                  <AttributeCard
-                    key={metric}
-                    metricType={metric}
-                    data={metricMap[metric] ?? null}
-                    lang={lang}
-                    C={C as unknown as Record<string, string>}
-                    isMobile={isMobile}
-                    isWave4={WAVE4_METRICS.has(metric)}
-                    onExpand={handleMetricExpand}
-                    trendData={[]}
-                  />
-                ))}
+                {domain.metrics.map(metric => {
+                  const trendKey = selectedBrand ? `${selectedBrand}:${metric}` : '';
+                  return (
+                    <AttributeCard
+                      key={metric}
+                      metricType={metric}
+                      data={metricMap[metric] ?? null}
+                      lang={lang}
+                      C={C as unknown as Record<string, string>}
+                      isMobile={isMobile}
+                      isWave4={WAVE4_METRICS.has(metric)}
+                      onExpand={handleMetricExpand}
+                      trendData={trendCache[trendKey] ?? []}
+                    />
+                  );
+                })}
               </div>
             </div>
           );

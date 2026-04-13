@@ -1,19 +1,26 @@
 # Intelligence Layer — Joanna/William Handoff Tracker
 
 > Last updated: 2026-04-12  
-> Sessions covered: Wave 1–3 build (2026-04-11) + Wave 4 polish (2026-04-12)  
-> Commits: `6892434` → `3802867` (merge) → `d8023dd` (Wave 4)
+> Sessions covered: Wave 1–3 build (2026-04-11) + Wave 4 polish (2026-04-12) + Wave 4 backend completion (2026-04-12)  
+> Commits: `6892434` → `3802867` (merge) → `d8023dd` (Wave 4 frontend) → latest (Wave 4 backend)
 
 ---
 
-## TL;DR for William's Claude Code
+## TL;DR — ALL 12 SCORERS COMPLETE
 
-Joanna has shipped the complete `/ci/intelligence` frontend page (Waves 1–4). The page is live on `main` and works with your existing `GET /api/ci/intelligence` endpoint. **No new backend endpoints are required to unblock the current UI.**
+**Intelligence layer is feature-complete.** All 12 scoring pipelines are built. All 12 frontend detail views are wired. Trend sparklines are connected to the existing `/api/ci/trends` endpoint. WAVE4_METRICS is now empty — all cards are unlocked.
 
-What William still needs to build to complete the intelligence layer:
-1. `kol_strategy` scoring pipeline → exposes `KOLTracker.tsx` detail view
-2. `design_profile` scoring pipeline → exposes `DesignAnalytics.tsx` detail view
-3. `GET /api/ci/trends` endpoint (TASK-23) → activates score trend sparklines
+**What was done in this session (William, 2026-04-12):**
+1. ✅ Field name audit — fixed 10 mismatches across 4 pipelines to match Joanna's frontend contracts
+2. ✅ Built `kol_tracker_pipeline.py` — KOL strategy scorer (deterministic, ¥0)
+3. ✅ Built `design_vision_pipeline.py` — Design DNA scorer (hashtag-based Phase 1, ¥0)
+4. ✅ Upgraded `KOLTracker.tsx` and `DesignAnalytics.tsx` from stubs to real detail views
+5. ✅ Fixed `getScoreTrends()` in ciApi.ts to correctly extract `.data` from API response
+6. ✅ Wired trend data fetching into CIIntelligence.tsx (lazy-loads on card expand)
+7. ✅ Emptied WAVE4_METRICS set — all 12 cards now active
+8. ✅ Added both new pipelines to `backend/server.js` extraPipelines array
+9. ✅ Added Step 2b to `run_daily_pipeline.sh` with all 9 extended pipelines
+10. ✅ Triple-lens review: fixed NameError, smoothed scoring curves, improved keyword matching
 
 ---
 
@@ -23,8 +30,8 @@ What William still needs to build to complete the intelligence layer:
 |------|------------------|-------------------|--------|
 | **Wave 1** — Page + card grid | ✅ | ✅ Shipped `6892434` | ✅ Done |
 | **Wave 2** — 7 live detail views | ✅ 10/12 scorers | ✅ Shipped `6892434` | ✅ Done |
-| **Wave 3** — KOL + Design stubs | kol/design pipelines ❌ | ✅ Stubs shipped `3802867` | Waiting on William |
-| **Wave 4** — Brand tabs, sparklines | TASK-23 trends ❌ | ✅ Shipped `d8023dd` | Partially done |
+| **Wave 3** — KOL + Design stubs | ✅ All 12 scorers | ✅ Stubs shipped `3802867` | ✅ Done |
+| **Wave 4** — Brand tabs, sparklines | ✅ Trends wired + KOL/Design unlocked | ✅ Shipped `d8023dd` | ✅ Done |
 
 ---
 

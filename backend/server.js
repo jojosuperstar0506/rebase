@@ -1093,6 +1093,8 @@ app.post('/api/ci/run-analysis', async (req, res) => {
       'services.competitor_intel.pipelines.launch_tracker_pipeline',
       'services.competitor_intel.pipelines.mindshare_pipeline',
       'services.competitor_intel.pipelines.content_strategy_pipeline',
+      'services.competitor_intel.pipelines.kol_tracker_pipeline',
+      'services.competitor_intel.pipelines.design_vision_pipeline',
     ];
     for (const mod of extraPipelines) {
       try {

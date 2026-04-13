@@ -27,7 +27,7 @@ import sys
 import traceback
 from ..db_bridge import get_conn
 
-METRIC_VERSION = "v1.1"
+METRIC_VERSION = "v1.2"
 
 
 def run_for_workspace(workspace_id: str):
@@ -197,12 +197,15 @@ def run_for_workspace(workspace_id: str):
 
                 raw_inputs = {
                     "total_notes": total_notes,
+                    "total_posts": total_notes,  # alias for frontend ContentLabels.tsx
                     "total_likes": total_likes,
                     "total_collects": total_collects,
                     "total_comments": total_comments,
                     "engagement_per_note": round(engagement_per_note, 1),
+                    "engagement_per_post": round(engagement_per_note, 1),  # alias for frontend
                     "volume_share_pct": round(volume_share, 1),
                     "content_types": content_types,
+                    "content_type_count": content_types,  # alias for frontend ContentLabels.tsx
                     "n_content_types": n_content_types,
                     "posting_consistency_cv": round(cv, 3),
                     "avg_new_notes_per_snapshot": round(avg_delta, 1),

@@ -75,6 +75,18 @@ else
   report_failure "scoring" "Scoring pipeline returned non-zero"
 fi
 
+# Step 2b: Run extended scoring pipelines (all 9 additional scorers)
+log "Step 2b: Running extended scoring pipelines..."
+for pipeline in keyword_pipeline voice_volume_pipeline product_ranking_pipeline \
+                price_analysis_pipeline launch_tracker_pipeline mindshare_pipeline \
+                content_strategy_pipeline kol_tracker_pipeline design_vision_pipeline; do
+  if $PYTHON -m "services.competitor_intel.pipelines.$pipeline" --all >> "$LOG_FILE" 2>&1; then
+    log "  $pipeline: complete"
+  else
+    log "  $pipeline: failed (continuing)"
+  fi
+done
+
 # Step 3: Generate narratives
 log "Step 3: Generating AI narratives..."
 if $PYTHON -m services.competitor_intel.narrative_pipeline --all >> "$LOG_FILE" 2>&1; then

@@ -28,7 +28,7 @@ import sys
 import traceback
 from ..db_bridge import get_conn
 
-METRIC_VERSION = "v1.1"
+METRIC_VERSION = "v1.2"
 
 
 def run_for_workspace(workspace_id: str):
@@ -170,12 +170,14 @@ def run_for_workspace(workspace_id: str):
 
                 raw_inputs = {
                     "engagement_share_pct": round(engagement_share, 1),
+                    "ugc_ratio": round(ugc_volume_ratio, 2),
                     "total_likes": total_likes,
                     "total_notes": total_notes,
                     "sentiment_ratio": round(sentiment_ratio, 2),
                     "positive_keywords": positive_kw[:10] if positive_kw else [],
                     "negative_keywords": negative_kw[:10] if negative_kw else [],
-                    "avg_comments_per_note": round(avg_comments, 1),
+                    "avg_comments": round(avg_comments, 1),
+                    "avg_comments_per_note": round(avg_comments, 1),  # backwards compat
                     "notes_with_comments": note_count,
                     "top_ugc": top_ugc,
                 }

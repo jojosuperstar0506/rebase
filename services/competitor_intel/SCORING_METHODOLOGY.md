@@ -1,4 +1,4 @@
-# Rebase Scoring Methodology — v1.1
+# Rebase Scoring Methodology — v1.2
 
 > This document is the single source of truth for how every Intelligence score
 > is calculated. Each scorer converts raw data into a 0-100 score. The formulas,
@@ -177,7 +177,7 @@ TOTAL = sum, clamped 0-100
 ---
 
 ### 2.2 Consumer Mindshare (mindshare_pipeline.py)
-**Version:** v1.1 | **Cost:** ¥0
+**Version:** v1.2 | **Cost:** ¥0
 
 **What it measures:** How strongly do consumers associate with and engage around this brand?
 
@@ -217,7 +217,7 @@ TOTAL = sum, clamped 0-100
 ## Domain 3: Product Intelligence
 
 ### 3.1 Hot Products / Trending (product_ranking_pipeline.py)
-**Version:** v1.0 | **Cost:** ¥0
+**Version:** v1.1 | **Cost:** ¥0
 
 **What it measures:** Which content/products are performing best right now?
 
@@ -253,7 +253,7 @@ TOTAL = sum, clamped 0-100
 ---
 
 ### 3.2 Price Positioning (price_analysis_pipeline.py)
-**Version:** v1.1 | **Cost:** ¥0
+**Version:** v1.2 | **Cost:** ¥0
 
 **What it measures:** Where does this brand sit in the price spectrum relative to competitors?
 
@@ -321,19 +321,66 @@ TOTAL = sum, clamped 0-100
 
 ---
 
-### 3.4 Design DNA (NOT YET IMPLEMENTED)
-**Version:** — | **Cost:** ~¥10/run (Sonnet vision)
+### 3.4 Design DNA (design_vision_pipeline.py)
+**Version:** v1.0 | **Cost:** ¥0 (Phase 1: hashtag-based)
 
-**What it will measure:** What visual and material patterns define this brand's product aesthetic?
+**What it measures:** What visual and material patterns define this brand's product aesthetic?
 
-**Planned data inputs:**
-- Product images from `scraped_products.image_urls`
-- Material tags from `scraped_products.material_tags`
+**Phase 1 (current):** Deterministic scoring from hashtags, product metadata, and image diversity. Zero AI cost.
+**Phase 2 (future):** Upgrade to Sonnet vision model for actual image analysis of product photos — material detection, color palette, style classification.
 
-**Planned approach:**
-- Send top 20 product images to Sonnet vision model
-- Classify: color palette, material, style (minimalist/maximalist/vintage/streetwear)
-- Compute style consistency score + trend alignment
+**Data inputs:**
+| Input | Source | Field |
+|-------|--------|-------|
+| Hashtags (style/material tags) | `scraped_products` | `category` (comma-joined hashtags) |
+| Image URLs (count) | `scraped_products` | `image_urls` (list length) |
+| Enriched note hashtags | `scraped_brand_profiles` | `raw_dimensions.d3.top_notes[].hashtags` |
+| Enriched note image count | `scraped_brand_profiles` | `raw_dimensions.d3.top_notes[].image_count` |
+
+**Keyword sets:**
+- **STYLE_KEYWORDS** (~30 terms): 极简, minimalist, 复古, vintage, 潮流, streetwear, 经典, classic, 轻奢, luxury, 运动, sporty, 商务, office, 文艺, bohemian, ins风, trendy, etc.
+- **MATERIAL_KEYWORDS** (~30 terms): 真皮, leather, 帆布, canvas, 尼龙, nylon, pu, 编织, woven, 丝绒, velvet, 棉, cotton, 羊毛, wool, etc.
+
+**Keyword matching:** For keywords ≥2 chars: exact match OR tag starts/ends with keyword. For <2 char keywords: exact match only. This prevents false positives (e.g., "时" matching inside "时尚").
+
+**Formula:**
+```
+style_found = distinct style keywords found in all hashtags
+material_found = distinct material keywords found in all hashtags
+style_concentration = most_frequent_tag_count / total_tag_count
+avg_images = total_images / total_notes
+
+diversity_score    = min(30, n_styles / 5 × 30)              — 5+ styles = 30pts
+material_score     = min(25, n_materials / 3 × 25)            — 3+ materials = 25pts
+consistency_score  = bell curve around ideal=0.25 concentration × 25pts max
+richness_score     = min(20, avg_images / 5 × 20)             — 5+ imgs/note = 20pts
+─────────────────────────────────────────────────────────
+TOTAL = sum, clamped 0-100
+```
+
+**Visual consistency scoring detail:**
+Uses a bell curve centered at 0.25 concentration (ideal balance of brand identity vs variety):
+- `dist = |concentration - 0.25| / max(0.25, 0.75)`
+- `score = max(0, 25 × (1 - dist))`
+- Below 0.10: weak brand identity. Above 0.60: monotonous.
+
+**Thresholds:**
+- 5+ distinct style signals = full diversity score (30pts)
+- 3+ material signals = full material score (25pts)
+- 0.25 style concentration = optimal consistency score (25pts)
+- 5+ images per note = full richness score (20pts)
+
+**Known weaknesses:**
+- Phase 1 relies entirely on hashtags — brands that don't tag consistently will score low.
+- Style/material keyword lists are manually curated and may miss emerging trends.
+- Image count ≠ image quality. A brand with many low-quality photos scores the same as one with high production value.
+- Chinese keyword matching doesn't handle word boundaries perfectly (no spaces in Chinese).
+
+**Improvement roadmap:**
+- [ ] Phase 2: Send product images to Sonnet vision for real material/style classification
+- [ ] Expand keyword dictionaries with category-specific terms
+- [ ] Add color palette extraction from product images
+- [ ] Cross-reference with enriched note tagged_products for product-level design signals
 
 ---
 
@@ -376,7 +423,7 @@ TOTAL = sum, clamped 0-100
 ---
 
 ### 4.2 Content Strategy (content_strategy_pipeline.py)
-**Version:** v1.1 | **Cost:** ¥0
+**Version:** v1.2 | **Cost:** ¥0
 
 **What it measures:** How effective is this brand's content output?
 
@@ -410,21 +457,61 @@ TOTAL = sum, clamped 0-100
 
 ---
 
-### 4.3 KOL Strategy (NOT YET IMPLEMENTED)
-**Version:** — | **Cost:** ¥0 (deterministic)
+### 4.3 KOL Strategy (kol_tracker_pipeline.py)
+**Version:** v1.0 | **Cost:** ¥0
 
-**What it will measure:** Who promotes this brand and how effectively?
+**What it measures:** How developed and effective is this brand's influencer/KOL ecosystem?
 
-**Planned data inputs (now available from enhanced scraper):**
-- `raw_dimensions.d4.note_authors` — authors with >10K followers who post about the brand
-- `raw_dimensions.d3.top_notes[].is_sponsored` — sponsored post flag
-- `raw_dimensions.d3.top_notes[].author_followers` — author reach per post
-- `raw_dimensions.d3.top_notes[].brand_collab` — collaboration brand name
+**Data inputs:**
+| Input | Source | Field |
+|-------|--------|-------|
+| KOL authors (>10K followers) | `scraped_brand_profiles` | `raw_dimensions.d4.note_authors` |
+| Sponsored/collab flags | `scraped_brand_profiles` | `raw_dimensions.d3.top_notes[].is_sponsored`, `brand_collab` |
+| KOL follower counts | `raw_dimensions.d4` | `note_authors[].followers` or `fansCount` |
 
-**Planned formula:**
-- KOL diversity (30pts): number of distinct KOLs posting about brand
-- KOL tier distribution (30pts): mix of mega/mid/micro KOLs
-- Sponsored efficiency (40pts): engagement on sponsored posts vs organic
+**KOL tier classification:**
+| Tier | Follower range |
+|------|---------------|
+| Nano | 10K – 50K |
+| Micro | 50K – 200K |
+| Mid | 200K – 1M |
+| Macro | 1M+ |
+
+Authors below 10K followers are excluded (below KOL threshold).
+
+**Formula:**
+```
+KOLs are deduplicated by user_id or nickname.
+max_reach_all = highest total_reach among all competitors in workspace.
+
+reach_score      = min(30, total_reach / max_reach_all × 30)     — relative reach = 30pts
+count_pts        = min(15, kol_count / 10 × 15)                  — 10+ KOLs = 15pts
+diversity_pts    = min(10, active_tiers / 3 × 10)                — 3+ tiers = 10pts
+count_score      = count_pts + diversity_pts                       — combined = 25pts
+sponsored_score  = min(25, sponsored_ratio / 0.20 × 25)          — 20%+ sponsored = 25pts
+depth_score      = 0/4/8/14/20 based on kol_count + active_tiers  — network maturity = 20pts
+─────────────────────────────────────────────────────────
+TOTAL = sum, clamped 0-100
+```
+
+**Depth scoring thresholds:**
+- 10+ KOLs AND 3+ active tiers → 20pts (mature, diversified network)
+- 5+ KOLs → 14pts
+- 2+ KOLs → 8pts
+- 1 KOL → 4pts
+- 0 KOLs → 0pts
+
+**Known weaknesses:**
+- KOL reach is relative to competitors in the workspace — adding/removing a competitor changes all scores.
+- "Sponsored" detection relies on `is_sponsored` and `brand_collab` flags from the scraper, which may not capture all paid partnerships.
+- No engagement efficiency comparison: we don't yet have per-note engagement split by KOL vs organic author.
+- Named "depth" not "efficiency" because we honestly measure network size/diversity, not ROI.
+
+**Improvement roadmap:**
+- [ ] Add per-note author-level engagement data to compare KOL post performance vs organic
+- [ ] Track KOL relationships over time (repeat collaborators vs one-offs)
+- [ ] Add Douyin KOL data (currently XHS-only from d4 enrichment)
+- [ ] Detect KOL overlap between competitors (shared influencers)
 
 ---
 
@@ -467,5 +554,5 @@ Each scorer should eventually report a confidence level based on data quality:
 
 ---
 
-*Last updated: 2026-04-11 | METRIC_VERSION: v1.1*
-*Next review: After Taobao scraper integration (will upgrade WTP, Pricing, Hot Products)*
+*Last updated: 2026-04-12 | METRIC_VERSION: v1.2*
+*All 12 scorers now implemented. Next review: After Taobao scraper integration (will upgrade WTP, Pricing, Hot Products)*

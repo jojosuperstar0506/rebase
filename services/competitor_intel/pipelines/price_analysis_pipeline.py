@@ -23,9 +23,10 @@ import argparse
 import json
 import sys
 import traceback
+from collections import Counter
 from ..db_bridge import get_conn
 
-METRIC_VERSION = "v1.1"
+METRIC_VERSION = "v1.2"
 
 # Price bands (RMB) — common for Chinese e-commerce
 PRICE_BANDS = [
@@ -190,7 +191,6 @@ def run_for_workspace(workspace_id: str):
                 product_prices = pd["product_prices"]
 
                 # Price band distribution (if product-level data exists)
-                from collections import Counter
                 if product_prices:
                     band_counts = Counter(classify_price_band(p) for p in product_prices)
                     band_distribution = {b: band_counts.get(b, 0) for b, _, _ in PRICE_BANDS}
@@ -282,13 +282,26 @@ def run_for_workspace(workspace_id: str):
 
                 score = max(0, min(100, round(level_score + breadth_score + discount_score + confidence_score)))
 
+                # Derive price_level label for frontend badge
+                if avg_price >= 2000:
+                    price_level = "luxury"
+                elif avg_price >= 500:
+                    price_level = "premium"
+                elif avg_price >= 100:
+                    price_level = "mid-range"
+                else:
+                    price_level = "entry"
+
                 raw_inputs = {
                     "avg_price": round(avg_price, 2),
                     "min_price": round(min_price, 2),
                     "max_price": round(max_price, 2),
                     "price_band_distribution": band_distribution,
+                    "price_bands": band_distribution,  # alias for frontend PriceMap.tsx
                     "premium_ratio": round(premium_ratio * 100, 1),
                     "avg_discount_depth": round(avg_discount_depth * 100, 1),
+                    "discount_depth": round(avg_discount_depth, 4),  # 0-1 ratio for PriceMap.tsx
+                    "price_level": price_level,
                     "category_median": round(category_median, 2) if category_median else None,
                     "position_vs_user": position_vs_user,
                     "n_products": n_products,

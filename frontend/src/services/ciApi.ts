@@ -304,21 +304,21 @@ export interface TrendDataPoint {
   value: number;  // 0-100 score
 }
 
-// TODO: Requires GET /api/ci/trends endpoint (TASK-23)
-// Returns simulated data as fallback until real historical data is available
+// GET /api/ci/trends — historical score data for trend sparklines
+// Backend returns { competitor, metric, days, data: TrendDataPoint[], count }
 export async function getScoreTrends(
   workspaceId: string,
   competitor: string,
   metric: string,
   days: number
 ): Promise<{ data: TrendDataPoint[]; source: 'api' | 'simulated' }> {
-  const apiData = await tryApi<TrendDataPoint[]>(
+  const resp = await tryApi<{ data: TrendDataPoint[]; count: number }>(
     `/trends?workspace_id=${encodeURIComponent(workspaceId)}&competitor=${encodeURIComponent(competitor)}&metric=${encodeURIComponent(metric)}&days=${days}`
   );
-  if (apiData && apiData.length > 1) {
-    return { data: apiData, source: 'api' };
+  if (resp?.data && resp.data.length > 1) {
+    return { data: resp.data, source: 'api' };
   }
-  // Simulated fallback — will be replaced when TASK-23 builds the trends API
+  // Fallback — no historical data yet (scores need ≥2 daily runs to show trend)
   return { data: [], source: 'simulated' };
 }
 
