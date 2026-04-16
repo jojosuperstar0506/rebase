@@ -711,6 +711,15 @@ app.post('/api/ci/competitors', async (req, res) => {
   try {
     const { workspace_id, brand_name, tier, platform_ids, added_via } = req.body;
 
+    // TASK-36 guard: reject platform-identifier strings stored as brand names
+    // e.g. "XHS: 62848d2700000000210271174" or "Douyin: MS4wLjABAAAA..."
+    const BAD_NAME_PATTERN = /^(XHS|Douyin|Taobao|JD|淘宝|抖音|小红书|京东)\s*:\s*[a-zA-Z0-9_\-]{8,}/i;
+    if (!brand_name || BAD_NAME_PATTERN.test(brand_name.trim())) {
+      return res.status(400).json({
+        error: 'Invalid brand name — looks like a platform identifier, not a real brand name. Please enter the actual brand name.',
+      });
+    }
+
     const { rows } = await pool.query(
       `INSERT INTO workspace_competitors (workspace_id, brand_name, tier, platform_ids, added_via)
        VALUES ($1, $2, $3, $4, $5)
@@ -734,6 +743,82 @@ app.delete('/api/ci/competitors/:id', async (req, res) => {
   } catch (err) {
     console.error('[CI] DELETE competitor error:', err.message);
     res.status(500).json({ error: 'Failed to delete competitor' });
+  }
+});
+
+// GET /api/ci/admin/cleanup-brand-names — find and optionally delete bad brand names
+// These are platform-identifier strings (e.g. "XHS: 62848d2700...") that were stored
+// as brand_name by a paste-link bug in earlier commits.
+// Dry run (default):  curl -H "x-rebase-secret: $API_SECRET" http://localhost:3000/api/ci/admin/cleanup-brand-names
+// Confirm delete:     curl -H "x-rebase-secret: $API_SECRET" http://localhost:3000/api/ci/admin/cleanup-brand-names?confirm=true
+app.get('/api/ci/admin/cleanup-brand-names', async (req, res) => {
+  // Require API_SECRET header for admin operations
+  const secret = req.headers['x-rebase-secret'];
+  if (!secret || secret !== process.env.API_SECRET) {
+    return res.status(403).json({ error: 'Forbidden — invalid or missing x-rebase-secret header' });
+  }
+
+  const confirm = req.query.confirm === 'true';
+
+  try {
+    // Pattern: "XHS: <hex>", "Douyin: <base64>", etc.
+    const BAD_PATTERN = '^(XHS|Douyin|Taobao|JD|淘宝|抖音|小红书|京东)\\s*:\\s*[a-zA-Z0-9_\\-]{8,}';
+
+    // Find affected competitors
+    const { rows: badCompetitors } = await pool.query(
+      `SELECT id, workspace_id, brand_name, platform_ids, added_via, created_at
+       FROM workspace_competitors WHERE brand_name ~ $1`, [BAD_PATTERN]
+    );
+
+    // Find affected scraped profiles
+    const { rows: badProfiles } = await pool.query(
+      `SELECT id, brand_name, platform, scraped_at
+       FROM scraped_brand_profiles WHERE brand_name ~ $1`, [BAD_PATTERN]
+    );
+
+    // Find affected scraped products
+    const { rows: badProducts } = await pool.query(
+      `SELECT COUNT(*) as cnt FROM scraped_products WHERE brand_name ~ $1`, [BAD_PATTERN]
+    );
+
+    // Find affected analysis results
+    const { rows: badResults } = await pool.query(
+      `SELECT COUNT(*) as cnt FROM analysis_results WHERE competitor_name ~ $1`, [BAD_PATTERN]
+    );
+
+    const summary = {
+      workspace_competitors: badCompetitors.length,
+      scraped_brand_profiles: badProfiles.length,
+      scraped_products: parseInt(badProducts[0]?.cnt || '0', 10),
+      analysis_results: parseInt(badResults[0]?.cnt || '0', 10),
+      affected_brands: [...new Set(badCompetitors.map(c => c.brand_name))],
+    };
+
+    if (!confirm) {
+      return res.json({
+        mode: 'dry_run',
+        message: 'Add ?confirm=true to actually delete these records',
+        summary,
+        details: { competitors: badCompetitors, profiles: badProfiles },
+      });
+    }
+
+    // Actually delete
+    const deleted = {};
+    const d1 = await pool.query('DELETE FROM analysis_results WHERE competitor_name ~ $1', [BAD_PATTERN]);
+    deleted.analysis_results = d1.rowCount;
+    const d2 = await pool.query('DELETE FROM scraped_products WHERE brand_name ~ $1', [BAD_PATTERN]);
+    deleted.scraped_products = d2.rowCount;
+    const d3 = await pool.query('DELETE FROM scraped_brand_profiles WHERE brand_name ~ $1', [BAD_PATTERN]);
+    deleted.scraped_brand_profiles = d3.rowCount;
+    const d4 = await pool.query('DELETE FROM workspace_competitors WHERE brand_name ~ $1', [BAD_PATTERN]);
+    deleted.workspace_competitors = d4.rowCount;
+
+    console.log(`[ADMIN] Cleaned up bad brand names:`, deleted);
+    res.json({ mode: 'confirmed', deleted, summary });
+  } catch (err) {
+    console.error('[ADMIN] cleanup-brand-names error:', err.message);
+    res.status(500).json({ error: 'Cleanup failed', detail: err.message });
   }
 });
 
