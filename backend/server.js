@@ -711,12 +711,15 @@ app.post('/api/ci/competitors', async (req, res) => {
   try {
     const { workspace_id, brand_name, tier, platform_ids, added_via } = req.body;
 
-    // TASK-36 guard: reject platform-identifier strings stored as brand names
-    // e.g. "XHS: 62848d2700000000210271174" or "Douyin: MS4wLjABAAAA..."
-    const BAD_NAME_PATTERN = /^(XHS|Douyin|Taobao|JD|淘宝|抖音|小红书|京东)\s*:\s*[a-zA-Z0-9_\-]{8,}/i;
-    if (!brand_name || BAD_NAME_PATTERN.test(brand_name.trim())) {
+    // Guard: reject brand names that look like platform identifiers (old paste-link bug).
+    // Patterns blocked: "XHS: 62848d...", "Douyin: MS4wLjAB...", "淘宝: xxx", etc.
+    if (!brand_name || brand_name.trim().length < 1) {
+      return res.status(400).json({ error: 'brand_name is required' });
+    }
+    const BAD_NAME_PATTERN = /^(XHS|Douyin|Taobao|JD|淘宝|抖音|小红书|京东|Brand)\s*:\s*[a-zA-Z0-9_\-]{8,}/i;
+    if (BAD_NAME_PATTERN.test(brand_name.trim())) {
       return res.status(400).json({
-        error: 'Invalid brand name — looks like a platform identifier, not a real brand name. Please enter the actual brand name.',
+        error: 'Invalid brand_name: looks like a platform identifier was used instead of a real brand name. Please provide the actual brand name (e.g. "Songmont", "古良吉吉").',
       });
     }
 
@@ -743,82 +746,6 @@ app.delete('/api/ci/competitors/:id', async (req, res) => {
   } catch (err) {
     console.error('[CI] DELETE competitor error:', err.message);
     res.status(500).json({ error: 'Failed to delete competitor' });
-  }
-});
-
-// GET /api/ci/admin/cleanup-brand-names — find and optionally delete bad brand names
-// These are platform-identifier strings (e.g. "XHS: 62848d2700...") that were stored
-// as brand_name by a paste-link bug in earlier commits.
-// Dry run (default):  curl -H "x-rebase-secret: $API_SECRET" http://localhost:3000/api/ci/admin/cleanup-brand-names
-// Confirm delete:     curl -H "x-rebase-secret: $API_SECRET" http://localhost:3000/api/ci/admin/cleanup-brand-names?confirm=true
-app.get('/api/ci/admin/cleanup-brand-names', async (req, res) => {
-  // Require API_SECRET header for admin operations
-  const secret = req.headers['x-rebase-secret'];
-  if (!secret || secret !== process.env.API_SECRET) {
-    return res.status(403).json({ error: 'Forbidden — invalid or missing x-rebase-secret header' });
-  }
-
-  const confirm = req.query.confirm === 'true';
-
-  try {
-    // Pattern: "XHS: <hex>", "Douyin: <base64>", etc.
-    const BAD_PATTERN = '^(XHS|Douyin|Taobao|JD|淘宝|抖音|小红书|京东)\\s*:\\s*[a-zA-Z0-9_\\-]{8,}';
-
-    // Find affected competitors
-    const { rows: badCompetitors } = await pool.query(
-      `SELECT id, workspace_id, brand_name, platform_ids, added_via, created_at
-       FROM workspace_competitors WHERE brand_name ~ $1`, [BAD_PATTERN]
-    );
-
-    // Find affected scraped profiles
-    const { rows: badProfiles } = await pool.query(
-      `SELECT id, brand_name, platform, scraped_at
-       FROM scraped_brand_profiles WHERE brand_name ~ $1`, [BAD_PATTERN]
-    );
-
-    // Find affected scraped products
-    const { rows: badProducts } = await pool.query(
-      `SELECT COUNT(*) as cnt FROM scraped_products WHERE brand_name ~ $1`, [BAD_PATTERN]
-    );
-
-    // Find affected analysis results
-    const { rows: badResults } = await pool.query(
-      `SELECT COUNT(*) as cnt FROM analysis_results WHERE competitor_name ~ $1`, [BAD_PATTERN]
-    );
-
-    const summary = {
-      workspace_competitors: badCompetitors.length,
-      scraped_brand_profiles: badProfiles.length,
-      scraped_products: parseInt(badProducts[0]?.cnt || '0', 10),
-      analysis_results: parseInt(badResults[0]?.cnt || '0', 10),
-      affected_brands: [...new Set(badCompetitors.map(c => c.brand_name))],
-    };
-
-    if (!confirm) {
-      return res.json({
-        mode: 'dry_run',
-        message: 'Add ?confirm=true to actually delete these records',
-        summary,
-        details: { competitors: badCompetitors, profiles: badProfiles },
-      });
-    }
-
-    // Actually delete
-    const deleted = {};
-    const d1 = await pool.query('DELETE FROM analysis_results WHERE competitor_name ~ $1', [BAD_PATTERN]);
-    deleted.analysis_results = d1.rowCount;
-    const d2 = await pool.query('DELETE FROM scraped_products WHERE brand_name ~ $1', [BAD_PATTERN]);
-    deleted.scraped_products = d2.rowCount;
-    const d3 = await pool.query('DELETE FROM scraped_brand_profiles WHERE brand_name ~ $1', [BAD_PATTERN]);
-    deleted.scraped_brand_profiles = d3.rowCount;
-    const d4 = await pool.query('DELETE FROM workspace_competitors WHERE brand_name ~ $1', [BAD_PATTERN]);
-    deleted.workspace_competitors = d4.rowCount;
-
-    console.log(`[ADMIN] Cleaned up bad brand names:`, deleted);
-    res.json({ mode: 'confirmed', deleted, summary });
-  } catch (err) {
-    console.error('[ADMIN] cleanup-brand-names error:', err.message);
-    res.status(500).json({ error: 'Cleanup failed', detail: err.message });
   }
 });
 
@@ -2129,6 +2056,103 @@ app.get('/api/ci/brands/search', async (req, res) => {
   } catch (err) {
     console.error('[CI] GET brands/search error:', err.message);
     res.status(500).json({ error: 'Failed to search brands' });
+  }
+});
+
+// ── Admin: cleanup bad brand names from old paste-link flow ─────────────────
+// Before TASK-32, pasting an XHS profile URL stored "XHS: 62848d..." as the
+// brand_name instead of prompting the user. This endpoint finds and deletes those
+// records. Default is dry-run; pass ?confirm=true to actually delete.
+//
+// Patterns that indicate a bad brand name:
+//   "XHS: <identifier>"   — xhs profile paste (old PLATFORM_LABELS + identifier)
+//   "淘宝: <identifier>"  — taobao paste
+//   "抖音: <identifier>"  — douyin paste
+//   "京东: <identifier>"  — jd paste
+//   "Brand: <identifier>" — fallback when PLATFORM_LABELS was undefined
+const BAD_NAME_PATTERN = /^(XHS|淘宝|抖音|京东|Brand): /;
+
+app.get('/api/ci/admin/cleanup-brand-names', async (req, res) => {
+  const confirm = req.query.confirm === 'true';
+  try {
+    // Find bad competitors
+    const { rows: badComps } = await pool.query(`
+      SELECT id, workspace_id, brand_name, tier, added_via, platform_ids, created_at
+      FROM workspace_competitors
+      ORDER BY created_at DESC
+    `);
+    const toDelete = badComps.filter(c => BAD_NAME_PATTERN.test(c.brand_name));
+
+    if (!confirm) {
+      // Dry run — just report
+      const { rows: badScores } = await pool.query(`
+        SELECT DISTINCT competitor_name FROM analysis_results
+      `);
+      const badAnalysis = badScores.filter(r => BAD_NAME_PATTERN.test(r.competitor_name));
+      const { rows: badProfiles } = await pool.query(`
+        SELECT DISTINCT brand_name FROM scraped_brand_profiles
+      `);
+      const badProfileNames = badProfiles.filter(r => BAD_NAME_PATTERN.test(r.brand_name));
+
+      return res.json({
+        dry_run: true,
+        message: 'Add ?confirm=true to actually delete these records.',
+        to_delete: {
+          workspace_competitors: toDelete.map(c => ({
+            id: c.id,
+            brand_name: c.brand_name,
+            added_via: c.added_via,
+            created_at: c.created_at,
+          })),
+          analysis_results_competitor_names: badAnalysis.map(r => r.competitor_name),
+          scraped_brand_profile_names: badProfileNames.map(r => r.brand_name),
+        },
+        counts: {
+          workspace_competitors: toDelete.length,
+          analysis_results_rows: badAnalysis.length,
+          scraped_profile_rows: badProfileNames.length,
+        },
+      });
+    }
+
+    // Confirmed — delete across all tables
+    const deletedComps = [];
+    for (const comp of toDelete) {
+      await pool.query('DELETE FROM workspace_competitors WHERE id = $1', [comp.id]);
+      deletedComps.push(comp.brand_name);
+    }
+
+    // Delete cascaded bad data
+    const { rowCount: deletedAnalysis } = await pool.query(`
+      DELETE FROM analysis_results
+      WHERE competitor_name ~ '^(XHS|淘宝|抖音|京东|Brand): '
+    `);
+    const { rowCount: deletedProfiles } = await pool.query(`
+      DELETE FROM scraped_brand_profiles
+      WHERE brand_name ~ '^(XHS|淘宝|抖音|京東|Brand): '
+    `);
+    const { rowCount: deletedProducts } = await pool.query(`
+      DELETE FROM scraped_products
+      WHERE brand_name ~ '^(XHS|淘宝|抖音|京东|Brand): '
+    `);
+
+    console.log(`[CLEANUP] Deleted ${deletedComps.length} bad workspace_competitors, ` +
+      `${deletedAnalysis} analysis_results, ${deletedProfiles} scraped_brand_profiles, ` +
+      `${deletedProducts} scraped_products`);
+
+    res.json({
+      success: true,
+      deleted: {
+        workspace_competitors: deletedComps,
+        analysis_results_rows: deletedAnalysis,
+        scraped_brand_profile_rows: deletedProfiles,
+        scraped_product_rows: deletedProducts,
+      },
+      message: 'Bad brand names deleted. Users will need to re-add these competitors with correct names.',
+    });
+  } catch (err) {
+    console.error('[CLEANUP] Error:', err.message);
+    res.status(500).json({ error: 'Cleanup failed', detail: err.message });
   }
 });
 
