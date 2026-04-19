@@ -299,17 +299,22 @@ async def run_tier_scrape_browser(platform: str, tier: str):
 
         # Warm up the session — navigate to the platform home first
         print(f"[INFO] Warming up session at {home_url}...")
-        await page.goto(home_url)
-        await page.wait_for_load_state('networkidle')
-        await page.wait_for_timeout(3000)
+        try:
+            await page.goto(home_url, wait_until='domcontentloaded', timeout=30000)
+        except Exception as e:
+            print(f"[WARN] Home page navigation issue: {e}")
+            print("[INFO] This is often normal for Douyin — continuing with brand searches...")
+        await page.wait_for_timeout(4000)
 
         # Quick check: are we logged in?
-        content = await page.accessibility.snapshot()
-        page_text = _flatten_snapshot(content)
-        if '登录' in page_text and '个人主页' not in page_text and '我' not in page_text:
-            print('[WARN] Session may have expired — you may need to log in again.')
-            print('       Log in manually in the Chrome window, then press Enter here.')
-            input('Press Enter when ready... ')
+        try:
+            content = await page.accessibility.snapshot()
+            page_text = _flatten_snapshot(content)
+            if '登录' in page_text and '个人主页' not in page_text and '我' not in page_text:
+                print('[WARN] Session may have expired — log in manually in the Chrome window.')
+                input('Press Enter when ready... ')
+        except Exception:
+            pass  # accessibility snapshot can fail on some pages — not critical
 
         success = 0
         for target in targets:

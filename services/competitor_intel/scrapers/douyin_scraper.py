@@ -110,9 +110,11 @@ class DouyinScraper:
         keyword = brand["douyin_keyword"]
         url = f"https://www.douyin.com/search/{keyword}?type=user"
 
-        await page.goto(url)
-        await page.wait_for_load_state("networkidle")
-        await page.wait_for_timeout(4000)
+        try:
+            await page.goto(url, wait_until='domcontentloaded', timeout=30000)
+        except Exception as e:
+            logger.warning(f"Navigation to {url} had an issue: {e} — trying to continue")
+        await page.wait_for_timeout(5000)  # Wait for JS to render
 
         # Use accessibility tree — NOT javascript_tool (blocked by Douyin)
         content = await page.accessibility.snapshot()
