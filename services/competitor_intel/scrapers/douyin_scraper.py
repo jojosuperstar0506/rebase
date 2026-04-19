@@ -282,8 +282,25 @@ class DouyinScraper:
         if not sorted_by_likes:
             logger.warning(
                 f"[SORT] Could not find popularity sort tab for {brand['name']} — "
-                f"results are default (personalized) sort"
+                f"will sort captured cards by likes client-side instead"
             )
+            # Dump visible tab/button labels so we can update selectors next run
+            try:
+                visible_labels = await page.evaluate("""
+                    Array.from(document.querySelectorAll(
+                        'button, [role="tab"], [role="button"], a[class*="tab"], div[class*="tab"]'
+                    ))
+                    .filter(el => el.offsetParent !== null)
+                    .map(el => (el.innerText || '').trim())
+                    .filter(t => t && t.length > 0 && t.length < 20)
+                    .slice(0, 40);
+                """)
+                logger.warning(
+                    f"[SORT-DEBUG] Visible clickable labels on the page: "
+                    f"{sorted(set(visible_labels))}"
+                )
+            except Exception as e:
+                logger.debug(f"Could not enumerate visible tabs: {e}")
 
         # Two scrolls with human-ish delays to trigger lazy-loaded cards
         for scroll_y in (800, 1800):
@@ -317,11 +334,17 @@ class DouyinScraper:
         for card in video_cards:
             parsed = self._parse_video_card(card["text"])
             if parsed["title"]:
+                parsed["likes_int"] = DouyinScraper._likes_to_int(parsed.get("likes", ""))
                 top_videos.append(parsed)
             handle = parsed.get("creator")
             if handle and handle not in creators_seen:
                 creators_seen.add(handle)
                 creators.append({"name": handle, "source": "douyin_video"})
+
+        # Client-side sort by parsed like count desc — deterministic even if
+        # Douyin's UI didn't give us a sort tab or if the default sort was
+        # personalized to the logged-in user's demographic.
+        top_videos.sort(key=lambda v: v.get("likes_int", 0), reverse=True)
 
         data.d4_top_creators = creators[:10]
         data.d4_brand_mentions_count = len(creators)
@@ -464,49 +487,62 @@ class DouyinScraper:
     def _find_official_account_from_cards(cards: List[Dict[str, str]],
                                            brand: dict) -> Optional[dict]:
         """
-        Scan user cards (from selector-based extraction) for the brand's
-        official account. Each card is a dict {href, text} where text is
-        that card's innerText — so locality is guaranteed.
+        Scan user cards and return the one most likely to be the brand's
+        official account.
+
+        Strategy: among cards whose text contains the brand name (or English
+        name), pick the one with the HIGHEST follower count. A real brand
+        account always dominates on follower count — fan accounts, parodies,
+        and random users with "adidas" in their bio are orders of magnitude
+        smaller.
+
+        Verification markers (认证 / 蓝V / 官方) are unreliable signals because
+        Douyin renders them as SVG badges, not text — so we don't rely on
+        them for ranking, only record them when present.
         """
         name = brand["name"]
         name_en = brand.get("name_en", name) or name
 
-        best = None
-        best_followers = -1
-
+        candidates = []
         for card in cards:
             t = card["text"]
             t_low = t.lower()
             if name.lower() not in t_low and name_en.lower() not in t_low:
                 continue
 
-            is_verified = any(m in t for m in ("认证", "蓝V", "官方账号", "官方"))
             followers = DouyinScraper._extract_number(
                 t, r"(\d[\d,.]*[万w]?)\s*(?:粉丝|followers)", 0)
+            is_verified = any(m in t for m in ("认证", "蓝V", "官方账号", "官方"))
 
-            # Prefer verified accounts and/or highest follower count
-            score = (1_000_000 if is_verified else 0) + followers
-            if score <= best_followers:
-                continue
-
-            # Extract user id from href: /user/MS4wLjABAAAAxxxx or similar
             user_id = ""
             id_match = re.search(r"/user/([^/?#]+)", card["href"])
             if id_match:
                 user_id = id_match.group(1)
 
-            # Account name = first line of the card
-            account_name = DouyinScraper._first_line(t)
-
-            best = {
-                "name": account_name or name,
+            candidates.append({
+                "name": DouyinScraper._first_line(t) or name,
                 "id": user_id,
                 "followers": followers,
                 "verified": is_verified,
-            }
-            best_followers = score
+                "raw_text_preview": t[:200],
+            })
 
-        return best
+        if not candidates:
+            logger.warning(f"[MATCH] No user cards matched brand name '{name}'")
+            return None
+
+        # Sort by follower count desc — brand account almost always wins
+        candidates.sort(key=lambda c: c["followers"], reverse=True)
+        top = candidates[0]
+
+        logger.info(
+            f"[MATCH] Brand='{name}' picked top candidate: "
+            f"'{top['name']}' followers={top['followers']:,} "
+            f"verified={top['verified']} (out of {len(candidates)} candidates)"
+        )
+        # Drop the debug-only field before returning
+        top.pop("raw_text_preview", None)
+        return top
 
     @staticmethod
     def _parse_video_card(text: str) -> Dict[str, str]:
@@ -705,6 +741,28 @@ class DouyinScraper:
                 seen.add(name)
                 creators.append({"name": name, "source": "douyin_video"})
         return creators
+
+    @staticmethod
+    def _likes_to_int(s: str) -> int:
+        """Convert a like-count string like '12.3万' / '1,234' / '8w' into an int."""
+        if not s:
+            return 0
+        m = re.match(r"^([\d,.]+)\s*([万亿wWkK]?)$", s.strip())
+        if not m:
+            return 0
+        num_str = m.group(1).replace(",", "")
+        try:
+            val = float(num_str)
+        except ValueError:
+            return 0
+        unit = m.group(2).lower()
+        if unit in ("万", "w"):
+            return int(val * 10_000)
+        if unit == "亿":
+            return int(val * 100_000_000)
+        if unit == "k":
+            return int(val * 1_000)
+        return int(val)
 
     @staticmethod
     def _extract_number(text: str, pattern: str, default: int = 0) -> int:

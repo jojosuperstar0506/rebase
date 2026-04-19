@@ -231,6 +231,69 @@ async def run_tier_scrape(platform: str, tier: str):
 
 # ─── Browser mode ─────────────────────────────────────────────────────────────
 
+def _fmt_num(n) -> str:
+    """Human-readable number: 32600000 -> '32.6M'."""
+    try:
+        n = int(n)
+    except (TypeError, ValueError):
+        return str(n)
+    if n >= 1_000_000_000:
+        return f"{n/1_000_000_000:.1f}B"
+    if n >= 1_000_000:
+        return f"{n/1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n/1_000:.1f}K"
+    return str(n)
+
+
+def _print_brand_summary(platform: str, brand_name: str, result) -> None:
+    """Print a rich, human-readable summary of what the scraper captured."""
+    print(f"[OK] {platform} / {brand_name}: {result.scrape_status}")
+
+    # D2 — account identity & size
+    acct_name = getattr(result, 'd2_official_account_name', '') or '(not found)'
+    followers = getattr(result, 'd2_official_followers', 0) or 0
+    total_videos = getattr(result, 'd2_total_videos', 0) or 0
+    total_likes = getattr(result, 'd2_total_likes', 0) or 0
+    verified = getattr(result, 'd2_verified', False)
+    verified_tag = ' ✓verified' if verified else ''
+    print(f"  Account: {acct_name}{verified_tag}")
+    print(f"  Size:    {_fmt_num(followers)} followers · "
+          f"{_fmt_num(total_videos)} posts · {_fmt_num(total_likes)} total likes")
+
+    # D5 — live commerce (Douyin only)
+    live_status = getattr(result, 'd5_live_status', '')
+    shop_count = getattr(result, 'd5_shop_product_count', 0) or 0
+    if live_status or shop_count:
+        parts = []
+        if live_status:
+            parts.append(f"live: {live_status}")
+        if shop_count:
+            parts.append(f"shop: {shop_count} products")
+        print(f"  Commerce: {' · '.join(parts)}")
+
+    # D4 — KOL / creator ecosystem
+    creators = getattr(result, 'd4_top_creators', []) or []
+    mentions = getattr(result, 'd4_brand_mentions_count', 0) or 0
+    if creators:
+        names = [c.get('name', '') for c in creators[:5] if c.get('name')]
+        print(f"  Creators mentioning brand ({mentions} total): "
+              f"{', '.join(names) or '(none)'}")
+
+    # D4 — top videos by likes (sorted client-side in scraper)
+    top_videos = getattr(result, 'd4_hashtag_views', {}) or {}
+    if top_videos:
+        print(f"  Top content by likes:")
+        for i, (title, likes) in enumerate(list(top_videos.items())[:5], 1):
+            print(f"    {i}. {title} — {likes}")
+
+    # D1 — search signals
+    suggestions = getattr(result, 'd1_search_suggestions', []) or []
+    if suggestions:
+        print(f"  Search hits: {', '.join(suggestions[:5])}"
+              + (f" (+{len(suggestions)-5} more)" if len(suggestions) > 5 else ""))
+
+
 async def scrape_brand_with_page(platform: str, brand_name: str, keyword: str, tier: str, page):
     """Scrape a single brand using an open Playwright page (browser mode)."""
     ScraperClass = PLATFORM_SCRAPERS.get(platform)
@@ -246,8 +309,7 @@ async def scrape_brand_with_page(platform: str, brand_name: str, keyword: str, t
         result = await scraper.scrape_brand_browser(brand_dict, page)
 
         if _save_result(platform, brand_name, tier, result):
-            print(f"[OK] {platform} / {brand_name}: {result.scrape_status} "
-                  f"(followers={getattr(result, 'd2_official_followers', 0)})")
+            _print_brand_summary(platform, brand_name, result)
             return True
         else:
             status = result.scrape_status if result else 'no_result'
