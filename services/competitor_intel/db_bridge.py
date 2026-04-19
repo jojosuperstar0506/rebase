@@ -8,9 +8,24 @@ Usage:
 """
 
 import os
+from pathlib import Path
 import psycopg2
 from psycopg2.extras import RealDictCursor, Json
 from datetime import datetime, timezone
+
+# Auto-load .env so scripts work without manually sourcing it.
+# Checks the backend/.env (ECS layout) and project root .env (local layout).
+try:
+    from dotenv import load_dotenv
+    for _candidate in [
+        Path(__file__).parent.parent.parent / 'backend' / '.env',  # ECS: ~/rebase/backend/.env
+        Path(__file__).parent.parent.parent / '.env',               # local: project root .env
+    ]:
+        if _candidate.exists():
+            load_dotenv(_candidate, override=False)  # override=False: shell env takes priority
+            break
+except ImportError:
+    pass  # python-dotenv not installed; rely on env vars being set externally
 
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
@@ -153,5 +168,69 @@ def mark_connection_expired(platform, workspace_id=None):
                     WHERE platform = %s AND status = 'active'
                 """, (platform,))
         conn.commit()
+    finally:
+        conn.close()
+
+
+def save_platform_connection(platform: str, cookie_str: str) -> bool:
+    """
+    Encrypt and upsert platform cookies into platform_connections.
+
+    Called automatically by setup_profiles after a successful login, and by
+    push_cookies as a recovery tool. This is the single place where cookies
+    are encrypted and written to the DB — do not duplicate this logic.
+
+    Returns True on success, False if the DB is unreachable (e.g. SSH tunnel
+    not open) so callers can decide whether to abort or continue.
+    """
+    from .crypto_utils import encrypt_cookies
+
+    if not DATABASE_URL:
+        print('[WARN] DATABASE_URL not set — cannot save cookies to DB')
+        return False
+
+    try:
+        conn = get_conn()
+    except Exception as e:
+        print(f'[WARN] DB unreachable, cookies not saved: {e}')
+        print('       Open SSH tunnel:  ssh -L 5432:localhost:5432 joanna@8.217.242.191 -N')
+        return False
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT id, brand_name FROM workspaces ORDER BY created_at LIMIT 1'
+            )
+            row = cur.fetchone()
+            if not row:
+                print('[WARN] No workspaces in DB — cannot save cookies')
+                return False
+            workspace_id = str(row['id'])
+
+            encrypted = encrypt_cookies(cookie_str)
+            cur.execute(
+                """
+                INSERT INTO platform_connections
+                    (workspace_id, platform, cookies_encrypted, status, expires_at)
+                VALUES (%s, %s, %s, 'active', NOW() + INTERVAL '7 days')
+                ON CONFLICT (workspace_id, platform) DO UPDATE
+                    SET cookies_encrypted = EXCLUDED.cookies_encrypted,
+                        status            = 'active',
+                        updated_at        = NOW(),
+                        expires_at        = NOW() + INTERVAL '7 days'
+                RETURNING id
+                """,
+                (workspace_id, platform, encrypted),
+            )
+            result = cur.fetchone()
+            conn.commit()
+            print(
+                f'[DB] {platform} cookies stored '
+                f'(workspace: {row["brand_name"]}, connection: {result["id"]})'
+            )
+            return True
+    except Exception as e:
+        print(f'[WARN] Failed to save cookies: {e}')
+        return False
     finally:
         conn.close()

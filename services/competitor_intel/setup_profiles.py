@@ -1,20 +1,25 @@
 """
-One-time setup script: log into XHS, Douyin, and SYCM and save the browser session.
+Login setup script: log into XHS, Douyin, and SYCM, save the browser session,
+and automatically push cookies into the database so scrapers can run immediately.
 
-After running this, set SCRAPER_PROFILE_DIR in your .env and the orchestrator
-will reuse the saved login — no cookie extraction ever needed again.
+Run this once on first setup, and again any time a platform session expires
+(scrape_runner will print an [AUTH] warning when that happens).
 
 Usage:
   # Set up all three platforms (recommended first time)
-  python -m services.competitor-intel.setup_profiles
+  python -m services.competitor_intel.setup_profiles
 
-  # Set up a single platform (e.g. after XHS session expires)
-  python -m services.competitor-intel.setup_profiles --platform xhs
-  python -m services.competitor-intel.setup_profiles --platform douyin
-  python -m services.competitor-intel.setup_profiles --platform sycm
+  # Refresh a single expired session (most common recurring task)
+  python -m services.competitor_intel.setup_profiles --platform xhs
+  python -m services.competitor_intel.setup_profiles --platform douyin
+  python -m services.competitor_intel.setup_profiles --platform sycm
 
   # Use a custom profile directory
-  python -m services.competitor-intel.setup_profiles --profile-dir D:/my-scraper-profile
+  python -m services.competitor_intel.setup_profiles --profile-dir D:/my-scraper-profile
+
+Requires:
+  - DATABASE_URL reachable (SSH tunnel open for local dev; direct on ECS)
+  - SCRAPER_PROFILE_DIR set in .env (or uses ~/rebase-scraper-profile)
 """
 
 import asyncio
@@ -104,10 +109,30 @@ async def setup_platform(platform_key: str, profile_dir: str):
         # Wait for user to log in
         input(f"Press Enter after logging into {platform['name']}... ")
 
+        # Extract cookies from the live context before closing — this is the
+        # authoritative moment; the user just confirmed they are logged in.
+        raw_cookies = await context.cookies([platform["url"]])
+        cookie_str = "; ".join(f"{c['name']}={c['value']}" for c in raw_cookies)
+
         # Session is automatically saved to the profile directory on close
         await context.close()
 
-    print(f"✓ {platform['name']} session saved.\n")
+    print(f"✓ {platform['name']} session saved to profile.\n")
+
+    # Push cookies to DB immediately so scrape_runner can use them without any
+    # extra steps. Requires DATABASE_URL to be reachable.
+    if cookie_str:
+        from .db_bridge import save_platform_connection
+        ok = save_platform_connection(platform_key, cookie_str)
+        if ok:
+            print(f"✓ Cookies pushed to database. {platform['name']} is ready to scrape.\n")
+        else:
+            print(
+                f"  Could not reach database. Open the SSH tunnel, then run:\n"
+                f"    python -m services.competitor_intel.push_cookies --platform {platform_key}\n"
+            )
+    else:
+        print(f"  No cookies found — make sure you completed the login before pressing Enter.\n")
 
 
 async def main():
@@ -155,10 +180,11 @@ Examples:
     print_separator()
     print("  Setup complete!")
     print_separator()
-    print(f"\nAdd this line to your .env file:")
-    print(f"\n  SCRAPER_PROFILE_DIR={profile_dir}")
-    print(f"\nThen run the scraper:")
-    print(f"\n  python -m services.competitor-intel.orchestrator --full --push")
+    print(f"\nCookies are now in the database. Run the scraper:")
+    print(f"\n  python -m services.competitor_intel.scrape_runner --platform xhs --tier watchlist")
+    print(f"  python -m services.competitor_intel.scrape_runner --platform douyin --tier watchlist")
+    print(f"\nIf a platform session expires later, re-run this script for that platform:")
+    print(f"\n  python -m services.competitor_intel.setup_profiles --platform xhs")
     print()
 
 

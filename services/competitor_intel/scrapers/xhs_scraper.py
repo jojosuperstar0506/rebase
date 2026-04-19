@@ -285,11 +285,13 @@ class XhsScraper:
             "Cookie": self.cookies or "",
         }
 
-        proxy_config = {"https://": self.proxy} if self.proxy else None
+        # httpx 0.20+ removed the `proxies` kwarg; use `proxy` (singular) instead
+        client_kwargs = {"headers": headers, "timeout": 30.0, "follow_redirects": True}
+        if self.proxy:
+            client_kwargs["proxy"] = self.proxy
 
         try:
-            async with httpx.AsyncClient(headers=headers, proxies=proxy_config,
-                                          timeout=30.0, follow_redirects=True) as client:
+            async with httpx.AsyncClient(**client_kwargs) as client:
                 # D1 + D3: Search API
                 await self._scrape_xhs_search_api(brand, client, data)
                 await self._rate_limit_delay()
