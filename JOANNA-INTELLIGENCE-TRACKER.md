@@ -1,268 +1,225 @@
 # Intelligence Layer — Joanna/William Handoff Tracker
 
-> Last updated: 2026-04-12  
-> Sessions covered: Wave 1–3 build (2026-04-11) + Wave 4 polish (2026-04-12) + Wave 4 backend completion (2026-04-12)  
-> Commits: `6892434` → `3802867` (merge) → `d8023dd` (Wave 4 frontend) → latest (Wave 4 backend)
+> Last updated: 2026-04-20
+> Sessions: Wave 1–3 (2026-04-11) → Wave 4 frontend (2026-04-12) → Wave 4 backend + bug fix (2026-04-12) → Scraper setup (2026-04-20)
+> Latest commit: `db921e6`
 
 ---
 
-## TL;DR — ALL 12 SCORERS COMPLETE
+## Overall Status: Intelligence layer COMPLETE. Scraper is the last blocker.
 
-**Intelligence layer is feature-complete.** All 12 scoring pipelines are built. All 12 frontend detail views are wired. Trend sparklines are connected to the existing `/api/ci/trends` endpoint. WAVE4_METRICS is now empty — all cards are unlocked.
+The frontend is deployed and fully wired. All 12 scorers are running on ECS. The only thing standing between zero data and a live intelligence page is Joanna's scraper — which needs to run on her Mac to feed real data into the pipeline.
 
-**What was done in this session (William, 2026-04-12):**
-1. ✅ Field name audit — fixed 10 mismatches across 4 pipelines to match Joanna's frontend contracts
-2. ✅ Built `kol_tracker_pipeline.py` — KOL strategy scorer (deterministic, ¥0)
-3. ✅ Built `design_vision_pipeline.py` — Design DNA scorer (hashtag-based Phase 1, ¥0)
-4. ✅ Upgraded `KOLTracker.tsx` and `DesignAnalytics.tsx` from stubs to real detail views
-5. ✅ Fixed `getScoreTrends()` in ciApi.ts to correctly extract `.data` from API response
-6. ✅ Wired trend data fetching into CIIntelligence.tsx (lazy-loads on card expand)
-7. ✅ Emptied WAVE4_METRICS set — all 12 cards now active
-8. ✅ Added both new pipelines to `backend/server.js` extraPipelines array
-9. ✅ Added Step 2b to `run_daily_pipeline.sh` with all 9 extended pipelines
-10. ✅ Triple-lens review: fixed NameError, smoothed scoring curves, improved keyword matching
+**Joanna's scraper is 80% set up.** Steps 1–4 are done locally. She is blocked on SSH access to ECS (one action from William, details below).
 
 ---
 
-## Wave Status
+## What William Needs to Do Right Now (ONE THING)
 
-| Wave | William (Backend) | Joanna (Frontend) | Status |
-|------|------------------|-------------------|--------|
-| **Wave 1** — Page + card grid | ✅ | ✅ Shipped `6892434` | ✅ Done |
-| **Wave 2** — 7 live detail views | ✅ 10/12 scorers | ✅ Shipped `6892434` | ✅ Done |
-| **Wave 3** — KOL + Design stubs | ✅ All 12 scorers | ✅ Stubs shipped `3802867` | ✅ Done |
-| **Wave 4** — Brand tabs, sparklines | ✅ Trends wired + KOL/Design unlocked | ✅ Shipped `d8023dd` | ✅ Done |
+Joanna has generated an SSH key on her Mac. William needs to add it to the ECS server so she can open the DB tunnel and run the scraper.
 
----
-
-## Architecture — How the Page Works
-
-```
-CIIntelligence.tsx
-  └── getIntelligence(workspaceId)        ← your existing endpoint
-        └── GET /api/ci/intelligence?workspace_id=X
-              └── returns IntelligenceData (see shape below)
-
-IntelligenceData.domains[domain].metrics[metricType].brands[brandName]
-  ├── score: number
-  ├── raw_inputs: Record<string, any> | null   ← drives all detail views
-  ├── ai_narrative: string | null
-  └── analyzed_at: string
+**William runs this on ECS:**
+```bash
+sudo mkdir -p /home/joanna/.ssh
+sudo bash -c 'echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICf0Y/mkwrn8JHuQhznGolnbwSGHYpY5hcXemtO6+WFa joanna@rebase" >> /home/joanna/.ssh/authorized_keys'
+sudo chmod 700 /home/joanna/.ssh
+sudo chmod 600 /home/joanna/.ssh/authorized_keys
+sudo chown -R joanna:joanna /home/joanna/.ssh
 ```
 
-The frontend never calls `/api/ci/dashboard` for the intelligence page. It uses your `GET /api/ci/intelligence` endpoint exclusively.
+Once done, Joanna can run the scraper immediately. No other blockers.
 
 ---
 
-## Frontend Files — What Joanna Shipped
+## Also: Run the Brand Name Cleanup on ECS (10 seconds)
 
-### Modified Files
+A bug was found and fixed: the old paste-link flow stored XHS user IDs (e.g. `"XHS: 62848d2700000000210271174"`) as competitor brand names. The write path is fixed. William needs to delete the bad existing records:
 
-| File | What Changed |
-|------|-------------|
-| `frontend/src/i18n/index.ts` | +21 intelligence/metric i18n keys in `T.ci` object |
-| `frontend/src/services/ciApi.ts` | Uses William's `getIntelligence()` / `IntelligenceData` shape; removed 6 dead exports Joanna had added in Wave 1 session (`getIntelligenceSummary`, `getIntelligenceDetail`, `MetricSummary`, `CompetitorSummary`, `IntelligenceSummary`, `MetricDetail`) |
-| `frontend/src/components/ci/CISubNav.tsx` | +竞品洞察 tab → `/ci/intelligence` |
-| `frontend/src/App.tsx` | +`/ci/intelligence` route with `ProtectedRoute` + `CIErrorBoundary` |
-| `frontend/src/components/ci/intelligence/AttributeCard.tsx` | Added `isWave4`, `onExpand`, `trendData` props; integrated `ScoreTrendLine` in expanded view; Wave 4 locked card rendering |
-| `frontend/src/pages/ci/CIIntelligence.tsx` | Full intelligence page — see description below |
+```bash
+# On ECS — step 1, dry run to see what's affected
+curl -H "x-rebase-secret: $API_SECRET" \
+  "http://localhost:3000/api/ci/admin/cleanup-brand-names"
 
-### Created Files
+# Step 2 — actually delete (run after reviewing step 1 output)
+curl -H "x-rebase-secret: $API_SECRET" \
+  "http://localhost:3000/api/ci/admin/cleanup-brand-names?confirm=true"
+```
 
-| File | Purpose | Status |
-|------|---------|--------|
-| `frontend/src/components/ci/intelligence/AttributeCard.tsx` | Score ring card, expand/collapse, per-brand bars, RawDataPreview | ✅ Live |
-| `frontend/src/pages/ci/CIIntelligence.tsx` | Main page: header, domain groups, compare mode, detail panel | ✅ Live |
-| `frontend/src/components/ci/intelligence/KeywordCloud.tsx` | Tag cloud + trending + categories | ✅ Live |
-| `frontend/src/components/ci/intelligence/SentimentPanel.tsx` | Engagement share, sentiment bar, keyword pills | ✅ Live |
-| `frontend/src/components/ci/intelligence/ProductRanking.tsx` | Top 5 products ranked by likes | ✅ Live |
-| `frontend/src/components/ci/intelligence/PriceMap.tsx` | Price band chart, avg price, discount depth | ✅ Live |
-| `frontend/src/components/ci/intelligence/LaunchTimeline.tsx` | 90d launch count, weekly sparkline bars | ✅ Live |
-| `frontend/src/components/ci/intelligence/VoiceVolume.tsx` | Growth rate, voice share, XHS/Douyin split | ✅ Live |
-| `frontend/src/components/ci/intelligence/ContentLabels.tsx` | Content type breakdown, top posts | ✅ Live |
-| `frontend/src/components/ci/intelligence/KOLTracker.tsx` | 🔒 Wave 4 stub (locked until William ships `kol_strategy` pipeline) | ⏳ Stub |
-| `frontend/src/components/ci/intelligence/DesignAnalytics.tsx` | 🔒 Wave 4 stub (locked until William ships `design_profile` pipeline) | ⏳ Stub |
-| `frontend/src/components/ci/intelligence/ScoreTrendLine.tsx` | SVG sparkline — dashed placeholder now, real chart when TASK-23 ships | ✅ Live |
+Affected users will need to re-add those competitors with correct names. The paste-link flow will now correctly prompt for a name instead of auto-saving the ID.
 
 ---
 
-## Detail View → raw_inputs Contract
+## Joanna's Scraper Setup — Current Status
 
-Each detail component reads `raw_inputs` from `IntelligenceData.domains[d].metrics[m].brands[b].raw_inputs`. These are the exact field names the frontend reads — William's backend must produce these field names for each metric type.
+| Step | Status | Detail |
+|------|--------|--------|
+| 1. `git pull` | ✅ Done | On `db921e6` — latest |
+| 2. Python deps | ✅ Done | `psycopg2-binary`, `httpx`, `playwright`, `chromium` all installed |
+| 3. `.env` configured | ✅ Done | `/Users/joannazhang/rebase/.env` — all values set |
+| 4. Scraper profile dir | ✅ Done | `/Users/joannazhang/rebase-scraper-profile/` created |
+| 5. SSH tunnel to ECS DB | ❌ BLOCKED | Needs William to add SSH key (see above) |
+| 6. Test DB connection | ❌ Waiting on 5 | |
+| 7. Browser login (XHS + Douyin) | ❌ Waiting on 5 | Needs QR scan on phone |
+| 8. Test scrape one brand | ❌ Waiting on 7 | |
+| 9. Full scrape all watchlist | ❌ Waiting on 8 | |
+| 10. Trigger scoring pipeline | ❌ Waiting on 9 | |
 
-### `keywords` → `KeywordCloud.tsx`
+**Important:** Python module is `services.competitor_intel` (underscore), NOT `services.competitor-intel` (hyphen). The architecture doc has a typo. All commands below use the correct underscore form.
+
+### Commands to Run After William Adds SSH Key
+
+**Terminal 1 — open SSH tunnel and keep open:**
+```bash
+ssh -L 5432:localhost:5432 joanna@8.217.242.191 -N
+```
+
+**Terminal 2 — verify DB connection:**
+```bash
+cd /Users/joannazhang/rebase
+python3 -c "
+import psycopg2
+conn = psycopg2.connect('postgresql://rebase_app:RebaseAdmin2026@localhost:5432/rebase')
+cur = conn.cursor()
+cur.execute('SELECT COUNT(*) FROM workspace_competitors')
+print(f'Connected! {cur.fetchone()[0]} competitors in database.')
+conn.close()
+"
+```
+
+**Set up browser profiles (need phone for QR scan):**
+```bash
+python3 -m services.competitor_intel.setup_profiles
+```
+
+**Test scrape single brand:**
+```bash
+python3 -m services.competitor_intel.scrape_runner --platform xhs --brand "Songmont"
+```
+
+**Full scrape:**
+```bash
+python3 -m services.competitor_intel.scrape_runner --platform xhs --tier watchlist
+python3 -m services.competitor_intel.scrape_runner --platform douyin --tier watchlist
+```
+
+**Trigger scoring (replace workspace_id with real value from DB):**
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  -H "x-rebase-secret: a9231db3907bef4f146cea299efa9f37960781fd5f191ae5f369ba3742e082ea" \
+  -d '{"workspace_id":"<actual-workspace-id>"}' \
+  "http://8.217.242.191:3000/api/ci/run-analysis"
+```
+
+---
+
+## Full Build History
+
+### Session 1 — 2026-04-11 (Joanna)
+Built the entire `/ci/intelligence` frontend from scratch — Waves 1–3. Commits `6892434`, `3802867`.
+
+### Session 2 — 2026-04-12 (Joanna)
+Wave 4 polish: interactive brand tabs in detail panel, ScoreTrendLine SVG sparkline component, ciApi.ts cleanup (removed 6 dead exports superseded by William's intelligence layer). Commit `d8023dd`.
+
+### Session 3 — 2026-04-12 (William)
+Completed all 12 scorers. Key work:
+- Field name audit — fixed 10 mismatches across 4 pipelines to match frontend contracts
+- Built `kol_tracker_pipeline.py` and `design_vision_pipeline.py`
+- Upgraded `KOLTracker.tsx` and `DesignAnalytics.tsx` from stubs to real detail views
+- Fixed `getScoreTrends()` — correctly extracts `.data` from API response
+- Wired trend data into CIIntelligence.tsx (lazy-loads on card expand)
+- Cleared `WAVE4_METRICS` — all 12 cards are now active
+- Added both pipelines to `backend/server.js` and `run_daily_pipeline.sh`
+
+Commit `fd22dd0`.
+
+### Session 4 — 2026-04-20 (Joanna)
+Found and fixed brand name bug: old paste-link flow was storing `"XHS: 62848d..."` as brand_name. Fixed in two places:
+1. Write-time guard in `POST /api/ci/competitors` (rejects bad pattern at API level)
+2. `GET /api/ci/admin/cleanup-brand-names` endpoint — dry-run to find affected records, `?confirm=true` to delete
+
+Also ran scraper setup locally (Steps 1–4 complete). Blocked on SSH key. Commits `92e0006`, `a49e0e8`, `db921e6`.
+
+---
+
+## Architecture Reference
+
+### Data Flow
+```
+Joanna's Mac
+  └── scrape_runner.py
+        ├── reads targets from workspace_competitors (via SSH tunnel → ECS Postgres)
+        ├── scrapes XHS/Douyin with Playwright
+        └── POSTs to /api/ci/ingest → ECS backend
+
+ECS Backend
+  └── /api/ci/run-analysis
+        └── scoring_pipeline.py
+              └── reads scraped_brand_profiles + scraped_products
+              └── writes to analysis_results (competitor_name, metric_type, score, raw_inputs)
+
+ECS Backend
+  └── GET /api/ci/intelligence?workspace_id=X
+        └── reads analysis_results
+        └── returns IntelligenceData shape (domains → metrics → brands → {score, raw_inputs, ai_narrative})
+
+Vercel Frontend
+  └── CIIntelligence.tsx
+        └── getIntelligence(workspaceId)
+        └── renders 12 AttributeCards + detail views
+```
+
+### Vercel Function Count — CRITICAL (Hobby plan = 12 max)
+Currently at **12/12**. Do NOT add new files to `api/`. Route new features through existing functions via query params.
+
+### Key Endpoints
+| Endpoint | Status |
+|----------|--------|
+| `GET /api/ci/intelligence?workspace_id=X` | ✅ Live |
+| `GET /api/ci/dashboard?workspace_id=X` | ✅ Live (Dashboard only, not used by Intelligence page) |
+| `GET /api/ci/trends?workspace_id=X&competitor=Y&metric=Z&days=N` | ✅ Live (William built) |
+| `GET /api/ci/admin/cleanup-brand-names` | ✅ Live — run on ECS to fix bad data |
+| `POST /api/ci/ingest` | ✅ Live — scraper pushes here |
+| `POST /api/ci/run-analysis` | ✅ Live — triggers all 12 scoring pipelines |
+
+### raw_inputs Contracts (frontend expects these exact field names)
+
+**`keywords` → `KeywordCloud.tsx`**
 ```json
-{
-  "keyword_cloud": { "word": count },
-  "categories": { "category_name": count },
-  "trending": ["keyword1", "keyword2"]
-}
+{ "keyword_cloud": {"word": count}, "categories": {"name": count}, "trending": ["word"] }
 ```
 
-### `consumer_mindshare` → `SentimentPanel.tsx`
+**`consumer_mindshare` → `SentimentPanel.tsx`**
 ```json
-{
-  "engagement_share_pct": 12.5,
-  "ugc_ratio": 0.78,
-  "avg_comments_per_note": 14,
-  "sentiment_ratio": 0.72,
-  "positive_keywords": ["高颜值", "实用"],
-  "negative_keywords": ["偏贵", "物流慢"]
-}
+{ "engagement_share_pct": 12.5, "ugc_ratio": 0.78, "avg_comments_per_note": 14,
+  "sentiment_ratio": 0.72, "positive_keywords": ["高颜值"], "negative_keywords": ["偏贵"] }
 ```
 
-### `trending_products` → `ProductRanking.tsx`
+**`trending_products` → `ProductRanking.tsx`**
 ```json
-{
-  "top_products": [
-    { "product_name": "...", "price": 599, "sales": 3200 }
-  ]
-}
+{ "top_products": [{ "product_name": "...", "price": 599, "sales": 3200 }] }
 ```
 
-### `price_positioning` → `PriceMap.tsx`
+**`price_positioning` → `PriceMap.tsx`**
 ```json
-{
-  "price_band_distribution": { "0-500": 4, "500-1000": 8, "1000-2000": 3 },
-  "avg_price": 780,
-  "premium_ratio": 35,
-  "avg_discount_depth": 18,
-  "price_level": "mid"
-}
+{ "price_band_distribution": {"0-500": 4, "500-1000": 8}, "avg_price": 780,
+  "premium_ratio": 35, "avg_discount_depth": 18, "price_level": "mid" }
 ```
-`price_level` badge colors: `"entry"` → green, `"mid"` → blue, `"premium"` → purple, `"luxury"` → gold.
+`price_level` values: `"entry"` (green), `"mid"` (blue), `"premium"` (purple), `"luxury"` (gold)
 
-### `launch_frequency` → `LaunchTimeline.tsx`
+**`launch_frequency` → `LaunchTimeline.tsx`**
 ```json
-{
-  "total_launches_90d": 24,
-  "avg_per_week": 2.7,
-  "acceleration_pct": 15,
-  "recent_launches": [
-    { "name": "...", "date": "2026-03-28" }
-  ]
-}
+{ "total_launches_90d": 24, "avg_per_week": 2.7, "acceleration_pct": 15,
+  "recent_launches": [{ "name": "...", "date": "2026-03-28" }] }
 ```
 
-### `voice_volume` → `VoiceVolume.tsx`
+**`voice_volume` → `VoiceVolume.tsx`**
 ```json
-{
-  "follower_growth": 12.4,
-  "content_growth": 8.1,
-  "engagement_growth": 21.3,
-  "voice_share_pct": 18.5,
-  "platform_breakdown": { "xhs": 0.65, "douyin": 0.35 }
-}
+{ "follower_growth": 12.4, "content_growth": 8.1, "engagement_growth": 21.3,
+  "voice_share_pct": 18.5, "platform_breakdown": {"xhs": 0.65, "douyin": 0.35} }
 ```
 
-### `content_strategy` → `ContentLabels.tsx`
+**`content_strategy` → `ContentLabels.tsx`**
 ```json
-{
-  "total_notes": 1420,
-  "engagement_per_note": 847,
-  "n_content_types": 4,
-  "top_content": [
-    { "title": "...", "likes": 12400 }
-  ]
-}
+{ "total_notes": 1420, "engagement_per_note": 847, "n_content_types": 4,
+  "top_content": [{ "title": "...", "likes": 12400 }] }
 ```
-
-### `kol_strategy` → `KOLTracker.tsx` ← WILLIAM BUILDS THIS
-```
-Currently locked stub. Unlock by:
-1. Build kol_tracker_pipeline in backend
-2. Return raw_inputs with KOL data shape (Joanna will wire the detail view once shape is confirmed)
-3. Remove kol_strategy from WAVE4_METRICS set in CIIntelligence.tsx (line 58)
-```
-
-### `design_profile` → `DesignAnalytics.tsx` ← WILLIAM BUILDS THIS
-```
-Currently locked stub. Unlock by:
-1. Build design_vision_pipeline in backend
-2. Return raw_inputs with design/vision data shape (Joanna will wire the detail view once shape is confirmed)
-3. Remove design_profile from WAVE4_METRICS set in CIIntelligence.tsx (line 58)
-```
-
----
-
-## What William Needs to Build (Ordered by Priority)
-
-### Priority 1 — `kol_strategy` scoring pipeline
-- **Backend:** Add `kol_strategy` scorer to `analysis_results` table (same pattern as existing scorers)
-- **Backend:** Include `kol_strategy` in `GET /api/ci/intelligence` response under `domains.marketing.metrics`
-- **Frontend unlock:** Remove `'kol_strategy'` from `WAVE4_METRICS` set in `CIIntelligence.tsx` line 58, then wire `KOLTracker.tsx` with agreed `raw_inputs` shape
-
-### Priority 2 — `design_profile` scoring pipeline  
-- **Backend:** Add `design_profile` scorer (image scraping + visual taxonomy)
-- **Backend:** Include `design_profile` in `GET /api/ci/intelligence` response under `domains.product.metrics`
-- **Frontend unlock:** Remove `'design_profile'` from `WAVE4_METRICS` set in `CIIntelligence.tsx` line 58, then wire `DesignAnalytics.tsx`
-
-### Priority 3 — TASK-23: Score trends endpoint
-- **Backend:** `GET /api/ci/trends?workspace_id=X&competitor=Y&metric=Z&days=N`
-- **Returns:** `TrendDataPoint[]` where `TrendDataPoint = { date: string; value: number }` (already typed in `ciApi.ts` line 302)
-- **Frontend:** Already calls `getScoreTrends()` which hits this endpoint. `ScoreTrendLine` component auto-upgrades from dashed placeholder to live sparkline. No frontend changes needed.
-- **Vercel:** Route through existing `api/ci/dashboard.js` function via query param — do NOT create a new serverless function (already at 12-function Hobby limit)
-
----
-
-## WAVE4_METRICS — How to Unlock Locked Cards
-
-In `frontend/src/pages/ci/CIIntelligence.tsx` line 58:
-```typescript
-const WAVE4_METRICS = new Set(['design_profile', 'kol_strategy']);
-```
-
-When a metric is in this Set:
-- `AttributeCard` shows 🔒 + "Coming in Wave 4" 
-- Card is non-clickable, greyed out, detail panel not triggered
-
-**To unlock:** Remove the metric from this Set. The card will immediately become active and the corresponding detail view component will be rendered in the detail panel. No other frontend code changes needed.
-
----
-
-## API Endpoint Reference
-
-| Endpoint | Status | Used By |
-|----------|--------|---------|
-| `GET /api/ci/intelligence?workspace_id=X` | ✅ William built | `CIIntelligence.tsx` (primary data source) |
-| `GET /api/ci/dashboard?workspace_id=X` | ✅ William built | `CIDashboard.tsx` only (NOT used by intelligence page) |
-| `GET /api/ci/trends?workspace_id=X&competitor=Y&metric=Z&days=N` | ❌ TASK-23 not built | `getScoreTrends()` in `ciApi.ts` — returns `[]` fallback until built |
-
----
-
-## Vercel Function Count (Critical — Hobby plan = 12 max)
-
-Current count: **12/12**. DO NOT add new files to `api/` directory without deleting another. Route new endpoints through existing functions via query params.
-
-```
-api/auth.js               api/ci/connections.js      api/ci/intelligence.js
-api/ci/alerts.js          api/ci/dashboard.js        api/ci/run-analysis.js
-api/ci/analysis.js        api/ci/deep-dive.js        api/ci/workspaces.js
-api/ci/brands.js          api/ci/brand-insights.js   api/ci/competitors.js
-```
-
-**TASK-23 trends endpoint:** Route through `api/ci/dashboard.js` — add `if (req.query.type === 'trends')` branch at the top of that function.
-
----
-
-## Compare Mode — Already Shipped
-
-William does not need to build anything for compare mode. `CIIntelligence.tsx` already includes:
-- `CompareSelector` — two `<select>` dropdowns populated from tracked competitors
-- Side-by-side score comparison table — reads from `IntelligenceData.domains[].metrics[].brands[]` (your existing data shape)
-- Works with any number of brands — no new endpoint needed
-
----
-
-## i18n Keys Added (for reference)
-
-All keys live in `frontend/src/i18n/index.ts` inside the `ci:` object:
-
-```
-intelligenceTitle, executiveSummary, consumerIntel, productIntel, marketingIntel,
-compareMode, viewDetails, noIntelligenceData, metricKeywords, metricMindshare,
-metricHotProducts, metricDesign, metricPrice, metricLaunch, metricVoice,
-metricContent, metricKol, wave4Coming, runDeepDiveToUnlock, detailLoading
-```
-
-`intelligence: { en: "Intelligence", zh: "竞品洞察" }` was already in the file at line 24 — NOT duplicated.
