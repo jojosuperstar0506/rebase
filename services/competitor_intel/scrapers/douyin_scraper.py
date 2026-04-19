@@ -115,15 +115,15 @@ class DouyinScraper:
             await page.goto(url, wait_until='domcontentloaded', timeout=30000)
         except Exception as e:
             logger.warning(f"Navigation to {url} had an issue: {e} — trying to continue")
-        await page.wait_for_timeout(5000)  # Wait for JS to render
+        # Fixed wait: Douyin is a SPA — networkidle never fires, use fixed delay instead
+        await page.wait_for_timeout(5000)
 
-        # Use accessibility tree — NOT javascript_tool (blocked by Douyin)
         text = await page.evaluate("document.body ? document.body.innerText : ''")
 
-        # D1: Search suggestions
+        # D1: Search suggestions — collect short lines from search results
         data.d1_search_suggestions = self._extract_search_suggestions(text)
 
-        # D2: Find official account
+        # D2: Find official account in user search results
         official = self._find_official_account(text, brand)
         if official:
             data.d2_official_account_id = official.get("id", "")
@@ -134,54 +134,75 @@ class DouyinScraper:
     async def _scrape_douyin_profile_browser(self, account_id: str, page, data: DouyinBrandData):
         """Scrape official profile for D2 metrics and D5 live commerce data."""
         url = f"https://www.douyin.com/user/{account_id}"
-        await page.goto(url)
-        await page.wait_for_load_state("networkidle")
-        await page.wait_for_timeout(4000)
+        try:
+            await page.goto(url, wait_until='domcontentloaded', timeout=30000)
+        except Exception as e:
+            logger.warning(f"Profile navigation issue: {e} — trying to continue")
+        # Fixed wait: do NOT use networkidle — Douyin fires network requests indefinitely
+        await page.wait_for_timeout(5000)
 
         text = await page.evaluate("document.body ? document.body.innerText : ''")
 
         # D2: Profile metrics
-        data.d2_official_followers = self._extract_number(text, r"(\d[\d,.]*[万w]?)\s*(?:粉丝|关注者)", data.d2_official_followers)
+        data.d2_official_followers = self._extract_number(
+            text, r"(\d[\d,.]*[万w]?)\s*(?:粉丝|关注者)", data.d2_official_followers)
         data.d2_total_videos = self._extract_number(text, r"(\d[\d,.]*)\s*(?:作品|视频)", 0)
-        data.d2_total_likes = self._extract_number(text, r"(\d[\d,.]*[万w]?)\s*(?:获赞|喜欢)", 0)
+        data.d2_total_likes = self._extract_number(
+            text, r"(\d[\d,.]*[万w]?)\s*(?:获赞|喜欢)", 0)
 
         # D5: Live status
         if "直播中" in text or "LIVE" in text:
             data.d5_live_status = "live_now"
-            viewers_match = re.search(r"(\d[\d,.]*)\s*(?:观看|在线)", text)
-            if viewers_match:
-                data.d5_live_viewers = self._extract_number(text, r"(\d[\d,.]*)\s*(?:观看|在线)", 0)
+            data.d5_live_viewers = self._extract_number(text, r"(\d[\d,.]*)\s*(?:观看|在线)", 0)
         elif "预告" in text or "即将开播" in text:
             data.d5_live_status = "scheduled"
         else:
             data.d5_live_status = "offline"
 
-        # D5: Shop products
         shop_match = re.search(r"(\d+)\s*(?:商品|件商品|橱窗)", text)
         if shop_match:
             data.d5_shop_product_count = int(shop_match.group(1))
 
     async def _scrape_douyin_hashtag_browser(self, brand: dict, page, data: DouyinBrandData):
-        """Scrape hashtag/topic pages for D4 KOL data."""
+        """
+        Scrape video search sorted by popularity for D4 KOL/creator data.
+        sort_type=1 = comprehensive popular sort (综合排序) on Douyin web search.
+        """
         keyword = brand["douyin_keyword"]
-        url = f"https://www.douyin.com/search/{keyword}?type=video"
+        # sort_type=1 sorts by popularity/engagement, not just recency
+        url = f"https://www.douyin.com/search/{keyword}?type=video&sort_type=1"
 
-        await page.goto(url)
-        await page.wait_for_load_state("networkidle")
-        await page.wait_for_timeout(3000)
+        try:
+            await page.goto(url, wait_until='domcontentloaded', timeout=30000)
+        except Exception as e:
+            logger.warning(f"Video search navigation issue: {e} — trying to continue")
+        # Fixed wait: do NOT use networkidle on Douyin
+        await page.wait_for_timeout(5000)
+
+        # Scroll to trigger lazy-loaded video cards
+        await page.evaluate("window.scrollTo(0, 1200)")
+        await page.wait_for_timeout(2000)
 
         text = await page.evaluate("document.body ? document.body.innerText : ''")
 
-        # D4: Extract creator names from video results
+        # D4: Extract creator names + engagement from top videos
         creators = self._extract_creators(text)
         data.d4_top_creators = creators[:10]
         data.d4_brand_mentions_count = len(creators)
 
-        # Hashtag views
+        # D4: Extract top video titles and like counts
+        top_videos = self._extract_top_videos(text)
+        if top_videos:
+            # Store as hashtag_views keyed by title snippet for backwards compat
+            for v in top_videos[:5]:
+                data.d4_hashtag_views[v["title"][:40]] = v["likes"]
+
+        # D4: Hashtag total play count (shown as "X万播放" on topic pages)
         hashtag = f"#{keyword}#"
-        view_match = re.search(rf"{re.escape(hashtag)}\s*(\d[\d,.]*[万亿w]?)\s*(?:播放|次播放|views)", text)
+        view_match = re.search(
+            rf"{re.escape(keyword)}\s*(\d[\d,.]*[万亿w]?)\s*(?:播放|次播放|views)", text)
         if view_match:
-            data.d4_hashtag_views[hashtag] = view_match.group(1)
+            data.d4_hashtag_views[f"#{keyword}# total"] = view_match.group(1)
 
     # ─── API Mode (Aliyun Cloud) ───────────────────────────────────────────
 
@@ -276,50 +297,79 @@ class DouyinScraper:
 
     @staticmethod
     def _extract_search_suggestions(text: str) -> List[str]:
-        """Extract search suggestions from page text."""
+        """
+        Extract search suggestions from Douyin user search innerText.
+        innerText format: each user card is a block of plain-text lines.
+        We collect account names that look like brand/creator handles.
+        """
         suggestions = []
+        seen = set()
+        skip_prefixes = ("猜你想搜", "相关搜索", "热门搜索", "综合", "视频", "用户", "直播",
+                         "商品", "筛选", "全部", "最新", "最热")
         for line in text.split("\n"):
-            if "猜你想搜" in line or "相关搜索" in line or "热门搜索" in line:
+            line = line.strip()
+            if not line or len(line) > 40 or len(line) < 2:
                 continue
-            match = re.search(r"\[link\]\s*(.+)", line)
-            if match and len(match.group(1)) < 30:
-                suggestions.append(match.group(1).strip())
+            if any(line.startswith(p) for p in skip_prefixes):
+                continue
+            # Skip lines that are just numbers or contain follower/video counts
+            if re.match(r"^[\d,.万亿w]+\s*(粉丝|作品|关注|获赞|视频)?$", line):
+                continue
+            if line not in seen:
+                seen.add(line)
+                suggestions.append(line)
         return suggestions[:10]
 
     @staticmethod
     def _find_official_account(text: str, brand: dict) -> Optional[dict]:
-        """Find official brand account in Douyin search results."""
+        """
+        Find official brand account in Douyin user search innerText.
+
+        innerText from a user-search page looks like:
+            adidas阿迪达斯
+            @adidasofficial_cn
+            3264.2万粉丝  208作品
+            品牌认证: 阿迪达斯官方账号
+            ...
+
+        Strategy: find a line containing the brand name, then scan the ±8
+        surrounding lines for follower count and verification markers.
+        """
         name = brand["name"]
-        name_en = brand.get("name_en", "")
-
+        name_en = brand.get("name_en", name)
         lines = text.split("\n")
+
         for i, line in enumerate(lines):
-            # Look for verified brand accounts
-            if ("认证" in line or "蓝V" in line or "官方" in line) and \
-               (name in line or name_en.lower() in line.lower()):
-                # Try to extract follower count from nearby lines
-                followers = 0
-                for j in range(max(0, i - 3), min(len(lines), i + 5)):
-                    f_match = re.search(r"(\d[\d,.]*[万w]?)\s*(?:粉丝|followers)", lines[j])
-                    if f_match:
-                        followers = DouyinScraper._extract_number(
-                            lines[j], r"(\d[\d,.]*[万w]?)\s*(?:粉丝|followers)", 0
-                        )
-                        break
+            line_lower = line.lower()
+            # Line must contain the brand name (Chinese or English)
+            if name.lower() not in line_lower and name_en.lower() not in line_lower:
+                continue
 
-                # Try to extract user ID from link
-                user_id = ""
-                for j in range(max(0, i - 3), min(len(lines), i + 5)):
-                    id_match = re.search(r"/user/([A-Za-z0-9_-]+)", lines[j])
-                    if id_match:
-                        user_id = id_match.group(1)
-                        break
+            window = lines[max(0, i - 3): min(len(lines), i + 8)]
+            window_text = "\n".join(window)
 
+            # Must have a verification signal nearby
+            is_verified = any(marker in window_text
+                              for marker in ("认证", "蓝V", "官方账号", "official"))
+
+            # Extract follower count from the window
+            followers = DouyinScraper._extract_number(
+                window_text, r"(\d[\d,.]*[万w]?)\s*(?:粉丝|followers)", 0)
+
+            # Extract @handle for user ID lookup (best proxy we have in innerText)
+            handle = ""
+            for wline in window:
+                m = re.search(r"@([A-Za-z0-9_.\u4e00-\u9fff]{2,30})", wline)
+                if m:
+                    handle = m.group(1)
+                    break
+
+            if followers > 0 or is_verified:
                 return {
                     "name": name,
-                    "id": user_id,
+                    "id": handle,          # handle used as surrogate ID in browser mode
                     "followers": followers,
-                    "verified": True,
+                    "verified": is_verified,
                 }
         return None
 
@@ -369,11 +419,53 @@ class DouyinScraper:
                 pass
 
     @staticmethod
+    def _extract_top_videos(text: str) -> List[Dict[str, str]]:
+        """
+        Extract top video titles and like counts from Douyin video search innerText.
+
+        innerText of a video card typically looks like:
+            这双adidas超好看！
+            @creator_name
+            1.2万
+            评论 345
+            ...
+
+        We scan for lines that look like video titles (Chinese text, not
+        pure numbers/handles) and pair them with the next like-count line.
+        """
+        videos = []
+        lines = [l.strip() for l in text.split("\n") if l.strip()]
+        i = 0
+        while i < len(lines) and len(videos) < 20:
+            line = lines[i]
+            # Video title heuristic: Chinese text, not too short, not a pure number
+            if (len(line) >= 5 and
+                    re.search(r"[\u4e00-\u9fff]", line) and
+                    not re.match(r"^[\d,.万亿w]+$", line) and
+                    not line.startswith("@")):
+                # Look ahead for like count (e.g. "1.2万" or "3456")
+                likes = ""
+                for j in range(i + 1, min(i + 5, len(lines))):
+                    lm = re.match(r"^([\d,.]+[万亿w]?)$", lines[j])
+                    if lm:
+                        likes = lm.group(1)
+                        break
+                # Look ahead for creator @handle
+                creator = ""
+                for j in range(i + 1, min(i + 4, len(lines))):
+                    cm = re.match(r"^@(.+)", lines[j])
+                    if cm:
+                        creator = cm.group(1)
+                        break
+                videos.append({"title": line, "likes": likes, "creator": creator})
+            i += 1
+        return videos
+
+    @staticmethod
     def _extract_creators(text: str) -> List[Dict[str, str]]:
         """Extract creator/KOL names from video search results."""
         creators = []
         seen = set()
-        # Match patterns like "@username" or "[link] username"
         for match in re.finditer(r"@([^\s\[<]{2,20})", text):
             name = match.group(1).strip()
             if name not in seen:
