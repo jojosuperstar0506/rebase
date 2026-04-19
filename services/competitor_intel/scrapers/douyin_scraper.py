@@ -190,6 +190,20 @@ class DouyinScraper:
             data.d2_official_followers = official["followers"]
             data.d2_verified = official["verified"]
 
+            # Safety net: if top candidate had suspiciously low followers for
+            # a brand we expect to be large, dump card texts so we can see why.
+            if official["followers"] < 10_000:
+                dump_text = "\n\n---\n\n".join(
+                    f"CARD {i}: {c['href']}\n{c['text']}"
+                    for i, c in enumerate(user_cards)
+                )
+                _dump_debug(dump_text, brand['name'], 'user_cards')
+                logger.warning(
+                    f"[MATCH] Brand '{brand['name']}' top account has only "
+                    f"{official['followers']} followers — all {len(user_cards)} "
+                    f"user cards dumped to .debug/ for inspection"
+                )
+
         # D1: Suggestions — pull visible account names from top cards
         data.d1_search_suggestions = [
             self._first_line(c["text"]) for c in user_cards[:8]
@@ -212,13 +226,25 @@ class DouyinScraper:
         if any(m in text for m in _RATE_LIMIT_MARKERS):
             raise RuntimeError(f"Douyin rate-limit page detected on profile {account_id}")
 
-        # D2: Profile metrics — stat blocks are consistent on profile pages
-        data.d2_official_followers = self._extract_number(
-            text, r"(\d[\d,.]*[万w]?)\s*(?:粉丝|关注者)", data.d2_official_followers)
-        data.d2_total_videos = self._extract_number(
-            text, r"(\d[\d,.]*[万w]?)\s*(?:作品|视频)", 0)
-        data.d2_total_likes = self._extract_number(
-            text, r"(\d[\d,.]*[万w]?)\s*(?:获赞|喜欢)", 0)
+        # D2: Profile metrics — try both "粉丝 32.6万" and "32.6万粉丝" orderings
+        followers = self._extract_stat(text, ("粉丝", "关注者", "fans"))
+        videos = self._extract_stat(text, ("作品", "视频", "posts"))
+        likes = self._extract_stat(text, ("获赞", "喜欢", "点赞", "total likes"))
+
+        # Only overwrite if we got a higher value (search page already set d2_official_followers)
+        if followers > data.d2_official_followers:
+            data.d2_official_followers = followers
+        data.d2_total_videos = videos
+        data.d2_total_likes = likes
+
+        # Safety net: if profile stats are suspiciously empty for a brand
+        # we thought was official, dump the page text so we can see why.
+        if followers < 1000 and videos == 0:
+            _dump_debug(text, data.brand_name, f'profile_{account_id[:20]}')
+            logger.warning(
+                f"[PROFILE] Suspiciously low stats for {data.brand_name} "
+                f"(followers={followers}, videos={videos}) — raw page dumped to .debug/"
+            )
 
         # D5: Live status
         if "直播中" in text or "LIVE" in text:
@@ -510,8 +536,8 @@ class DouyinScraper:
             if name.lower() not in t_low and name_en.lower() not in t_low:
                 continue
 
-            followers = DouyinScraper._extract_number(
-                t, r"(\d[\d,.]*[万w]?)\s*(?:粉丝|followers)", 0)
+            # Try both "粉丝 32.6万" and "32.6万粉丝" orderings
+            followers = DouyinScraper._extract_stat(t, ("粉丝", "followers", "fans"))
             is_verified = any(m in t for m in ("认证", "蓝V", "官方账号", "官方"))
 
             user_id = ""
@@ -763,6 +789,35 @@ class DouyinScraper:
         if unit == "k":
             return int(val * 1_000)
         return int(val)
+
+    @staticmethod
+    def _extract_stat(text: str, labels: tuple) -> int:
+        """
+        Extract a numeric stat from Douyin text by trying BOTH label orderings.
+
+        Douyin profile pages render stats as "粉丝 32.6万" (label first), while
+        some search result contexts render "32.6万粉丝" (number first). We try
+        label-first first — it's the most common profile format — then fall
+        back to number-first. Returns the largest value found (brand accounts
+        dominate, so picking max is safe).
+        """
+        best = 0
+        for label in labels:
+            # Pattern A: "粉丝 32.6万" — label then number (profile pages)
+            for m in re.finditer(
+                rf"{label}\s*[:：]?\s*(\d[\d,.]*\s*[万亿wWkK]?)", text
+            ):
+                val = DouyinScraper._likes_to_int(m.group(1).replace(" ", ""))
+                if val > best:
+                    best = val
+            # Pattern B: "32.6万粉丝" — number then label (some cards)
+            for m in re.finditer(
+                rf"(\d[\d,.]*\s*[万亿wWkK]?)\s*{label}", text
+            ):
+                val = DouyinScraper._likes_to_int(m.group(1).replace(" ", ""))
+                if val > best:
+                    best = val
+        return best
 
     @staticmethod
     def _extract_number(text: str, pattern: str, default: int = 0) -> int:
