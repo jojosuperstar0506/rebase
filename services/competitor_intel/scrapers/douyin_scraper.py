@@ -117,8 +117,7 @@ class DouyinScraper:
         await page.wait_for_timeout(5000)  # Wait for JS to render
 
         # Use accessibility tree — NOT javascript_tool (blocked by Douyin)
-        content = await page.accessibility.snapshot()
-        text = self._flatten_accessibility_tree(content)
+        text = await page.aria_snapshot()
 
         # D1: Search suggestions
         data.d1_search_suggestions = self._extract_search_suggestions(text)
@@ -138,8 +137,7 @@ class DouyinScraper:
         await page.wait_for_load_state("networkidle")
         await page.wait_for_timeout(4000)
 
-        content = await page.accessibility.snapshot()
-        text = self._flatten_accessibility_tree(content)
+        text = await page.aria_snapshot()
 
         # D2: Profile metrics
         data.d2_official_followers = self._extract_number(text, r"(\d[\d,.]*[万w]?)\s*(?:粉丝|关注者)", data.d2_official_followers)
@@ -171,8 +169,7 @@ class DouyinScraper:
         await page.wait_for_load_state("networkidle")
         await page.wait_for_timeout(3000)
 
-        content = await page.accessibility.snapshot()
-        text = self._flatten_accessibility_tree(content)
+        text = await page.aria_snapshot()
 
         # D4: Extract creator names from video results
         creators = self._extract_creators(text)

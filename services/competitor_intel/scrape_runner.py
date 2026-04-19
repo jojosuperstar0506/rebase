@@ -308,13 +308,12 @@ async def run_tier_scrape_browser(platform: str, tier: str):
 
         # Quick check: are we logged in?
         try:
-            content = await page.accessibility.snapshot()
-            page_text = _flatten_snapshot(content)
+            page_text = await page.aria_snapshot()
             if '登录' in page_text and '个人主页' not in page_text and '我' not in page_text:
                 print('[WARN] Session may have expired — log in manually in the Chrome window.')
                 input('Press Enter when ready... ')
         except Exception:
-            pass  # accessibility snapshot can fail on some pages — not critical
+            pass  # aria_snapshot can fail on some pages — not critical
 
         success = 0
         for target in targets:

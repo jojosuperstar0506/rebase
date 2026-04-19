@@ -146,8 +146,7 @@ class XhsScraper:
         await page.wait_for_timeout(3000)  # Extra wait for dynamic content
 
         # Get page content via accessibility tree (most reliable on XHS)
-        content = await page.accessibility.snapshot()
-        text = self._flatten_accessibility_tree(content)
+        text = await page.aria_snapshot()
 
         # Extract search suggestions (D1)
         data.d1_search_suggestions = self._extract_search_suggestions(text)
@@ -172,8 +171,7 @@ class XhsScraper:
         await page.wait_for_load_state("networkidle")
         await page.wait_for_timeout(3000)
 
-        content = await page.accessibility.snapshot()
-        text = self._flatten_accessibility_tree(content)
+        text = await page.aria_snapshot()
 
         # Extract follower/note/like counts
         data.d2_official_followers = self._extract_number(text, r"(\d[\d,.]*)\s*(?:粉丝|followers)", 0)
@@ -189,8 +187,7 @@ class XhsScraper:
         await page.wait_for_load_state("networkidle")
         await page.wait_for_timeout(3000)
 
-        content = await page.accessibility.snapshot()
-        text = self._flatten_accessibility_tree(content)
+        text = await page.aria_snapshot()
 
         # Extract sentiment keywords from UGC titles/descriptions
         data.d6_sentiment_keywords = self._extract_sentiment_keywords(text)
@@ -214,8 +211,7 @@ class XhsScraper:
             seen_ids = set()
 
             for page_num in range(max_pages):
-                content = await page.accessibility.snapshot()
-                text = self._flatten_accessibility_tree(content)
+                text = await page.aria_snapshot()
                 cards = self._extract_note_cards_from_text(text)
 
                 new_found = 0
