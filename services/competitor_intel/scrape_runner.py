@@ -20,6 +20,7 @@ Usage:
 import argparse
 import asyncio
 import os
+import random
 import sys
 import traceback
 from datetime import datetime
@@ -259,13 +260,18 @@ async def scrape_brand_with_page(platform: str, brand_name: str, keyword: str, t
         return False
 
 
-async def run_tier_scrape_browser(platform: str, tier: str):
+async def run_tier_scrape_browser(platform: str, tier: str, limit: int = 0):
     """
     Scrape all brands at a tier using Playwright browser mode.
 
     MUST run on a local machine (residential IP). Douyin/XHS actively block
     datacenter IPs. Uses the saved Playwright profile from setup_profiles so
     the browser is already logged in — no QR scan needed.
+
+    Rate-limit defense:
+      * Inter-brand delay is 45–90s with jitter (Douyin) / 30–60s (XHS)
+      * Abort entire tier if the scraper hits a rate_limited status
+      * Use --limit N to cap brands per run while testing
     """
     try:
         from playwright.async_api import async_playwright
@@ -277,6 +283,9 @@ async def run_tier_scrape_browser(platform: str, tier: str):
     if not targets:
         print(f"[INFO] No {tier} targets to scrape for {platform}")
         return
+    if limit and limit > 0:
+        targets = targets[:limit]
+        print(f"[INFO] --limit {limit}: scraping only first {limit} brand(s)")
 
     home_url = PLATFORM_HOME_URLS.get(platform, f'https://www.{platform}.com')
     print(f"[START] Scraping {len(targets)} {tier} brands on {platform} (browser mode)")
@@ -304,7 +313,7 @@ async def run_tier_scrape_browser(platform: str, tier: str):
         except Exception as e:
             print(f"[WARN] Home page navigation issue: {e}")
             print("[INFO] This is often normal for Douyin — continuing with brand searches...")
-        await page.wait_for_timeout(4000)
+        await page.wait_for_timeout(random.randint(4000, 7000))
 
         # Quick check: are we logged in?
         try:
@@ -316,7 +325,8 @@ async def run_tier_scrape_browser(platform: str, tier: str):
             pass  # page.evaluate can fail on some pages — not critical
 
         success = 0
-        for target in targets:
+        rate_limited = False
+        for i, target in enumerate(targets):
             brand_name = target['brand_name']
             platform_ids = target.get('platform_ids') or {}
             keyword = platform_ids.get(platform, brand_name)
@@ -325,14 +335,31 @@ async def run_tier_scrape_browser(platform: str, tier: str):
             if ok:
                 success += 1
 
-            # Respectful delay between brands — mimics human browsing
-            delay = 10 if platform == 'douyin' else 6
-            print(f"  Waiting {delay}s before next brand...")
-            await asyncio.sleep(delay)
+            # Check if the scraper hit a rate-limit page — if so, stop immediately
+            # to avoid getting the account / IP flagged for longer.
+            try:
+                pt = await page.evaluate("document.body ? document.body.innerText : ''")
+                if any(m in pt for m in ('滑块验证', '验证码', '访问过于频繁', '操作太频繁', '人机验证')):
+                    print(f"\n[ABORT] Rate-limit page detected after {brand_name}. Stopping tier scrape.")
+                    print("[INFO]  Wait 1-2 hours before re-running to let Douyin cool off.")
+                    rate_limited = True
+                    break
+            except Exception:
+                pass
+
+            # Respectful inter-brand delay — jittered to look human
+            if i < len(targets) - 1:
+                if platform == 'douyin':
+                    delay = random.randint(45, 90)
+                else:
+                    delay = random.randint(30, 60)
+                print(f"  [WAIT] {delay}s before next brand (human-like pacing)...")
+                await asyncio.sleep(delay)
 
         await context.close()
 
-    print(f"\n[DONE] {platform} {tier} browser: {success}/{len(targets)} brands scraped")
+    final_status = "ABORTED (rate-limited)" if rate_limited else "DONE"
+    print(f"\n[{final_status}] {platform} {tier} browser: {success}/{len(targets)} brands scraped")
 
 
 def _flatten_snapshot(node: dict, depth: int = 0) -> str:
@@ -392,13 +419,16 @@ def main():
     parser.add_argument('--brand', help='Scrape a single brand (deep dive)')
     parser.add_argument('--mode', choices=['api', 'browser'], default='api',
                         help='api=httpx (default), browser=Playwright (local machine only)')
+    parser.add_argument('--limit', type=int, default=0,
+                        help='Browser mode only: scrape at most N brands per run (0 = all). '
+                             'Useful for testing without burning rate budget.')
     args = parser.parse_args()
 
     if args.brand:
         asyncio.run(run_single_brand(args.platform, args.brand, mode=args.mode))
     elif args.tier:
         if args.mode == 'browser':
-            asyncio.run(run_tier_scrape_browser(args.platform, args.tier))
+            asyncio.run(run_tier_scrape_browser(args.platform, args.tier, limit=args.limit))
         else:
             asyncio.run(run_tier_scrape(args.platform, args.tier))
     else:

@@ -17,14 +17,42 @@ read_page / accessibility tree approach for browser mode.
 
 import asyncio
 import json
+import os
+import random
 import re
 import time
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field, asdict
 
 logger = logging.getLogger(__name__)
+
+# Rate-limit / anti-bot markers Douyin surfaces when it wants us to slow down.
+_RATE_LIMIT_MARKERS = (
+    '滑块验证', '验证码', '请稍后再试', '访问过于频繁', '操作太频繁',
+    '系统繁忙', '人机验证', '安全验证',
+)
+
+
+async def _human_pause(min_s: float = 3.0, max_s: float = 7.0):
+    """Sleep for a random interval in [min_s, max_s]."""
+    await asyncio.sleep(random.uniform(min_s, max_s))
+
+
+def _dump_debug(page_text: str, brand: str, step: str):
+    """Save the raw page text when extraction returns empty, so we can see why."""
+    try:
+        debug_dir = Path(os.environ.get('SCRAPER_DEBUG_DIR', '.debug'))
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        safe_brand = re.sub(r'[^A-Za-z0-9_-]', '_', brand)
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        path = debug_dir / f'douyin_{safe_brand}_{step}_{ts}.txt'
+        path.write_text(page_text or '', encoding='utf-8')
+        logger.warning(f"[DEBUG] Saved raw page text to {path}")
+    except Exception as e:
+        logger.warning(f"[DEBUG] Could not save debug file: {e}")
 
 
 @dataclass
@@ -89,25 +117,36 @@ class DouyinScraper:
         try:
             # D1 + D2: Search for brand
             await self._scrape_douyin_search_browser(brand, page, data)
-            await asyncio.sleep(3)  # Douyin needs longer delays
+            await _human_pause(5, 9)  # Random pause before next nav
 
             # D2 + D5: Official profile
             if data.d2_official_account_id:
-                await self._scrape_douyin_profile_browser(data.d2_official_account_id, page, data)
-                await asyncio.sleep(3)
+                await self._scrape_douyin_profile_browser(
+                    data.d2_official_account_id, page, data)
+                await _human_pause(5, 9)
 
-            # D4: Hashtag/topic search
+            # D4: Video search (sorted by likes)
             await self._scrape_douyin_hashtag_browser(brand, page, data)
 
             data.scrape_status = "success"
         except Exception as e:
-            logger.error(f"Douyin browser scrape failed for {brand['name']}: {e}")
-            data.scrape_status = "partial" if data.d2_official_followers > 0 else "failed"
+            msg = str(e)
+            logger.error(f"Douyin browser scrape failed for {brand['name']}: {msg}")
+            if "rate-limit" in msg.lower() or "rate_limit" in msg.lower():
+                data.scrape_status = "rate_limited"
+            else:
+                data.scrape_status = "partial" if data.d2_official_followers > 0 else "failed"
 
         return data
 
     async def _scrape_douyin_search_browser(self, brand: dict, page, data: DouyinBrandData):
-        """Search Douyin for brand and extract user results."""
+        """
+        Search Douyin (user search) and extract D1 suggestions + D2 official account.
+
+        Uses DOM-selector-based extraction instead of positional innerText parsing —
+        each user card is anchored by an <a href="/user/..."> element, which is
+        stable across Douyin redesigns.
+        """
         keyword = brand["douyin_keyword"]
         url = f"https://www.douyin.com/search/{keyword}?type=user"
 
@@ -115,45 +154,77 @@ class DouyinScraper:
             await page.goto(url, wait_until='domcontentloaded', timeout=30000)
         except Exception as e:
             logger.warning(f"Navigation to {url} had an issue: {e} — trying to continue")
-        # Fixed wait: Douyin is a SPA — networkidle never fires, use fixed delay instead
-        await page.wait_for_timeout(5000)
+        # Jitter wait — Douyin is a SPA, networkidle never fires
+        await page.wait_for_timeout(random.randint(5000, 8000))
 
-        text = await page.evaluate("document.body ? document.body.innerText : ''")
+        # Rate-limit check — bail early if Douyin is showing a captcha
+        page_text = await page.evaluate("document.body ? document.body.innerText : ''")
+        if any(m in page_text for m in _RATE_LIMIT_MARKERS):
+            data.scrape_status = "rate_limited"
+            raise RuntimeError(f"Douyin rate-limit page detected for {brand['name']}")
 
-        # D1: Search suggestions — collect short lines from search results
-        data.d1_search_suggestions = self._extract_search_suggestions(text)
+        # Selector-based user card extraction
+        user_cards = await page.evaluate("""
+            Array.from(document.querySelectorAll('a[href*="/user/"]'))
+                .slice(0, 15)
+                .map(a => {
+                    const card = a.closest('li, div[class*="card"], div[class*="user"]') || a.parentElement;
+                    return {
+                        href: a.href,
+                        text: (card ? card.innerText : a.innerText).trim().slice(0, 600)
+                    };
+                })
+                .filter(x => x.text.length > 0);
+        """)
 
-        # D2: Find official account in user search results
-        official = self._find_official_account(text, brand)
+        if not user_cards:
+            _dump_debug(page_text, brand['name'], 'user_search')
+            logger.warning(f"No user cards found for {brand['name']} — page may have been blocked")
+            return
+
+        # D2: Find official account among user cards
+        official = self._find_official_account_from_cards(user_cards, brand)
         if official:
-            data.d2_official_account_id = official.get("id", "")
-            data.d2_official_account_name = official.get("name", "")
-            data.d2_official_followers = official.get("followers", 0)
-            data.d2_verified = official.get("verified", False)
+            data.d2_official_account_id = official["id"]
+            data.d2_official_account_name = official["name"]
+            data.d2_official_followers = official["followers"]
+            data.d2_verified = official["verified"]
+
+        # D1: Suggestions — pull visible account names from top cards
+        data.d1_search_suggestions = [
+            self._first_line(c["text"]) for c in user_cards[:8]
+            if self._first_line(c["text"])
+        ]
 
     async def _scrape_douyin_profile_browser(self, account_id: str, page, data: DouyinBrandData):
-        """Scrape official profile for D2 metrics and D5 live commerce data."""
+        """
+        Scrape official profile for D2 metrics + D5 live commerce.
+        account_id can be a numeric user id or a handle suffix.
+        """
         url = f"https://www.douyin.com/user/{account_id}"
         try:
             await page.goto(url, wait_until='domcontentloaded', timeout=30000)
         except Exception as e:
             logger.warning(f"Profile navigation issue: {e} — trying to continue")
-        # Fixed wait: do NOT use networkidle — Douyin fires network requests indefinitely
-        await page.wait_for_timeout(5000)
+        await page.wait_for_timeout(random.randint(5000, 8000))
 
         text = await page.evaluate("document.body ? document.body.innerText : ''")
+        if any(m in text for m in _RATE_LIMIT_MARKERS):
+            raise RuntimeError(f"Douyin rate-limit page detected on profile {account_id}")
 
-        # D2: Profile metrics
+        # D2: Profile metrics — stat blocks are consistent on profile pages
         data.d2_official_followers = self._extract_number(
             text, r"(\d[\d,.]*[万w]?)\s*(?:粉丝|关注者)", data.d2_official_followers)
-        data.d2_total_videos = self._extract_number(text, r"(\d[\d,.]*)\s*(?:作品|视频)", 0)
+        data.d2_total_videos = self._extract_number(
+            text, r"(\d[\d,.]*[万w]?)\s*(?:作品|视频)", 0)
         data.d2_total_likes = self._extract_number(
             text, r"(\d[\d,.]*[万w]?)\s*(?:获赞|喜欢)", 0)
 
         # D5: Live status
         if "直播中" in text or "LIVE" in text:
             data.d5_live_status = "live_now"
-            data.d5_live_viewers = self._extract_number(text, r"(\d[\d,.]*)\s*(?:观看|在线)", 0)
+            data.d5_live_viewers = self._extract_number(
+                text, r"(\d[\d,.]*)\s*(?:观看|在线)", 0)
         elif "预告" in text or "即将开播" in text:
             data.d5_live_status = "scheduled"
         else:
@@ -165,42 +236,102 @@ class DouyinScraper:
 
     async def _scrape_douyin_hashtag_browser(self, brand: dict, page, data: DouyinBrandData):
         """
-        Scrape video search sorted by popularity for D4 KOL/creator data.
-        sort_type=1 = comprehensive popular sort (综合排序) on Douyin web search.
+        Scrape video search page for D4 KOL / creator / engagement data.
+
+        Uses DOM-selector-based extraction — each video card is anchored by
+        <a href="/video/{id}">, which is stable across redesigns. This
+        replaces the earlier positional-innerText parser which was unreliable.
+
+        Sort: explicitly clicks the "most likes" / "most popular" tab after load
+        so results are comparable across brands and sessions (default sort is
+        personalized to the logged-in user's demographic and is NOT stable for
+        competitive intelligence).
         """
         keyword = brand["douyin_keyword"]
-        # sort_type=1 sorts by popularity/engagement, not just recency
-        url = f"https://www.douyin.com/search/{keyword}?type=video&sort_type=1"
+        url = f"https://www.douyin.com/search/{keyword}?type=video"
 
         try:
             await page.goto(url, wait_until='domcontentloaded', timeout=30000)
         except Exception as e:
             logger.warning(f"Video search navigation issue: {e} — trying to continue")
-        # Fixed wait: do NOT use networkidle on Douyin
-        await page.wait_for_timeout(5000)
+        await page.wait_for_timeout(random.randint(5000, 8000))
 
-        # Scroll to trigger lazy-loaded video cards
-        await page.evaluate("window.scrollTo(0, 1200)")
-        await page.wait_for_timeout(2000)
+        # Rate-limit check
+        page_text = await page.evaluate("document.body ? document.body.innerText : ''")
+        if any(m in page_text for m in _RATE_LIMIT_MARKERS):
+            raise RuntimeError(f"Douyin rate-limit page detected on video search for {brand['name']}")
 
-        text = await page.evaluate("document.body ? document.body.innerText : ''")
+        # ── Force deterministic sort: click the "most likes" filter tab ─────
+        # Try common label variants. Douyin's UI shifts but one of these works.
+        # Stops at first successful click — continues silently if none found
+        # (default sort still gives useful, just personalized, results).
+        sorted_by_likes = False
+        for label in ("最多点赞", "按点赞", "最热", "热门"):
+            try:
+                locator = page.locator(f"text={label}").first
+                if await locator.count() > 0:
+                    await locator.click(timeout=4000)
+                    sorted_by_likes = True
+                    logger.info(f"[SORT] Clicked '{label}' tab for {brand['name']}")
+                    await page.wait_for_timeout(random.randint(3000, 5000))
+                    break
+            except Exception as e:
+                logger.debug(f"Sort tab '{label}' not clickable: {e}")
+                continue
 
-        # D4: Extract creator names + engagement from top videos
-        creators = self._extract_creators(text)
+        if not sorted_by_likes:
+            logger.warning(
+                f"[SORT] Could not find popularity sort tab for {brand['name']} — "
+                f"results are default (personalized) sort"
+            )
+
+        # Two scrolls with human-ish delays to trigger lazy-loaded cards
+        for scroll_y in (800, 1800):
+            await page.evaluate(f"window.scrollTo(0, {scroll_y})")
+            await page.wait_for_timeout(random.randint(1500, 2800))
+
+        # Selector-based video card extraction.
+        # Each card contains: title, creator handle, like count, upload date.
+        video_cards = await page.evaluate("""
+            Array.from(document.querySelectorAll('a[href*="/video/"]'))
+                .slice(0, 25)
+                .map(a => {
+                    const card = a.closest('li, div[class*="video"], div[class*="aweme"], div[class*="card"]') || a.parentElement;
+                    return {
+                        href: a.href,
+                        text: (card ? card.innerText : a.innerText).trim().slice(0, 400)
+                    };
+                })
+                .filter(x => x.text.length > 0);
+        """)
+
+        if not video_cards:
+            _dump_debug(page_text, brand['name'], 'video_search')
+            logger.warning(f"No video cards found for {brand['name']} — page may have been blocked or DOM changed")
+            return
+
+        # Parse each card into structured top_videos + creators
+        top_videos = []
+        creators_seen = set()
+        creators = []
+        for card in video_cards:
+            parsed = self._parse_video_card(card["text"])
+            if parsed["title"]:
+                top_videos.append(parsed)
+            handle = parsed.get("creator")
+            if handle and handle not in creators_seen:
+                creators_seen.add(handle)
+                creators.append({"name": handle, "source": "douyin_video"})
+
         data.d4_top_creators = creators[:10]
         data.d4_brand_mentions_count = len(creators)
 
-        # D4: Extract top video titles and like counts
-        top_videos = self._extract_top_videos(text)
-        if top_videos:
-            # Store as hashtag_views keyed by title snippet for backwards compat
-            for v in top_videos[:5]:
-                data.d4_hashtag_views[v["title"][:40]] = v["likes"]
+        for v in top_videos[:5]:
+            data.d4_hashtag_views[v["title"][:40]] = v["likes"]
 
-        # D4: Hashtag total play count (shown as "X万播放" on topic pages)
-        hashtag = f"#{keyword}#"
+        # Hashtag total plays (if shown on the results header)
         view_match = re.search(
-            rf"{re.escape(keyword)}\s*(\d[\d,.]*[万亿w]?)\s*(?:播放|次播放|views)", text)
+            rf"{re.escape(keyword)}\s*(\d[\d,.]*[万亿w]?)\s*(?:播放|次播放)", page_text)
         if view_match:
             data.d4_hashtag_views[f"#{keyword}# total"] = view_match.group(1)
 
@@ -319,6 +450,108 @@ class DouyinScraper:
                 seen.add(line)
                 suggestions.append(line)
         return suggestions[:10]
+
+    @staticmethod
+    def _first_line(text: str) -> str:
+        """Return the first non-empty stripped line of a block of text."""
+        for line in text.split("\n"):
+            line = line.strip()
+            if line:
+                return line
+        return ""
+
+    @staticmethod
+    def _find_official_account_from_cards(cards: List[Dict[str, str]],
+                                           brand: dict) -> Optional[dict]:
+        """
+        Scan user cards (from selector-based extraction) for the brand's
+        official account. Each card is a dict {href, text} where text is
+        that card's innerText — so locality is guaranteed.
+        """
+        name = brand["name"]
+        name_en = brand.get("name_en", name) or name
+
+        best = None
+        best_followers = -1
+
+        for card in cards:
+            t = card["text"]
+            t_low = t.lower()
+            if name.lower() not in t_low and name_en.lower() not in t_low:
+                continue
+
+            is_verified = any(m in t for m in ("认证", "蓝V", "官方账号", "官方"))
+            followers = DouyinScraper._extract_number(
+                t, r"(\d[\d,.]*[万w]?)\s*(?:粉丝|followers)", 0)
+
+            # Prefer verified accounts and/or highest follower count
+            score = (1_000_000 if is_verified else 0) + followers
+            if score <= best_followers:
+                continue
+
+            # Extract user id from href: /user/MS4wLjABAAAAxxxx or similar
+            user_id = ""
+            id_match = re.search(r"/user/([^/?#]+)", card["href"])
+            if id_match:
+                user_id = id_match.group(1)
+
+            # Account name = first line of the card
+            account_name = DouyinScraper._first_line(t)
+
+            best = {
+                "name": account_name or name,
+                "id": user_id,
+                "followers": followers,
+                "verified": is_verified,
+            }
+            best_followers = score
+
+        return best
+
+    @staticmethod
+    def _parse_video_card(text: str) -> Dict[str, str]:
+        """
+        Parse a single video card's innerText into a structured dict.
+
+        A typical card looks like:
+            这双adidas超好看 | 穿搭分享
+            @creator_handle
+            12.3万
+            3 天前
+
+        We try to identify: title (first Chinese line), creator (@handle),
+        likes (standalone number possibly with 万/w), date (relative time).
+        """
+        result = {"title": "", "creator": "", "likes": "", "date": ""}
+        lines = [l.strip() for l in text.split("\n") if l.strip()]
+
+        for line in lines:
+            # Creator handle
+            if not result["creator"]:
+                m = re.match(r"^@(.+)", line)
+                if m:
+                    result["creator"] = m.group(1)[:40]
+                    continue
+
+            # Standalone number = like count (most cards show one)
+            if not result["likes"] and re.match(r"^[\d,.]+[万亿w]?$", line):
+                result["likes"] = line
+                continue
+
+            # Relative date
+            if not result["date"] and re.search(r"(\d+\s*(?:天|小时|分钟|秒|月|年)前|今天|昨天)", line):
+                result["date"] = line
+                continue
+
+            # Title — first non-trivial Chinese-containing line that isn't above
+            if (not result["title"]
+                    and len(line) >= 4
+                    and re.search(r"[\u4e00-\u9fffA-Za-z]", line)
+                    and not re.match(r"^[\d,.万亿w]+$", line)
+                    and not line.startswith("@")):
+                result["title"] = line[:120]
+
+        return result
 
     @staticmethod
     def _find_official_account(text: str, brand: dict) -> Optional[dict]:
