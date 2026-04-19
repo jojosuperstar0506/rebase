@@ -11,11 +11,40 @@ Usage:
 
 import argparse
 import json
+import math
 import sys
 import traceback
 from .db_bridge import get_conn
 
-METRIC_VERSION = "v1.0"
+METRIC_VERSION = "v1.1"
+
+
+def _log_normalize(value, cap: float) -> float:
+    """
+    Log-scale normalize a value to 0-100.
+
+    Linear normalization broke on wide-range metrics: boutique brands (10K
+    followers) and megabrands (10M followers) are 1000x apart but linear
+    scaling clamps both to 100 past a low threshold. Log scale preserves
+    differentiation across orders of magnitude.
+
+    Formula: log10(value + 1) / log10(cap) * 100, clamped to [0, 100].
+
+    Examples with cap=100M:
+      value=100         ->  25.0
+      value=10K         ->  50.0
+      value=100K        ->  62.5
+      value=1M          ->  75.0
+      value=10M         ->  87.5
+      value=100M        -> 100.0
+    """
+    try:
+        v = float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    if v <= 0:
+        return 0.0
+    return min(100.0, max(0.0, math.log10(v + 1) / math.log10(max(cap, 10)) * 100))
 
 
 def update_job(job_id: str, **fields):
@@ -181,12 +210,14 @@ def compute_momentum(profile: dict, products: list) -> dict:
     total_notes = engagement.get("total_notes") or 0
     product_count = len(products)
 
-    # Normalize each factor to 0-100
-    # These thresholds are calibrated for the Chinese handbag market
-    follower_score = min(100, (followers / 100000) * 100)  # 100k = max
-    content_score = min(100, (total_notes / 500) * 100)  # 500 notes = max
-    engagement_score = min(100, (total_likes / 200000) * 100)  # 200k likes = max
-    catalog_score = min(100, (product_count / 50) * 100)  # 50 products = max
+    # Normalize each factor to 0-100 using log scale so boutique brands
+    # (10K followers) and megabrands (100M followers) both get meaningful
+    # differentiation. Linear caps collapsed everything past a low threshold
+    # to 100 (e.g. Adidas 13.68M and 安踏 6.16M both clamped to 100).
+    follower_score = _log_normalize(followers, cap=100_000_000)   # 100M = max
+    content_score = _log_normalize(total_notes, cap=10_000)       # 10K posts = max
+    engagement_score = _log_normalize(total_likes, cap=1_000_000_000)  # 1B likes = max
+    catalog_score = _log_normalize(product_count, cap=500)        # 500 products = max
 
     # Weighted average
     score = round(
@@ -242,11 +273,11 @@ def compute_threat(profile: dict, products: list, workspace: dict) -> dict:
         price_distance = abs(comp_avg_price - user_mid) / max(user_mid, 1)
         price_overlap = max(0, 100 - (price_distance * 100))  # 0 distance = 100 overlap
 
-    # Market presence score
-    presence_score = min(100, (followers / 80000) * 100)
+    # Market presence score (log-scaled — see compute_momentum for rationale)
+    presence_score = _log_normalize(followers, cap=100_000_000)
 
-    # Engagement intensity
-    engagement_score = min(100, (total_likes / 150000) * 100)
+    # Engagement intensity (log-scaled)
+    engagement_score = _log_normalize(total_likes, cap=1_000_000_000)
 
     # Product range overlap (how many products compete in user's price range)
     competing_products = 0
