@@ -15,6 +15,7 @@ Note: Douyin blocks javascript_tool execution. Always use
 read_page / accessibility tree approach for browser mode.
 """
 
+import asyncio
 import json
 import re
 import time
@@ -88,12 +89,12 @@ class DouyinScraper:
         try:
             # D1 + D2: Search for brand
             await self._scrape_douyin_search_browser(brand, page, data)
-            time.sleep(3)  # Douyin needs longer delays
+            await asyncio.sleep(3)  # Douyin needs longer delays
 
             # D2 + D5: Official profile
             if data.d2_official_account_id:
                 await self._scrape_douyin_profile_browser(data.d2_official_account_id, page, data)
-                time.sleep(3)
+                await asyncio.sleep(3)
 
             # D4: Hashtag/topic search
             await self._scrape_douyin_hashtag_browser(brand, page, data)

@@ -17,6 +17,7 @@ read_page (accessibility tree) is the most reliable approach.
 For Aliyun deployment, rotate proxies and use signed cookie auth.
 """
 
+import asyncio
 import json
 import re
 import time
@@ -112,19 +113,19 @@ class XhsScraper:
         try:
             # D1 + D2 + D3: Search results page
             await self._scrape_xhs_search_browser(brand, page, data)
-            time.sleep(2)  # Respectful delay
+            await asyncio.sleep(2)  # Respectful delay
 
             # D2: Official profile (if account ID known)
             if data.d2_official_account_id:
                 await self._scrape_xhs_profile_browser(data.d2_official_account_id, page, data)
-                time.sleep(2)
+                await asyncio.sleep(2)
 
             # D6: UGC sentiment from search results (multiple pages)
             await self._scrape_xhs_ugc_browser(brand, page, data)
 
             # Full catalog: paginate through all notes on the brand's profile
             if data.d2_official_account_id:
-                time.sleep(2)
+                await asyncio.sleep(2)
                 await self._scrape_xhs_note_catalog_browser(
                     data.d2_official_account_id, page, data, max_pages=10
                 )
