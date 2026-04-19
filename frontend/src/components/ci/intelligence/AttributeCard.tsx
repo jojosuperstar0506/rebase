@@ -85,12 +85,31 @@ export default function AttributeCard({ metricType, data, lang, C, isMobile, isW
   const [expanded, setExpanded] = useState(false);
   const [hovered, setHovered] = useState(false);
   const config = METRIC_CONFIG[metricType] || DEFAULT_CONFIG;
-  const isPending = isWave4 || !data || data.score === 0;
+
+  // ── Status-aware rendering ────────────────────────────────────────
+  // The backend now emits an explicit `status` per metric so we can tell
+  // "pipeline is still running" apart from "pipeline finished with zero
+  // data" apart from "this metric can't ever be computed from the user's
+  // connected data sources". Previously all three cases rendered as 0/—
+  // which was ambiguous and eroded trust in the numbers that WERE real.
+  const status = isWave4
+    ? 'pending'
+    : (data?.status ?? (data ? (data.score > 0 ? 'computed' : 'no_data') : 'pending'));
+  const isComputed = status === 'computed';
+  const isNotApplicable = status === 'not_applicable';
+  const isNoData = status === 'no_data';
+  // isPending kept for legacy code paths (expanded detail, skeleton)
+  const isPending = !isComputed;
   const score = data?.score ?? 0;
   const brandEntries = data ? Object.entries(data.brands) : [];
 
   // Get the top AI insight from the first brand that has one
   const topInsight = brandEntries.find(([, b]) => b.ai_narrative)?.[1]?.ai_narrative;
+
+  // Pick a status-specific reason line shown instead of the metric description
+  const statusReason = !isComputed
+    ? (brandEntries.find(([, b]) => b.status_reason)?.[1]?.status_reason ?? null)
+    : null;
 
   const card: CSSProperties = {
     background: C.s1,
@@ -138,18 +157,19 @@ export default function AttributeCard({ metricType, data, lang, C, isMobile, isW
     >
       {/* Header row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        {/* Score ring or pending indicator */}
-        {isPending ? (
+        {/* Score ring (computed) / N-A lock / No-data dash / Pending clock */}
+        {isComputed ? (
+          <ScoreRing score={score} color={config.color} />
+        ) : (
           <div style={{
             width: 56, height: 56, borderRadius: '50%',
-            background: C.s2, border: `2px dashed ${C.bd}`,
+            background: C.s2,
+            border: `2px ${isNotApplicable ? 'solid' : 'dashed'} ${isNotApplicable ? '#94a3b855' : C.bd}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 12, color: C.t3, fontStyle: 'italic',
-          }}>
-            —
+            fontSize: 18, color: C.t3,
+          }} title={statusReason || ''}>
+            {isNotApplicable ? '🔒' : isNoData ? '—' : '⏳'}
           </div>
-        ) : (
-          <ScoreRing score={score} color={config.color} />
         )}
 
         {/* Label + description */}
@@ -159,11 +179,37 @@ export default function AttributeCard({ metricType, data, lang, C, isMobile, isW
             <span style={{ fontSize: 14, fontWeight: 600, color: C.tx }}>
               {lang === 'zh' ? config.label.zh : config.label.en}
             </span>
+            {/* Status badge — only show for non-computed states so the normal
+                card stays clean when everything is working */}
+            {isNotApplicable && (
+              <span style={{
+                fontSize: 10, fontWeight: 600, color: '#64748b',
+                background: '#94a3b815', padding: '2px 6px', borderRadius: 3,
+                marginLeft: 'auto',
+              }}>
+                {lang === 'zh' ? '数据源受限' : 'N/A'}
+              </span>
+            )}
+            {isNoData && (
+              <span style={{
+                fontSize: 10, fontWeight: 600, color: '#6b7280',
+                background: '#6b728015', padding: '2px 6px', borderRadius: 3,
+                marginLeft: 'auto',
+              }}>
+                {lang === 'zh' ? '暂无数据' : 'No data'}
+              </span>
+            )}
           </div>
           <div style={{ fontSize: 11, color: C.t3, lineHeight: 1.4 }}>
-            {isPending
-              ? (lang === 'zh' ? '分析待计算' : 'Analysis pending')
-              : (lang === 'zh' ? config.description.zh : config.description.en)}
+            {isNotApplicable
+              ? (statusReason || (lang === 'zh'
+                  ? '此指标需要连接小红书或天猫品牌号'
+                  : 'Requires XHS or Tmall brand account to unlock'))
+              : isNoData
+                ? (statusReason || (lang === 'zh' ? '尚未捕获数据' : 'No data captured yet'))
+                : !isComputed
+                  ? (lang === 'zh' ? '分析计算中…' : 'Analysis in progress…')
+                  : (lang === 'zh' ? config.description.zh : config.description.en)}
           </div>
         </div>
 

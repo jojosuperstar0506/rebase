@@ -247,6 +247,41 @@ export default function CIIntelligence() {
           </p>
         </div>
 
+        {/* Data freshness banner — color-coded by age so users notice stale data */}
+        {!isLocal && intel?.last_updated && (() => {
+          const ageMs = Date.now() - new Date(intel.last_updated).getTime();
+          const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+          const ageHours = Math.floor(ageMs / (1000 * 60 * 60));
+          // 3 tiers: fresh (<= 7d, green), aging (8-14d, yellow), stale (>14d, red)
+          const tier = ageDays > 14 ? 'stale' : ageDays > 7 ? 'aging' : 'fresh';
+          const tierColor = tier === 'stale' ? '#ef4444' : tier === 'aging' ? '#f59e0b' : '#22c55e';
+          const ageLabel = ageHours < 24
+            ? (lang === 'zh' ? `${ageHours}小时前` : `${ageHours}h ago`)
+            : (lang === 'zh' ? `${ageDays}天前` : `${ageDays}d ago`);
+          const staleMsg = tier === 'stale'
+            ? (lang === 'zh'
+              ? ' — 数据已过期，建议重新运行分析'
+              : ' — Data is stale, consider re-running analysis')
+            : '';
+          return (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: `${tierColor}10`, border: `1px solid ${tierColor}33`,
+              borderRadius: 8, padding: '8px 12px', marginBottom: 14,
+              fontSize: 12, color: C.t2,
+            }}>
+              <span style={{
+                width: 8, height: 8, borderRadius: '50%', background: tierColor,
+                flexShrink: 0,
+              }} />
+              <span>
+                {lang === 'zh' ? `数据更新于${ageLabel}` : `Data last updated ${ageLabel}`}
+                {staleMsg}
+              </span>
+            </div>
+          );
+        })()}
+
         {/* AI Executive Summary */}
         {intel?.domains?.core?.metrics?.momentum && (
           <div style={{
@@ -301,7 +336,15 @@ export default function CIIntelligence() {
             {CORE_METRICS.map(metric => {
               const data = metricMap[metric];
               const config = METRIC_CONFIG[metric];
-              const avgScore = data?.score ?? 0;
+              const status = data?.status ?? (data && data.score > 0 ? 'computed' : 'no_data');
+              const isComputed = status === 'computed';
+              // Only show a number if we truly have a meaningful score.
+              // Anything else renders as an em-dash — prevents junk displays
+              // like concatenated fallbacks or stringified zeros.
+              const scoreValue = typeof data?.score === 'number' ? data.score : null;
+              const displayValue = isComputed && scoreValue !== null && scoreValue > 0
+                ? String(Math.round(scoreValue))
+                : '—';
               return (
                 <div key={metric} style={{
                   flex: '1 1 100px', minWidth: 100,
@@ -310,8 +353,12 @@ export default function CIIntelligence() {
                 }}>
                   <span style={{ fontSize: 14 }}>{config?.icon}</span>
                   <div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: config?.color || C.ac, lineHeight: 1 }}>
-                      {avgScore || '—'}
+                    <div style={{
+                      fontSize: 18, fontWeight: 700,
+                      color: isComputed ? (config?.color || C.ac) : C.t3,
+                      lineHeight: 1,
+                    }}>
+                      {displayValue}
                     </div>
                     <div style={{ fontSize: 10, color: C.t3, marginTop: 2 }}>
                       {lang === 'zh' ? config?.label.zh : config?.label.en}

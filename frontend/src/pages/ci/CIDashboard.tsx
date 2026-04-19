@@ -201,6 +201,28 @@ export default function CIDashboard() {
   // TASK-32/35/36: Real scores only when API responded AND scoring pipeline has completed.
   const hasRealScores = source === 'api' && !dashboard?.analysis_pending;
 
+  // ── Dismissible action items ──────────────────────────────────────
+  // Stored as a Set of stable hashes in localStorage so the same auto-generated
+  // item doesn't reappear next visit after the user has acknowledged it.
+  // This is intentionally client-only — V1 doesn't need server-side ack state.
+  const DISMISSED_ACTIONS_KEY = 'rebase_ci_dismissed_actions';
+  const [dismissedActions, setDismissedActions] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(DISMISSED_ACTIONS_KEY);
+      return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+    } catch { return new Set(); }
+  });
+  const actionKey = (item: ActionItem, idx: number) =>
+    `${item.title || ''}|${(item.description || '').slice(0, 40)}|${idx}`;
+  const dismissAction = useCallback((key: string) => {
+    setDismissedActions(prev => {
+      const next = new Set(prev);
+      next.add(key);
+      try { localStorage.setItem(DISMISSED_ACTIONS_KEY, JSON.stringify([...next])); } catch { /* quota */ }
+      return next;
+    });
+  }, []);
+
   // ── TASK-36: Analysis job polling ──────────────────────────────────
   const [analysisJob, setAnalysisJob] = useState<AnalysisJob | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -241,7 +263,26 @@ export default function CIDashboard() {
   useEffect(() => {
     if (!isJobActive || !workspace?.id) { stopPolling(); return; }
 
+    // Polling timeout — don't let the UI sit on "analyzing…" forever if the
+    // backend hangs or the job row is never updated. After 15 minutes we stop
+    // polling and surface a soft timeout so the user can retry.
+    const POLL_TIMEOUT_MS = 15 * 60 * 1000;
+    const pollStartedAt = Date.now();
+
     pollRef.current = setInterval(async () => {
+      // Hard stop after timeout — mark the job as failed locally so the UI
+      // shows the retry affordance instead of an infinite spinner.
+      if (Date.now() - pollStartedAt > POLL_TIMEOUT_MS) {
+        stopPolling();
+        setAnalysisJob(prev => prev ? {
+          ...prev,
+          status: 'failed' as AnalysisJob['status'],
+          error_message: (prev as any).error_message
+            || 'Analysis timed out after 15 minutes. Please retry.',
+        } : prev);
+        return;
+      }
+
       const status = await getAnalysisStatus(workspace.id!);
       if (status) {
         setAnalysisJob(status);
@@ -728,41 +769,63 @@ export default function CIDashboard() {
           })()}
 
           {/* Action Items — HERO POSITION (TASK-32) */}
-          {hasRealScores && data.action_items.length > 0 && (
-            <div style={card}>
-              <div style={sectionTitle}>
-                {t(T.ci.actionItems, lang)}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {data.action_items.map((item, i) => {
-                  const pColor = item.priority === 'high' ? C.danger : item.priority === 'medium' ? C.ac : C.t2;
-                  return (
-                    <div key={i} style={{
-                      display: 'flex', gap: 14, padding: isMobile ? '10px 12px' : '14px 16px',
-                      background: C.s2, borderRadius: 8, border: `1px solid ${C.bd}`,
-                      borderLeft: `3px solid ${pColor}`,
-                    }}>
-                      <div style={{ flexShrink: 0, marginTop: 2 }}>
-                        <span style={{
-                          fontSize: 11, fontWeight: 700, color: pColor,
-                          background: `${pColor}18`, border: `1px solid ${pColor}44`,
-                          borderRadius: 4, padding: '2px 8px',
-                          textTransform: 'uppercase', letterSpacing: '0.04em',
-                        }}>
-                          {item.priority}
-                        </span>
+          {hasRealScores && (() => {
+            // Filter out dismissed items so acknowledged actions stay hidden
+            // across reloads (localStorage-backed)
+            const visibleActions = data.action_items
+              .map((item, i) => ({ item, i, key: actionKey(item, i) }))
+              .filter(({ key }) => !dismissedActions.has(key));
+            if (visibleActions.length === 0) return null;
+            return (
+              <div style={card}>
+                <div style={sectionTitle}>
+                  {t(T.ci.actionItems, lang)}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {visibleActions.map(({ item, i, key }) => {
+                    const pColor = item.priority === 'high' ? C.danger : item.priority === 'medium' ? C.ac : C.t2;
+                    return (
+                      <div key={i} style={{
+                        display: 'flex', gap: 14, padding: isMobile ? '10px 12px' : '14px 16px',
+                        background: C.s2, borderRadius: 8, border: `1px solid ${C.bd}`,
+                        borderLeft: `3px solid ${pColor}`,
+                      }}>
+                        <div style={{ flexShrink: 0, marginTop: 2 }}>
+                          <span style={{
+                            fontSize: 11, fontWeight: 700, color: pColor,
+                            background: `${pColor}18`, border: `1px solid ${pColor}44`,
+                            borderRadius: 4, padding: '2px 8px',
+                            textTransform: 'uppercase', letterSpacing: '0.04em',
+                          }}>
+                            {item.priority}
+                          </span>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{item.title}</div>
+                          <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.7 }}>{item.description}</div>
+                        </div>
+                        {item.dept && <span style={{ fontSize: 12, color: C.t3, flexShrink: 0 }}>[{item.dept}]</span>}
+                        {/* Dismiss button — marks this action as acknowledged */}
+                        <button
+                          onClick={() => dismissAction(key)}
+                          title={lang === 'zh' ? '标记为已处理' : 'Mark as handled'}
+                          style={{
+                            flexShrink: 0, border: 'none', background: 'transparent',
+                            color: C.t3, fontSize: 18, cursor: 'pointer',
+                            padding: '0 4px', lineHeight: 1, alignSelf: 'flex-start',
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.color = C.tx)}
+                          onMouseLeave={e => (e.currentTarget.style.color = C.t3)}
+                        >
+                          ✕
+                        </button>
                       </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{item.title}</div>
-                        <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.7 }}>{item.description}</div>
-                      </div>
-                      {item.dept && <span style={{ fontSize: 12, color: C.t3, flexShrink: 0 }}>[{item.dept}]</span>}
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ── Divider to "Show me the data" section ──────────── */}
 

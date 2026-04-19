@@ -830,6 +830,69 @@ app.get('/api/ci/dashboard', async (req, res) => {
   }
 });
 
+// Metrics that structurally require XHS / Tmall data sources.
+// Douyin doesn't expose product prices or a product catalog to public scraping,
+// so if a brand has only Douyin data, these metrics return 0 — and we want the
+// UI to render that as "Not applicable — connect XHS" instead of a misleading
+// low score.
+const XHS_TMALL_REQUIRED_METRICS = new Set([
+  'price_positioning',
+  'trending_products',
+  'design_profile',
+  'wtp',
+]);
+
+/**
+ * Derive the user-facing status for one brand × metric row.
+ *
+ *   'computed'        — score > 0, trust it
+ *   'no_data'         — pipeline ran but had nothing to chew on
+ *   'not_applicable'  — metric structurally can't be computed from the
+ *                       available data sources for this brand
+ *
+ * Returns { status, status_reason }.
+ */
+function deriveMetricStatus(metricType, score, rawInputs, brandHasXhsData) {
+  // Real, meaningful score
+  if (typeof score === 'number' && score > 0) {
+    return { status: 'computed' };
+  }
+
+  // Zero / null score — figure out WHY
+  const reason = rawInputs && typeof rawInputs === 'object'
+    ? (rawInputs.reason || rawInputs.status || '')
+    : '';
+
+  // Structural N/A: pricing/product/design metrics when the brand only has
+  // Douyin data. Douyin public scraping can't see product prices or catalogs.
+  if (XHS_TMALL_REQUIRED_METRICS.has(metricType) && !brandHasXhsData) {
+    return {
+      status: 'not_applicable',
+      status_reason: 'Requires XHS or Tmall data source — connect a brand account to unlock.',
+    };
+  }
+
+  // Pipeline explicitly flagged no data
+  if (reason === 'no_data' || reason === 'no_price_data' || reason === 'no_product_data') {
+    return { status: 'no_data', status_reason: 'No data captured for this dimension yet.' };
+  }
+
+  // Default: no data available
+  return { status: 'no_data', status_reason: 'No data captured for this dimension yet.' };
+}
+
+/**
+ * Derive the aggregate status for a metric across brands:
+ * - 'computed' if ANY brand has a real score
+ * - 'not_applicable' if ALL brands are N/A for the same structural reason
+ * - 'no_data' otherwise
+ */
+function deriveAggregateStatus(brandStatuses) {
+  if (brandStatuses.some(s => s === 'computed')) return 'computed';
+  if (brandStatuses.length > 0 && brandStatuses.every(s => s === 'not_applicable')) return 'not_applicable';
+  return 'no_data';
+}
+
 // GET /api/ci/intelligence — all metrics for all competitors, grouped by domain
 app.get('/api/ci/intelligence', async (req, res) => {
   try {
@@ -845,6 +908,21 @@ app.get('/api/ci/intelligence', async (req, res) => {
        ORDER BY competitor_name, metric_type, analyzed_at DESC`,
       [workspaceId]
     );
+
+    // Figure out which brands have XHS / Tmall scrape data so we can decide
+    // which metrics are structurally N/A vs. merely missing.
+    const { rows: sourceRows } = await pool.query(
+      `SELECT DISTINCT brand_name, platform
+         FROM scraped_brand_profiles
+        WHERE brand_name = ANY($1::text[])`,
+      [[...new Set(rows.map(r => r.competitor_name))]]
+    );
+    const brandHasXhs = new Map();
+    for (const s of sourceRows) {
+      if (s.platform === 'xhs' || s.platform === 'tmall' || s.platform === 'taobao') {
+        brandHasXhs.set(s.brand_name, true);
+      }
+    }
 
     // Collect available metric types
     const availableMetrics = [...new Set(rows.map(r => r.metric_type))];
@@ -863,6 +941,7 @@ app.get('/api/ci/intelligence', async (req, res) => {
       if (!domains[domain].metrics[metricKey]) {
         domains[domain].metrics[metricKey] = {
           score: null,
+          status: 'no_data',
           brands: {},
         };
       }
@@ -873,23 +952,38 @@ app.get('/api/ci/intelligence', async (req, res) => {
         try { rawInputs = JSON.parse(rawInputs); } catch { /* leave as-is */ }
       }
 
+      const { status, status_reason } = deriveMetricStatus(
+        row.metric_type,
+        row.score,
+        rawInputs,
+        brandHasXhs.get(row.competitor_name) === true,
+      );
+
       domains[domain].metrics[metricKey].brands[row.competitor_name] = {
         score: row.score,
+        status,
+        status_reason,
         raw_inputs: rawInputs,
         ai_narrative: row.ai_narrative,
         analyzed_at: row.analyzed_at,
       };
     }
 
-    // Compute aggregate score per metric (average across brands)
+    // Compute aggregate score + status per metric
     for (const domain of Object.values(domains)) {
       for (const [, metric] of Object.entries(domain.metrics)) {
-        const brandScores = Object.values(metric.brands)
-          .map(b => b.score)
-          .filter(s => s != null);
-        metric.score = brandScores.length > 0
-          ? Math.round(brandScores.reduce((a, b) => a + b, 0) / brandScores.length)
+        // Only average across brands whose score is meaningful — otherwise
+        // the zeros from N/A or no-data brands drag the average down and
+        // the UI shows a misleading low aggregate.
+        const meaningfulScores = Object.values(metric.brands)
+          .filter(b => b.status === 'computed')
+          .map(b => b.score);
+        metric.score = meaningfulScores.length > 0
+          ? Math.round(meaningfulScores.reduce((a, b) => a + b, 0) / meaningfulScores.length)
           : null;
+        metric.status = deriveAggregateStatus(
+          Object.values(metric.brands).map(b => b.status)
+        );
       }
     }
 

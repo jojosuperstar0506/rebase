@@ -449,15 +449,31 @@ export async function getAnalysisStatus(workspaceId: string): Promise<AnalysisJo
 
 // ─── Intelligence Layer ─────────────────────────────────────────
 
+/**
+ * Per-metric status — tells the UI whether this score is trustworthy.
+ *
+ * - 'computed': pipeline ran and produced a real, non-trivial score.
+ * - 'pending': no analysis row yet (first-time user or analysis still running).
+ * - 'no_data': pipeline ran but had no scrape data to chew on.
+ * - 'not_applicable': this metric structurally can't be computed from the
+ *   connected data sources (e.g. price analysis when only Douyin is connected —
+ *   Douyin doesn't expose product prices to public scraping).
+ */
+export type MetricStatus = 'computed' | 'pending' | 'no_data' | 'not_applicable';
+
 export interface MetricBrandData {
   score: number;
+  status: MetricStatus;
   raw_inputs: Record<string, any> | null;
   ai_narrative: string | null;
   analyzed_at: string;
+  /** Human-readable reason for non-computed statuses. E.g. "Connect XHS to unlock pricing." */
+  status_reason?: string;
 }
 
 export interface MetricData {
   score: number;
+  status: MetricStatus;
   brands: Record<string, MetricBrandData>;
 }
 
