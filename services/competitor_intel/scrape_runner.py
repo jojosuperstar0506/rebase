@@ -308,12 +308,12 @@ async def run_tier_scrape_browser(platform: str, tier: str):
 
         # Quick check: are we logged in?
         try:
-            page_text = await page.aria_snapshot()
+            page_text = await page.evaluate("document.body ? document.body.innerText : ''")
             if '登录' in page_text and '个人主页' not in page_text and '我' not in page_text:
                 print('[WARN] Session may have expired — log in manually in the Chrome window.')
                 input('Press Enter when ready... ')
         except Exception:
-            pass  # aria_snapshot can fail on some pages — not critical
+            pass  # page.evaluate can fail on some pages — not critical
 
         success = 0
         for target in targets:

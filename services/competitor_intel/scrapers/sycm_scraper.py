@@ -98,8 +98,7 @@ class SycmScraper:
             await page.wait_for_load_state("networkidle")
             await page.wait_for_timeout(3000)
 
-            content = await page.accessibility.snapshot()
-            text = self._flatten_accessibility_tree(content)
+            text = await page.evaluate("document.body ? document.body.innerText : ''")
 
             if "登录" in text and "欢迎" not in text:
                 logger.warning("SYCM: Not logged in. Skipping.")
@@ -128,8 +127,7 @@ class SycmScraper:
         await page.wait_for_load_state("networkidle")
         await page.wait_for_timeout(3000)
 
-        content = await page.accessibility.snapshot()
-        text = self._flatten_accessibility_tree(content)
+        text = await page.evaluate("document.body ? document.body.innerText : ''")
 
         # Extract ranking info
         rank_match = re.search(r"(?:排名|排行).*?(\d+)", text)
@@ -154,8 +152,7 @@ class SycmScraper:
         await page.wait_for_load_state("networkidle")
         await page.wait_for_timeout(3000)
 
-        content = await page.accessibility.snapshot()
-        text = self._flatten_accessibility_tree(content)
+        text = await page.evaluate("document.body ? document.body.innerText : ''")
 
         # Extract top products
         products = self._extract_top_products(text)
