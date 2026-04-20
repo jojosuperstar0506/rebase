@@ -18,6 +18,7 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useApp } from '../../context/AppContext';
+import type { ColorSet } from '../../theme/colors';
 import CISubNav from '../../components/ci/CISubNav';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useCIData } from '../../hooks/useCIData';
@@ -526,7 +527,7 @@ export default function CIBrief() {
 // ─── Sub-components ──────────────────────────────────────────────────────
 
 function ScriptBlock({ label, text, color, C }: {
-  label: string; text: string; color: string; C: Record<string, string>;
+  label: string; text: string; color: string; C: ColorSet;
 }) {
   return (
     <div style={{ display: 'flex', gap: 12 }}>
@@ -552,7 +553,7 @@ function ProductOpportunityCard({ opp, accepted, onAccept, onDismiss, C, lang, i
   accepted: boolean;
   onAccept: (id: string) => void;
   onDismiss: (id: string) => void;
-  C: Record<string, string>;
+  C: ColorSet;
   lang: string;
   isMobile: boolean;
 }) {
@@ -646,7 +647,7 @@ function ProductOpportunityCard({ opp, accepted, onAccept, onDismiss, C, lang, i
   );
 }
 
-function MetaBox({ label, value, C }: { label: string; value: string; C: Record<string, string> }) {
+function MetaBox({ label, value, C }: { label: string; value: string; C: ColorSet }) {
   return (
     <div style={{ padding: '8px 10px', background: C.s2, borderRadius: 6 }}>
       <div style={{ fontSize: 10, color: C.t3, marginBottom: 2 }}>{label}</div>
@@ -656,7 +657,7 @@ function MetaBox({ label, value, C }: { label: string; value: string; C: Record<
 }
 
 function DomainScoreComparison({ domains, C, lang }: {
-  domains: DomainScores; C: Record<string, string>; lang: string;
+  domains: DomainScores; C: ColorSet; lang: string;
 }) {
   const rows: Array<{ key: keyof DomainScores; label: string; color: string }> = [
     { key: 'consumer',  label: lang === 'zh' ? '消费者' : 'Consumer',  color: '#ec4899' },
@@ -698,7 +699,7 @@ function DomainScoreComparison({ domains, C, lang }: {
 }
 
 function BarRow({ name, score, max, color, highlight, C }: {
-  name: string; score: number; max: number; color: string; highlight?: boolean; C: Record<string, string>;
+  name: string; score: number; max: number; color: string; highlight?: boolean; C: ColorSet;
 }) {
   const pct = (score / max) * 100;
   return (

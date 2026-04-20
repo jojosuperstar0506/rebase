@@ -517,13 +517,16 @@ export default function CICompetitors() {
     // their competitors for side-by-side comparison. "Own brand" uses the
     // same stableScore placeholder formulas for now; will be replaced by
     // real data once the own-brand scraping pipeline (Phase 1) lands.
+    //
+    // Workspace type has no created_at — we just stamp "now" as the synthetic
+    // created_at for the own-brand row since it's not a real DB row anyway.
     if (workspace?.brand_name) {
       const ownProfile = buildProfile(
         workspace.brand_name,
         `own-${workspace.id || 'local'}`,
         'watchlist',       // own brand always counts as a tracked brand
         'own_brand',
-        workspace.created_at || new Date().toISOString(),
+        new Date().toISOString(),
         true,
       );
       return [ownProfile, ...competitorProfiles];
