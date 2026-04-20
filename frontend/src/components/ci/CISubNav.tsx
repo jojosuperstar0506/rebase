@@ -20,11 +20,12 @@ interface CITab {
 }
 
 const CI_TABS: CITab[] = [
-  { path: '/ci',             label: { en: 'Brief',    zh: '简报'   }, icon: '📰' },
-  { path: '/ci/library',     label: { en: 'Library',  zh: '资料库' }, icon: '📚' },
-  { path: '/ci/competitors', label: { en: 'Brands',   zh: '品牌'   }, icon: '🏷️' },
-  { path: '/ci/settings',    label: { en: 'Settings', zh: '设置'   }, icon: '⚙️' },
-  { path: '/ci/help',        label: { en: 'Help',     zh: '帮助'   }, icon: '💡' },
+  { path: '/ci',             label: { en: 'Brief',     zh: '简报'   }, icon: '📰' },
+  { path: '/ci/analytics',   label: { en: 'Analytics', zh: '分析'   }, icon: '📊' },
+  { path: '/ci/library',     label: { en: 'Library',   zh: '资料库' }, icon: '📚' },
+  { path: '/ci/competitors', label: { en: 'Brands',    zh: '品牌'   }, icon: '🏷️' },
+  { path: '/ci/settings',    label: { en: 'Settings',  zh: '设置'   }, icon: '⚙️' },
+  { path: '/ci/help',        label: { en: 'Help',      zh: '帮助'   }, icon: '💡' },
 ];
 
 export default function CISubNav() {

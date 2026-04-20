@@ -285,6 +285,97 @@ export const MOCK_LIBRARY_NIKE: LibraryEntry[] = [
   },
 ];
 
+// ─── Analytics types (for the new /ci/analytics tab) ─────────────────────
+
+export type MetricDomain = 'consumer' | 'product' | 'marketing';
+
+/**
+ * A single metric's scores across all brands in the workspace, with metadata.
+ * This is what the analytics tab renders one row per.
+ */
+export interface FullMetric {
+  metric_key: string;             // 'voice_volume', 'kol_strategy', etc.
+  label: { en: string; zh: string };
+  icon: string;
+  domain: MetricDomain;
+  /** Per-brand score. Keyed by brand_name; 'own' is a reserved key for the user's brand. */
+  scores: Record<string, number>;
+  /** Direction of change vs last week. Null for week 1. */
+  delta: number | null;
+  /** One-line description of what this metric measures. */
+  description: { en: string; zh: string };
+}
+
+/**
+ * Priority metric = a metric the AI flagged as most important this week.
+ * Picked by (|delta| × gap_to_leader). Up to 5 per brief.
+ */
+export interface PriorityMetric {
+  metric_key: string;
+  label: { en: string; zh: string };
+  icon: string;
+  your_score: number;
+  best_competitor: { name: string; score: number };
+  delta: number | null;       // week-over-week change, null for week 1
+  priority_rationale: string; // AI: "Why this metric matters THIS week"
+  domain: MetricDomain;
+}
+
+/**
+ * A white-space opportunity: a dimension where the competitive set is
+ * uncontested — nobody is winning. The most differentiated analytical output
+ * Rebase produces. Every other CI tool shows "here are scores"; Rebase says
+ * "here's where no one is playing."
+ */
+export type WhiteSpaceCategory = 'dimension' | 'pricing' | 'keyword' | 'channel';
+
+export interface WhiteSpace {
+  id: string;
+  title: string;
+  category: WhiteSpaceCategory;
+  /** 1-line teaser shown on the card. */
+  summary: string;
+  /** 2-3 sentence elaboration for the drill-down view. */
+  reasoning: string;
+  /** Concrete next step the user could take. */
+  suggested_action: string;
+  /** Supporting data points with source links where applicable. */
+  supporting_data: Array<{ label: string; value: string; source_url?: string }>;
+  /** 0-100 opportunity score — bigger = more empty white space. */
+  opportunity_score: number;
+}
+
+export interface AnalyticsData {
+  week_of: string;
+  workspace_brand_name: string;
+  priority_metrics: PriorityMetric[];
+  white_space: WhiteSpace[];
+  all_metrics: FullMetric[];
+  /** Optional historical trend for the drill-down view — 6-8 weeks of priority metrics. */
+  trends: Record<string, Array<{ week_of: string; score: number }>>;
+}
+
+/**
+ * SignalSource — what backs a specific claim in the brief or library.
+ * When a user clicks "复古跑鞋 +120%" or "Adidas Samba launched" they see
+ * this data to verify where the number came from.
+ */
+export type SignalSourceType = 'douyin_video' | 'xhs_post' | 'keyword_trend' | 'kol_profile' | 'product_catalog';
+
+export interface SignalSource {
+  type: SignalSourceType;
+  title: string;
+  description: string;
+  /** Sample items that back the signal (e.g., the top 5 videos for a trend). */
+  items: Array<{
+    title: string;
+    url?: string;          // link out to the actual post if available
+    creator?: string;
+    stats?: string;        // e.g., "420万点赞"
+    posted_at?: string;
+  }>;
+}
+
 // ─── Mock: Domain scores (used in "See all metrics" collapsible) ─────────
 
 export interface DomainScores {
@@ -356,4 +447,324 @@ export function getOpportunityStatus(id: string): OpportunityStatus | null {
     const map = JSON.parse(raw) as Record<string, OpportunityStatus>;
     return map[id] ?? null;
   } catch { return null; }
+}
+
+// ─── Mock: Analytics for Nike workspace ──────────────────────────────────
+
+/**
+ * All 12 metrics with scores per brand.
+ * Scores are in the same range as the old pipelines (0-100).
+ * Keyed by brand_name; 'Nike' is the user's own brand row.
+ */
+export const MOCK_ALL_METRICS_NIKE: FullMetric[] = [
+  // ── Consumer domain ────────────────────────────────────────────────
+  {
+    metric_key: 'consumer_mindshare', domain: 'consumer',
+    label: { en: 'Mindshare', zh: '消费心智' }, icon: '🧠',
+    description: { en: 'Share of consumer conversation', zh: '消费者对话份额' },
+    scores: { Nike: 68, Adidas: 77, '安踏': 54, '李宁': 62 },
+    delta: -2,
+  },
+  {
+    metric_key: 'keywords', domain: 'consumer',
+    label: { en: 'Keywords', zh: '关键词' }, icon: '🔍',
+    description: { en: 'Brand keyword strength vs category', zh: '品牌关键词强度' },
+    scores: { Nike: 72, Adidas: 81, '安踏': 58, '李宁': 65 },
+    delta: 1,
+  },
+  // ── Product domain ─────────────────────────────────────────────────
+  {
+    metric_key: 'trending_products', domain: 'product',
+    label: { en: 'Hot Products', zh: '热门商品' }, icon: '🔥',
+    description: { en: 'Top-selling + new launch momentum', zh: '畅销品与新品势能' },
+    scores: { Nike: 78, Adidas: 85, '安踏': 60, '李宁': 68 },
+    delta: -1,
+  },
+  {
+    metric_key: 'design_profile', domain: 'product',
+    label: { en: 'Design DNA', zh: '设计分析' }, icon: '🎨',
+    description: { en: 'Visual style + material innovation signals', zh: '视觉风格与材质创新信号' },
+    scores: { Nike: 41, Adidas: 38, '安踏': 32, '李宁': 35 },
+    delta: 0,
+  },
+  {
+    metric_key: 'price_positioning', domain: 'product',
+    label: { en: 'Pricing', zh: '价格定位' }, icon: '💰',
+    description: { en: 'Price band coverage and premium power', zh: '价格带覆盖与溢价能力' },
+    scores: { Nike: 82, Adidas: 79, '安踏': 55, '李宁': 63 },
+    delta: 0,
+  },
+  {
+    metric_key: 'launch_frequency', domain: 'product',
+    label: { en: 'Launch Pace', zh: '新品频率' }, icon: '📦',
+    description: { en: 'New SKU cadence over 90 days', zh: '90天新品上架节奏' },
+    scores: { Nike: 64, Adidas: 74, '安踏': 71, '李宁': 69 },
+    delta: -3,
+  },
+  // ── Marketing domain ───────────────────────────────────────────────
+  {
+    metric_key: 'voice_volume', domain: 'marketing',
+    label: { en: 'Voice Volume', zh: '品牌声量' }, icon: '📢',
+    description: { en: 'Total social reach + growth rate', zh: '社交总曝光与增长率' },
+    scores: { Nike: 68, Adidas: 81, '安踏': 64, '李宁': 71 },
+    delta: -3,
+  },
+  {
+    metric_key: 'content_strategy', domain: 'marketing',
+    label: { en: 'Content', zh: '内容策略' }, icon: '📝',
+    description: { en: 'Post cadence + engagement efficiency', zh: '发布节奏与互动效率' },
+    scores: { Nike: 62, Adidas: 70, '安踏': 58, '李宁': 65 },
+    delta: -4,
+  },
+  {
+    metric_key: 'kol_strategy', domain: 'marketing',
+    label: { en: 'KOL Strategy', zh: 'KOL策略' }, icon: '👥',
+    description: { en: 'Creator partnership depth and breadth', zh: '创作者合作的深度与广度' },
+    scores: { Nike: 52, Adidas: 68, '安踏': 59, '李宁': 71 },
+    delta: -9,   // This is the one the brief called out — 李宁 surge
+  },
+  // ── Core composites (momentum / threat / wtp) ──────────────────────
+  {
+    metric_key: 'momentum', domain: 'marketing',
+    label: { en: 'Momentum', zh: '增长势能' }, icon: '🚀',
+    description: { en: 'Composite growth indicator', zh: '综合增长指标' },
+    scores: { Nike: 71, Adidas: 78, '安踏': 62, '李宁': 66 },
+    delta: -2,
+  },
+  {
+    metric_key: 'threat', domain: 'consumer',
+    label: { en: 'Threat Index', zh: '威胁指数' }, icon: '⚡',
+    description: { en: 'How much pressure competitors put on you', zh: '竞品施压程度' },
+    scores: { Nike: 0, Adidas: 72, '安踏': 58, '李宁': 64 },  // threat doesn't apply to self
+    delta: null,
+  },
+  {
+    metric_key: 'wtp', domain: 'product',
+    label: { en: 'Price Power', zh: '溢价能力' }, icon: '💎',
+    description: { en: 'Willingness-to-pay above category avg', zh: '超越品类均价的意愿' },
+    scores: { Nike: 74, Adidas: 78, '安踏': 52, '李宁': 58 },
+    delta: 0,
+  },
+];
+
+export const MOCK_PRIORITY_METRICS_NIKE: PriorityMetric[] = [
+  {
+    metric_key: 'kol_strategy', domain: 'marketing',
+    label: { en: 'KOL Strategy', zh: 'KOL策略' }, icon: '👥',
+    your_score: 52,
+    best_competitor: { name: '李宁', score: 71 },
+    delta: -9,
+    priority_rationale:
+      '李宁本周新增28名中腰部创作者，你的KOL矩阵密度差距从6分拉大到19分。若不在2周内响应，心智份额流失风险显著。',
+  },
+  {
+    metric_key: 'voice_volume', domain: 'marketing',
+    label: { en: 'Voice Volume', zh: '品牌声量' }, icon: '📢',
+    your_score: 68,
+    best_competitor: { name: 'Adidas', score: 81 },
+    delta: -3,
+    priority_rationale:
+      '本周内容发布量下降40%导致声量分降3分，Adidas借Samba热度同期上升2分。这直接驱动了本周Verdict中的"稳定"结论。',
+  },
+  {
+    metric_key: 'content_strategy', domain: 'marketing',
+    label: { en: 'Content Strategy', zh: '内容策略' }, icon: '📝',
+    your_score: 62,
+    best_competitor: { name: 'Adidas', score: 70 },
+    delta: -4,
+    priority_rationale:
+      '互动率（点赞/观看）下降5%，内容节奏放缓是主因。补发专业向内容可在7天内回正。',
+  },
+  {
+    metric_key: 'launch_frequency', domain: 'product',
+    label: { en: 'Launch Pace', zh: '新品频率' }, icon: '📦',
+    your_score: 64,
+    best_competitor: { name: 'Adidas', score: 74 },
+    delta: -3,
+    priority_rationale:
+      'Adidas本周发布了限量款，你最近30天无重大新品。每周差距平均+1分，是慢性风险。',
+  },
+];
+
+export const MOCK_WHITE_SPACE_NIKE: WhiteSpace[] = [
+  {
+    id: 'ws-1',
+    title: '设计创新：无人占领的差异化轴',
+    category: 'dimension',
+    summary: '整个竞品集在 design_vision 平均仅37分 — 市场上没有品牌在"视觉独特性"上建立优势。',
+    reasoning:
+      'Nike(41) / Adidas(38) / 安踏(32) / 李宁(35) 四个品牌在设计创新指标上都处于中低水平，行业平均37分。消费者对于运动鞋的"辨识度"需求正在上升（复古潮回潮是一个证据），但当前没有品牌以"独特设计语言"作为核心心智。这是一个结构性空白。',
+    suggested_action: '考虑推出一个具备强视觉标志性的独立系列（不走主线），以设计师合作或艺术家联名为切入点，在小红书+抖音并行种草。',
+    supporting_data: [
+      { label: '竞品集平均分', value: '37/100 (design_vision)' },
+      { label: '你的当前分', value: '41 — 微弱领先' },
+      { label: '相关关键词增长', value: '"独特设计" +82% 过去30天' },
+      { label: '参考案例', value: 'Songmont（非同业）以设计心智获得1200万+粉丝' },
+    ],
+    opportunity_score: 82,
+  },
+  {
+    id: 'ws-2',
+    title: '高端跑步细分：¥1000-1400 价位无竞品',
+    category: 'pricing',
+    summary: '在¥1000-1400价位带，你的竞品集中没有品牌有跑鞋产品presence — 高端运动鞋买家被迫选择国际品牌。',
+    reasoning:
+      'Adidas 的旗舰跑鞋定价¥1500+，安踏李宁主力¥400-800。¥1000-1400是真正专业跑者愿意付但目前国内竞品未覆盖的价位带。同时小红书"专业跑鞋推荐"相关笔记月均点赞120万+，搜索意图强。',
+    suggested_action: '评估推出一款针对马拉松跑者的¥1199旗舰跑鞋。定价策略：明显低于Adidas旗舰，但材料和科技配置接近。',
+    supporting_data: [
+      { label: '竞品集¥1000-1400跑鞋', value: '0 款' },
+      { label: '小红书相关笔记月点赞', value: '120万+' },
+      { label: 'Adidas 最低价旗舰跑鞋', value: '¥1599 (Boston 12)' },
+      { label: '安踏/李宁跑鞋价格上限', value: '¥799' },
+    ],
+    opportunity_score: 75,
+  },
+  {
+    id: 'ws-3',
+    title: '女性跑步社群：低密度高需求',
+    category: 'channel',
+    summary: '"女生跑鞋"相关关键词流量上涨68%，但所有竞品的女性向KOL合作占比不足20%。',
+    reasoning:
+      '女性运动鞋市场增速高于整体市场，"姐姐们跑起来"、"女生专业跑鞋"等话题在小红书+抖音双平台持续升温。竞品现有KOL池中女性向占比偏低（Adidas 18% / 安踏 22% / 李宁 15%），且多为泛运动生活方式，非专业运动领域。',
+    suggested_action: '建立一个专属女性运动KOL合作小组（8-12人），主打"专业女跑者"定位。预算参考：¥80-120万/季。',
+    supporting_data: [
+      { label: '"女生跑鞋"关键词增长', value: '+68% (抖音30天)' },
+      { label: '竞品集女性KOL平均占比', value: '18%' },
+      { label: '相关话题播放量', value: '3.4亿 (30天)' },
+    ],
+    opportunity_score: 64,
+  },
+];
+
+/**
+ * Mock historical trends for priority metrics (last 8 weeks).
+ * These would come from a future time-series query of analysis_results.
+ */
+export const MOCK_TRENDS_NIKE: Record<string, Array<{ week_of: string; score: number }>> = {
+  voice_volume: [
+    { week_of: '2026-03-01', score: 70 }, { week_of: '2026-03-08', score: 72 },
+    { week_of: '2026-03-15', score: 71 }, { week_of: '2026-03-22', score: 69 },
+    { week_of: '2026-03-29', score: 70 }, { week_of: '2026-04-05', score: 72 },
+    { week_of: '2026-04-12', score: 71 }, { week_of: '2026-04-19', score: 68 },
+  ],
+  kol_strategy: [
+    { week_of: '2026-03-01', score: 58 }, { week_of: '2026-03-08', score: 60 },
+    { week_of: '2026-03-15', score: 61 }, { week_of: '2026-03-22', score: 59 },
+    { week_of: '2026-03-29', score: 60 }, { week_of: '2026-04-05', score: 62 },
+    { week_of: '2026-04-12', score: 61 }, { week_of: '2026-04-19', score: 52 },
+  ],
+  content_strategy: [
+    { week_of: '2026-03-01', score: 68 }, { week_of: '2026-03-08', score: 67 },
+    { week_of: '2026-03-15', score: 66 }, { week_of: '2026-03-22', score: 65 },
+    { week_of: '2026-03-29', score: 66 }, { week_of: '2026-04-05', score: 67 },
+    { week_of: '2026-04-12', score: 66 }, { week_of: '2026-04-19', score: 62 },
+  ],
+  launch_frequency: [
+    { week_of: '2026-03-01', score: 69 }, { week_of: '2026-03-08', score: 68 },
+    { week_of: '2026-03-15', score: 67 }, { week_of: '2026-03-22', score: 66 },
+    { week_of: '2026-03-29', score: 67 }, { week_of: '2026-04-05', score: 66 },
+    { week_of: '2026-04-12', score: 67 }, { week_of: '2026-04-19', score: 64 },
+  ],
+};
+
+export const MOCK_ANALYTICS_NIKE: AnalyticsData = {
+  week_of: '2026-04-19',
+  workspace_brand_name: 'Nike',
+  priority_metrics: MOCK_PRIORITY_METRICS_NIKE,
+  white_space: MOCK_WHITE_SPACE_NIKE,
+  all_metrics: MOCK_ALL_METRICS_NIKE,
+  trends: MOCK_TRENDS_NIKE,
+};
+
+// ─── Mock: Signal sources (for Library + Brief drill-downs) ──────────────
+
+/**
+ * Signal sources backing specific items in the brief. When a user clicks
+ * a signal pill (e.g., "Samba OG launch") they see these sources.
+ * Keyed by a string identifier embedded in the move / content / signal.
+ */
+export const MOCK_SIGNAL_SOURCES: Record<string, SignalSource> = {
+  'adidas-samba-launch': {
+    type: 'douyin_video',
+    title: 'Adidas Samba OG 限量款 — 抖音热门视频',
+    description: '本周抖音上关于Adidas Samba OG发布的热度数据。这些是按点赞量排序的Top 5视频。',
+    items: [
+      {
+        title: 'Adidas Samba OG秒杀实录！这个配色太绝了',
+        creator: '@潮流探店王',
+        stats: '248万点赞 · 4天前',
+        url: 'https://www.douyin.com/video/example1',
+      },
+      {
+        title: '为什么Samba突然这么火？',
+        creator: '@球鞋江湖',
+        stats: '89万点赞 · 3天前',
+        url: 'https://www.douyin.com/video/example2',
+      },
+      {
+        title: '上脚实测｜Samba OG值不值这个价',
+        creator: '@穿搭小姐姐',
+        stats: '58万点赞 · 2天前',
+        url: 'https://www.douyin.com/video/example3',
+      },
+      {
+        title: '三双Samba OG对比，哪个最值得买',
+        creator: '@鞋评专业户',
+        stats: '25万点赞 · 1天前',
+        url: 'https://www.douyin.com/video/example4',
+      },
+    ],
+  },
+  'lining-kol-surge': {
+    type: 'kol_profile',
+    title: '李宁本周合作的新增KOL（28位）',
+    description: '通过提及李宁的视频创作者数据抓取。这里是本周新增的中腰部KOL（5-50万粉丝）列表的前10位。',
+    items: [
+      { title: '@运动日常阿凯', stats: '42万粉丝 · 3条李宁合作视频', creator: '男性 · 健身赛道' },
+      { title: '@校园跑者小米', stats: '18万粉丝 · 2条李宁合作视频', creator: '大学生 · 跑步赛道' },
+      { title: '@型格男孩Terry', stats: '35万粉丝 · 2条李宁合作视频', creator: '潮流穿搭赛道' },
+      { title: '@女跑团主理人', stats: '12万粉丝 · 1条李宁合作视频', creator: '女性跑步社群' },
+      { title: '@篮球教练老董', stats: '28万粉丝 · 1条李宁合作视频', creator: '篮球教学赛道' },
+    ],
+  },
+  'retro-running-keyword': {
+    type: 'keyword_trend',
+    title: '关键词趋势：复古跑鞋',
+    description: '"复古跑鞋" 关键词在抖音的搜索量在过去30天上涨120%。以下是权重最高的5条相关内容。',
+    items: [
+      { title: '#复古跑鞋穿搭 总播放量2.1亿', stats: '30天增长 +88%' },
+      { title: '复古Adidas Samba限量款盘点', creator: '@潮流探店王', stats: '248万点赞' },
+      { title: '90年代跑鞋复兴！这几双值得收藏', creator: '@球鞋档案馆', stats: '62万点赞' },
+      { title: 'Y2K复古穿搭 跑鞋选什么', creator: '@穿搭博主Lily', stats: '34万点赞' },
+    ],
+  },
+  'your-voice-drop': {
+    type: 'douyin_video',
+    title: '你本周发布的抖音视频 — 声量下降分析',
+    description: '本周Nike品牌发布的视频数量环比下降40%。以下是本周发布的所有视频及其表现。',
+    items: [
+      { title: 'Air Max 新配色上脚', creator: '@Nike', stats: '8.2万点赞 · 5天前', url: 'https://www.douyin.com/user/nike' },
+      { title: '跑者故事 第12集', creator: '@Nike', stats: '3.1万点赞 · 3天前', url: 'https://www.douyin.com/user/nike' },
+      { title: '周末运动指南', creator: '@Nike', stats: '1.8万点赞 · 1天前', url: 'https://www.douyin.com/user/nike' },
+    ],
+  },
+};
+
+// ─── Mock API — analytics ────────────────────────────────────────────────
+
+export async function getAnalytics(_workspaceId: string): Promise<AnalyticsData | null> {
+  if (!USE_MOCKS) return null;
+  return new Promise(resolve => setTimeout(() => resolve(MOCK_ANALYTICS_NIKE), 250));
+}
+
+export async function getSignalSource(key: string): Promise<SignalSource | null> {
+  if (!USE_MOCKS) return null;
+  return new Promise(resolve => setTimeout(() => resolve(MOCK_SIGNAL_SOURCES[key] || null), 100));
+}
+
+/** Lookup the full brief by week_of (for Library drill-down). */
+export async function getBriefByWeek(_workspaceId: string, _weekOf: string): Promise<WeeklyBrief | null> {
+  if (!USE_MOCKS) return null;
+  // For mocks, we only return the current week's brief if it matches
+  return new Promise(resolve => setTimeout(() => resolve(MOCK_BRIEF_NIKE), 150));
 }
