@@ -20,7 +20,6 @@ import Admin from "./pages/Admin";
 import Success from "./pages/Success";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Signup from "./pages/Signup";
-import AppDashboard from "./pages/AppDashboard";
 import CIDashboard from "./pages/ci/CIDashboard";
 import CIIntelligence from "./pages/ci/CIIntelligence";
 import CILandscape from "./pages/ci/CILandscape";
@@ -155,7 +154,6 @@ function Nav() {
 
         {isLoggedIn && (
           <>
-            <NavLink to="/intelligence" label="竞品分析" />
             {/* CI nav link with alert badge (real count) or dot fallback */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <NavLink to="/ci" label={t(nav.ciVfinal, lang)} />
@@ -248,10 +246,7 @@ function AppRoutes() {
         {/* Self-serve signup (public — customer applies for access) */}
         <Route path="/signup" element={<Signup />} />
 
-        {/* Intelligence dashboard — tab inside the authenticated shell */}
-        <Route path="/intelligence" element={<ProtectedRoute><AppDashboard /></ProtectedRoute>} />
-
-        {/* CI vFinal — new competitive intelligence tab */}
+        {/* CI vFinal — new competitive intelligence tab (/intelligence removed — superseded by /ci/*) */}
         <Route path="/ci" element={<ProtectedRoute><CIErrorBoundary><CIDashboard /></CIErrorBoundary></ProtectedRoute>} />
         <Route path="/ci/intelligence" element={<ProtectedRoute><CIErrorBoundary><CIIntelligence /></CIErrorBoundary></ProtectedRoute>} />
         <Route path="/ci/landscape" element={<ProtectedRoute><CIErrorBoundary><CILandscape /></CIErrorBoundary></ProtectedRoute>} />
