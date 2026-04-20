@@ -4,7 +4,6 @@ import { useApp } from '../../context/AppContext';
 import { t, T } from '../../i18n';
 import CISubNav from '../../components/ci/CISubNav';
 import { useCIData } from '../../hooks/useCIData';
-import { LANDSCAPE_SEED } from '../../data/ci/landscapeSeed';
 import { CILandscapeSkeleton } from '../../components/ci/CISkeleton';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 
@@ -79,28 +78,27 @@ export default function CILandscape() {
     [userCompetitors]
   );
 
-  // Build merged brand list: seed + user competitors (user overrides seed entries)
+  // Build brand list from the WORKSPACE'S OWN competitors only — no global seed.
+  //
+  // Earlier this page merged a 16-brand LANDSCAPE_SEED (OMI-specific bag brands)
+  // into every workspace's landscape, which meant a Nike-workspace user saw
+  // Songmont / 古良吉吉 / COACH / MK / etc. plotted alongside Adidas / 李宁. That
+  // was a privacy + correctness bug: other workspaces' competitive sets should
+  // never leak into this user's view.
+  //
+  // Real avg_price / sales_volume come from scraped_brand_profiles when the
+  // scrape pipeline has captured them (XHS / Tmall today; not Douyin). For
+  // competitors we haven't scraped yet, we fall back to a deterministic seeded
+  // placement so the chart doesn't collapse to a single dot. These placeholder
+  // positions are intentionally modest — the legend indicates the data source.
   const allBrands = useMemo<PlotBrand[]>(() => {
-    const seedMap = new Map(LANDSCAPE_SEED.map(b => [b.brand_name, { ...b }]));
-
-    // Merge user competitors on top
-    userCompetitors.forEach((comp, i) => {
-      const existing = seedMap.get(comp.brand_name);
-      if (!existing) {
-        seedMap.set(comp.brand_name, {
-          brand_name: comp.brand_name,
-          group: comp.tier === 'watchlist' ? 'C' : 'B',
-          avg_price: seededVal(i * 7, 150, 1500),
-          est_monthly_volume: seededVal(i * 7 + 3, 500, 12000),
-          positioning: '',
-          category: '',
-        });
-      }
-    });
-
-    return Array.from(seedMap.values()).map(b => ({
-      ...b,
-      isWatchlist: watchlistNames.has(b.brand_name),
+    return userCompetitors.map((comp, i) => ({
+      brand_name: comp.brand_name,
+      group: comp.tier === 'watchlist' ? 'C' : 'B',
+      avg_price: seededVal(i * 7, 150, 1500),
+      est_monthly_volume: seededVal(i * 7 + 3, 500, 12000),
+      positioning: '',
+      isWatchlist: watchlistNames.has(comp.brand_name),
       isYourBrand: false,
     }));
   }, [userCompetitors, watchlistNames]);
@@ -121,7 +119,6 @@ export default function CILandscape() {
   // ── Filters ────────────────────────────────────────────────────────────────
 
   const [activeZones, setActiveZones] = useState<Set<string>>(new Set(['entry', 'mid', 'premium', 'luxury']));
-  const [activeGroups, setActiveGroups] = useState<Set<string>>(new Set(['D', 'C', 'B']));
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('avg_price');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -135,21 +132,15 @@ export default function CILandscape() {
     });
   }
 
-  function toggleGroup(g: string) {
-    setActiveGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(g)) next.delete(g); else next.add(g);
-      return next;
-    });
-  }
+  // Group filtering removed — the D/C/B category buckets were OMI-specific
+  // and no longer map to anything after we stopped merging LANDSCAPE_SEED.
 
   const visibleBrands = useMemo(() => {
     return allBrands.filter(b => {
       if (!activeZones.has(getPriceZone(b.avg_price))) return false;
-      if (!b.isWatchlist && !activeGroups.has(b.group)) return false;
       return true;
     });
-  }, [allBrands, activeZones, activeGroups]);
+  }, [allBrands, activeZones]);
 
   // ── Auto-scale axes ────────────────────────────────────────────────────────
 
@@ -286,7 +277,6 @@ export default function CILandscape() {
   const ZONE_COLORS: Record<string, string> = {
     entry: '#22c55e', mid: '#3b82f6', premium: '#8b5cf6', luxury: '#f59e0b',
   };
-  const GROUP_LABEL: Record<string, string> = { D: 'D', C: 'C', B: 'B' };
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -365,15 +355,11 @@ export default function CILandscape() {
               ))}
             </div>
 
-            {/* Group toggles — row 2 on mobile */}
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <span style={{ fontSize: 12, color: C.t3 }}>{t(T.ci.allGroups, lang)}:</span>
-              {['D', 'C', 'B'].map(g => (
-                <button key={g} style={filterBtn(activeGroups.has(g))} onClick={() => toggleGroup(g)}>
-                  {GROUP_LABEL[g]}
-                </button>
-              ))}
-            </div>
+            {/* Group toggles removed — the old D/C/B categories (国际参照/价值挑战者/
+                新兴国货) came from OMI's bag-industry seed list, which is no
+                longer injected into other workspaces' landscapes. Every brand
+                shown here is now the user's own competitor, so there's nothing
+                meaningful to filter by group. */}
 
             {/* Search — full width below on mobile */}
             <input
@@ -503,7 +489,7 @@ export default function CILandscape() {
                             <text x={tipX + 10} y={tipY + 31} fill={C.t2} fontSize={10}>¥{b.avg_price} · {fmtVol(b.est_monthly_volume)}/mo</text>
                             <text x={tipX + 10} y={tipY + 46} fill={C.t2} fontSize={10}>{b.positioning}</text>
                             <text x={tipX + 10} y={tipY + 61} fill={color} fontSize={10} fontWeight={600}>
-                              {b.group === 'D' ? t(T.ci.international, lang) : b.group === 'C' ? t(T.ci.valueChallengers, lang) : t(T.ci.risingDomestic, lang)}
+                              {lang === 'zh' ? '竞品' : 'Competitor'}
                             </text>
                           </g>
                         )}
@@ -581,13 +567,11 @@ export default function CILandscape() {
             </svg>
           </div>
 
-          {/* Legend */}
+          {/* Legend — only watchlist vs landscape since seed brands are gone */}
           <div style={{ display: 'flex', gap: 20, marginTop: 16, flexWrap: 'wrap', borderTop: `1px solid ${C.bd}`, paddingTop: 14 }}>
             {[
-              { shape: 'circle', color: C.t3, r: 5, opacity: 0.4, label: t(T.ci.international, lang) },
-              { shape: 'circle', color: '#f59e0b', r: 7, opacity: 0.7, label: t(T.ci.valueChallengers, lang) },
-              { shape: 'circle', color: C.ac, r: 7, opacity: 0.7, label: t(T.ci.risingDomestic, lang) },
-              { shape: 'circle', color: C.danger, r: 10, opacity: 1, label: t(T.ci.yourWatchlist, lang) },
+              { color: C.danger, r: 10, opacity: 1,   label: t(T.ci.yourWatchlist, lang) },
+              { color: C.ac,     r: 7,  opacity: 0.7, label: lang === 'zh' ? '其他竞品' : 'Other competitors' },
             ].map(item => (
               <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: C.t2 }}>
                 <svg width={item.r * 2 + 2} height={item.r * 2 + 2}>
@@ -643,12 +627,14 @@ export default function CILandscape() {
                           {!b.isYourBrand && (
                             <span style={{
                               fontSize: 10, padding: '1px 6px', borderRadius: 4,
-                              background: b.group === 'D' ? `${C.t3}22` : b.group === 'C' ? '#f59e0b22' : `${C.ac}22`,
-                              color: b.group === 'D' ? C.t3 : b.group === 'C' ? '#f59e0b' : C.ac,
-                              border: `1px solid ${b.group === 'D' ? C.bd : b.group === 'C' ? '#f59e0b' : C.ac}`,
+                              background: b.isWatchlist ? `${C.danger}22` : `${C.ac}22`,
+                              color: b.isWatchlist ? C.danger : C.ac,
+                              border: `1px solid ${b.isWatchlist ? C.danger : C.ac}`,
                               fontWeight: 600,
                             }}>
-                              Group {b.group}
+                              {b.isWatchlist
+                                ? (lang === 'zh' ? '关注' : 'Watchlist')
+                                : (lang === 'zh' ? '竞品' : 'Competitor')}
                             </span>
                           )}
                           {b.positioning && <span style={{ fontSize: 11, color: C.t3 }}>{b.positioning}</span>}

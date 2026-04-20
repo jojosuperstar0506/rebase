@@ -5,7 +5,10 @@ import { t, T, Lang } from '../../i18n';
 import CISubNav from '../../components/ci/CISubNav';
 import { removeCompetitor as apiRemoveCompetitor, getBrandInsights } from '../../services/ciApi';
 import { useCIData } from '../../hooks/useCIData';
-import { LANDSCAPE_SEED, LandscapeBrand } from '../../data/ci/landscapeSeed';
+// LANDSCAPE_SEED removed — was an OMI-specific 16-brand reference list that
+// leaked into every workspace's view. Per-competitor avg_price / volume now
+// come purely from stableScore (seeded random) until real scrape pricing is
+// wired in (requires XHS or Tmall scraper, not Douyin).
 import { CICompetitorsSkeleton } from '../../components/ci/CISkeleton';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { exportCompetitorsCSV, exportDashboardPDF, showExportToast } from '../../utils/ciExport';
@@ -474,20 +477,15 @@ export default function CICompetitors() {
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [deepDiveOpen, setDeepDiveOpen] = useState<string | null>(null);
 
-  const seedMap = useMemo(() => {
-    const m = new Map<string, LandscapeBrand>();
-    LANDSCAPE_SEED.forEach(b => m.set(b.brand_name, b));
-    return m;
-  }, []);
-
   const profiles = useMemo<CompetitorProfile[]>(() => {
     return rawCompetitors.map((c) => {
-      const sd = seedMap.get(c.brand_name);
-
-      const avg_price = sd?.avg_price ?? (150 + stableScore(c.brand_name, 3, 0, 1800));
-      const est_monthly_volume = sd?.est_monthly_volume ?? (500 + stableScore(c.brand_name, 5, 0, 11000));
-      const positioning = sd?.positioning ?? '竞品';
-      const group = sd?.group ?? 'C';
+      // Placeholder values — real per-competitor pricing/volume come from
+      // scraped_brand_profiles (XHS/Tmall only today). Seeded random keeps
+      // the UI from collapsing until that data is available.
+      const avg_price = 150 + stableScore(c.brand_name, 3, 0, 1800);
+      const est_monthly_volume = 500 + stableScore(c.brand_name, 5, 0, 11000);
+      const positioning = '竞品';
+      const group = 'C';
 
       // Use same formula as ciApi.getDashboard → consistent scores across all pages
       const momentum_score = stableScore(c.brand_name, 7, 30, 60);
@@ -502,7 +500,7 @@ export default function CICompetitors() {
 
       return { id: c.id, brand_name: c.brand_name, tier: c.tier, added_via: c.added_via, created_at: c.created_at, avg_price, est_monthly_volume, positioning, group, momentum_score, threat_index, wtp_score, platforms };
     });
-  }, [rawCompetitors, seedMap]);
+  }, [rawCompetitors]);
 
   const filtered = useMemo(() => {
     let list = profiles.filter(p => tierFilter === 'all' || p.tier === tierFilter);

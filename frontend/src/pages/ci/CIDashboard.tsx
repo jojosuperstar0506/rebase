@@ -443,11 +443,55 @@ export default function CIDashboard() {
           </div>
 
           {/* Header */}
-          <div style={{ marginBottom: isMobile ? 16 : 24 }}>
-            <h1 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, marginBottom: 6, marginTop: 0 }}>
-              {t(T.ci.title, lang)}
-            </h1>
-            <p style={{ color: C.t2, fontSize: 14, margin: 0 }}>{t(T.ci.subtitle, lang)}</p>
+          <div style={{
+            marginBottom: isMobile ? 16 : 24,
+            display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between',
+            flexDirection: isMobile ? 'column' : 'row', gap: 12,
+          }}>
+            <div>
+              <h1 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, marginBottom: 6, marginTop: 0 }}>
+                {t(T.ci.title, lang)}
+              </h1>
+              <p style={{ color: C.t2, fontSize: 14, margin: 0 }}>{t(T.ci.subtitle, lang)}</p>
+            </div>
+
+            {/* Hero CTA: Regenerate today's analysis with newest data.
+                This is the "show me Rebase's value" button — one click fires
+                the full scoring pipeline across all 10 dimensions and the AI
+                narrative. Button is disabled + labeled while a job is running
+                so users don't double-fire. Visible on every visit so the
+                re-run-each-day workflow is one click away.
+                Only shown for API-backed workspaces (local-only workspaces
+                use the existing sync-then-run path via handleRetryAnalysis). */}
+            {source === 'api' && workspace?.id && workspace.id !== 'local' && (
+              <button
+                data-no-print
+                onClick={handleRetryAnalysis}
+                disabled={!!isJobActive}
+                style={{
+                  background: isJobActive ? C.s2 : C.ac,
+                  color: isJobActive ? C.t2 : '#fff',
+                  border: 'none', borderRadius: 8,
+                  padding: '10px 18px', fontSize: 13, fontWeight: 700,
+                  cursor: isJobActive ? 'default' : 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  boxShadow: isJobActive ? 'none' : `0 2px 8px ${C.ac}33`,
+                  transition: 'all 0.15s ease',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
+                title={lang === 'zh'
+                  ? '使用最新抓取的数据重新运行全部 AI 分析流水线'
+                  : 'Re-run all AI analysis pipelines with the latest scraped data'}
+              >
+                <span style={{ fontSize: 14 }}>{isJobActive ? '⏳' : '🔄'}</span>
+                <span>
+                  {isJobActive
+                    ? (lang === 'zh' ? '分析中…' : 'Analyzing…')
+                    : (lang === 'zh' ? '生成今日分析' : "Run Today's Analysis")}
+                </span>
+              </button>
+            )}
           </div>
 
           {/* First-visit welcome banner (no-print) */}
