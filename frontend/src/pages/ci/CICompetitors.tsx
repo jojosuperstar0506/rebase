@@ -29,6 +29,8 @@ interface CompetitorProfile {
   threat_index: number;
   wtp_score: number;
   platforms: { name: string; status: 'active' | 'partial' | 'none' }[];
+  /** True for the "own brand" row we synthesize at the top of the list. */
+  isOwnBrand?: boolean;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -252,30 +254,30 @@ function CompetitorCard({
         </div>
       </div>
 
-      {/* Actions */}
+      {/* Actions — own brand row has no "remove" since you can't remove yourself.
+          Deep-dive external link was retired with the rest of the CIDeepDive
+          page; per-brand detail view will return as a drill-down later. */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <a
-          href={`/ci/competitors/${encodeURIComponent(profile.brand_name)}`}
-          style={{
-            flex: 1, padding: '7px 0', borderRadius: 8,
-            border: `1px solid ${C.ac}`, background: 'transparent',
-            color: C.ac, cursor: 'pointer', fontSize: 13, fontWeight: 600,
-            textDecoration: 'none', textAlign: 'center' as const,
-            display: 'block',
-          }}
-        >
-          {t(T.ci.deepDive, lang)}
-        </a>
-        <button
-          onClick={onRemove}
-          style={{
-            padding: '7px 12px', borderRadius: 8,
-            border: `1px solid ${C.bd}`, background: 'transparent',
-            color: C.t3, cursor: 'pointer', fontSize: 13,
-          }}
-        >
-          {t(T.ci.removeCompetitor, lang)}
-        </button>
+        {profile.isOwnBrand ? (
+          <div style={{
+            flex: 1, padding: '7px 12px', borderRadius: 8,
+            background: `${C.ac}15`, border: `1px solid ${C.ac}33`,
+            color: C.ac, fontSize: 12, fontWeight: 600, textAlign: 'center' as const,
+          }}>
+            {lang === 'zh' ? '🏷️ 你的品牌 · 对比基准' : '🏷️ Your brand · comparison baseline'}
+          </div>
+        ) : (
+          <button
+            onClick={onRemove}
+            style={{
+              flex: 1, padding: '7px 0', borderRadius: 8,
+              border: `1px solid ${C.bd}`, background: 'transparent',
+              color: C.t3, cursor: 'pointer', fontSize: 13,
+            }}
+          >
+            {t(T.ci.removeCompetitor, lang)}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -478,37 +480,68 @@ export default function CICompetitors() {
   const [deepDiveOpen, setDeepDiveOpen] = useState<string | null>(null);
 
   const profiles = useMemo<CompetitorProfile[]>(() => {
-    return rawCompetitors.map((c) => {
+    const buildProfile = (brand_name: string, id: string, tier: 'watchlist' | 'landscape',
+                          added_via: string, created_at: string,
+                          isOwnBrand = false): CompetitorProfile => {
       // Placeholder values — real per-competitor pricing/volume come from
       // scraped_brand_profiles (XHS/Tmall only today). Seeded random keeps
       // the UI from collapsing until that data is available.
-      const avg_price = 150 + stableScore(c.brand_name, 3, 0, 1800);
-      const est_monthly_volume = 500 + stableScore(c.brand_name, 5, 0, 11000);
-      const positioning = '竞品';
-      const group = 'C';
+      const avg_price = 150 + stableScore(brand_name, 3, 0, 1800);
+      const est_monthly_volume = 500 + stableScore(brand_name, 5, 0, 11000);
+      const positioning = isOwnBrand ? '你的品牌' : '竞品';
+      const group = isOwnBrand ? 'OWN' : 'C';
 
-      // Use same formula as ciApi.getDashboard → consistent scores across all pages
-      const momentum_score = stableScore(c.brand_name, 7, 30, 60);
-      const threat_index = stableScore(c.brand_name, 13, 20, 70);
-      const wtp_score = stableScore(c.brand_name, 11, 25, 65);
+      const momentum_score = stableScore(brand_name, 7, 30, 60);
+      const threat_index = stableScore(brand_name, 13, 20, 70);
+      const wtp_score = stableScore(brand_name, 11, 25, 65);
 
       const platforms = PLATFORM_LIST.map((name, pi) => {
-        const v = stableScore(c.brand_name + pi, 17, 0, 3);
+        const v = stableScore(brand_name + pi, 17, 0, 3);
         const status: 'active' | 'partial' | 'none' = v >= 2 ? 'active' : v === 1 ? 'partial' : 'none';
         return { name, status };
       });
 
-      return { id: c.id, brand_name: c.brand_name, tier: c.tier, added_via: c.added_via, created_at: c.created_at, avg_price, est_monthly_volume, positioning, group, momentum_score, threat_index, wtp_score, platforms };
-    });
-  }, [rawCompetitors]);
+      return {
+        id, brand_name, tier, added_via, created_at,
+        avg_price, est_monthly_volume, positioning, group,
+        momentum_score, threat_index, wtp_score, platforms, isOwnBrand,
+      };
+    };
+
+    const competitorProfiles = rawCompetitors.map(c =>
+      buildProfile(c.brand_name, c.id, c.tier, c.added_via, c.created_at, false),
+    );
+
+    // Prepend the user's own brand as row 1 — one of the core fixes from the
+    // Brief-centric redesign. Users should always see themselves alongside
+    // their competitors for side-by-side comparison. "Own brand" uses the
+    // same stableScore placeholder formulas for now; will be replaced by
+    // real data once the own-brand scraping pipeline (Phase 1) lands.
+    if (workspace?.brand_name) {
+      const ownProfile = buildProfile(
+        workspace.brand_name,
+        `own-${workspace.id || 'local'}`,
+        'watchlist',       // own brand always counts as a tracked brand
+        'own_brand',
+        workspace.created_at || new Date().toISOString(),
+        true,
+      );
+      return [ownProfile, ...competitorProfiles];
+    }
+    return competitorProfiles;
+  }, [rawCompetitors, workspace]);
 
   const filtered = useMemo(() => {
-    let list = profiles.filter(p => tierFilter === 'all' || p.tier === tierFilter);
+    // Split so the "own brand" row stays pinned at the top regardless of
+    // the active sort order — it's an anchor for comparison, not a
+    // competitor to re-rank.
+    const own = profiles.filter(p => p.isOwnBrand);
+    let list = profiles.filter(p => !p.isOwnBrand && (tierFilter === 'all' || p.tier === tierFilter));
     if (sortBy === 'name') list = [...list].sort((a, b) => a.brand_name.localeCompare(b.brand_name));
     else if (sortBy === 'threat') list = [...list].sort((a, b) => b.threat_index - a.threat_index);
     else if (sortBy === 'momentum') list = [...list].sort((a, b) => b.momentum_score - a.momentum_score);
     else if (sortBy === 'price') list = [...list].sort((a, b) => b.avg_price - a.avg_price);
-    return list;
+    return [...own, ...list];
   }, [profiles, tierFilter, sortBy]);
 
   // ── Early return AFTER all hooks (React Rules of Hooks) ─────────────────────

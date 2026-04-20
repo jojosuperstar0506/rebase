@@ -20,12 +20,14 @@ import Admin from "./pages/Admin";
 import Success from "./pages/Success";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Signup from "./pages/Signup";
-import CIDashboard from "./pages/ci/CIDashboard";
-import CIIntelligence from "./pages/ci/CIIntelligence";
-import CILandscape from "./pages/ci/CILandscape";
+// CI vFinal — Brief-centric redesign.
+// /ci now lands on the Brief (weekly action kit). Library is new. Dashboard,
+// Intelligence, Landscape, DeepDive are retired — their content is folded
+// into the Brief (collapsed metrics panel) or per-brand detail views.
+import CIBrief from "./pages/ci/CIBrief";
+import CILibrary from "./pages/ci/CILibrary";
 import CICompetitors from "./pages/ci/CICompetitors";
 import CISettings from "./pages/ci/CISettings";
-import CIDeepDive from "./pages/ci/CIDeepDive";
 import CIHelp from "./pages/ci/CIHelp";
 import { CIErrorBoundary } from "./components/ci/CIErrorBoundary";
 
@@ -246,11 +248,12 @@ function AppRoutes() {
         {/* Self-serve signup (public — customer applies for access) */}
         <Route path="/signup" element={<Signup />} />
 
-        {/* CI vFinal — new competitive intelligence tab (/intelligence removed — superseded by /ci/*) */}
-        <Route path="/ci" element={<ProtectedRoute><CIErrorBoundary><CIDashboard /></CIErrorBoundary></ProtectedRoute>} />
-        <Route path="/ci/intelligence" element={<ProtectedRoute><CIErrorBoundary><CIIntelligence /></CIErrorBoundary></ProtectedRoute>} />
-        <Route path="/ci/landscape" element={<ProtectedRoute><CIErrorBoundary><CILandscape /></CIErrorBoundary></ProtectedRoute>} />
-        <Route path="/ci/competitors/:brandName" element={<ProtectedRoute><CIErrorBoundary><CIDeepDive /></CIErrorBoundary></ProtectedRoute>} />
+        {/* CI vFinal — Brief-centric routes.
+            Deleted: /ci/intelligence, /ci/landscape, /ci/competitors/:brandName (DeepDive).
+            Those UIs were redundant dashboards of the same data — their content is now
+            inside the Brief (collapsed metrics) or per-brand detail views from Brands. */}
+        <Route path="/ci" element={<ProtectedRoute><CIErrorBoundary><CIBrief /></CIErrorBoundary></ProtectedRoute>} />
+        <Route path="/ci/library" element={<ProtectedRoute><CIErrorBoundary><CILibrary /></CIErrorBoundary></ProtectedRoute>} />
         <Route path="/ci/competitors" element={<ProtectedRoute><CIErrorBoundary><CICompetitors /></CIErrorBoundary></ProtectedRoute>} />
         <Route path="/ci/settings" element={<ProtectedRoute><CIErrorBoundary><CISettings /></CIErrorBoundary></ProtectedRoute>} />
         <Route path="/ci/help" element={<ProtectedRoute><CIErrorBoundary><CIHelp /></CIErrorBoundary></ProtectedRoute>} />
