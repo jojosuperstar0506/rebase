@@ -45,6 +45,7 @@ export default function CILibrary() {
 
   const [entries, setEntries] = useState<LibraryEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [view, setView] = useState<'briefs' | 'content' | 'products'>('briefs');
   const [search, setSearch] = useState('');
 
@@ -66,8 +67,12 @@ export default function CILibrary() {
 
   useEffect(() => {
     setLoading(true);
+    setError(false);
     getLibrary(workspaceId).then(data => {
       setEntries(data);
+      setLoading(false);
+    }).catch(() => {
+      setError(true);
       setLoading(false);
     });
   }, [workspaceId]);
@@ -135,6 +140,25 @@ export default function CILibrary() {
             <div style={{ fontSize: 13, color: C.t2 }}>
               {lang === 'zh' ? '加载中…' : 'Loading…'}
             </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={pageStyle}>
+        <div style={container}>
+          <CISubNav />
+          <div style={{ ...card, textAlign: 'center', padding: 40, marginTop: 20 }}>
+            <div style={{ fontSize: 28, marginBottom: 10 }}>⚠️</div>
+            <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 8px' }}>
+              {lang === 'zh' ? '加载失败' : 'Could not load library'}
+            </h3>
+            <p style={{ fontSize: 12, color: C.t3, margin: 0 }}>
+              {lang === 'zh' ? '请稍后重试。' : 'Check your connection and try again.'}
+            </p>
           </div>
         </div>
       </div>

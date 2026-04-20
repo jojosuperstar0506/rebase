@@ -62,6 +62,7 @@ export default function CIAnalytics() {
 
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [showAllMetrics, setShowAllMetrics] = useState(false);
 
   // Drill-down state — a single slot for whatever the user clicked
@@ -76,8 +77,12 @@ export default function CIAnalytics() {
 
   useEffect(() => {
     setLoading(true);
+    setError(false);
     getAnalytics(workspaceId).then(d => {
       setData(d);
+      setLoading(false);
+    }).catch(() => {
+      setError(true);
       setLoading(false);
     });
   }, [workspaceId]);
@@ -95,7 +100,7 @@ export default function CIAnalytics() {
     padding: isMobile ? 14 : 18,
   };
 
-  if (loading || !data) {
+  if (loading) {
     return (
       <div style={pageStyle}>
         <div style={container}>
@@ -104,6 +109,46 @@ export default function CIAnalytics() {
             <div style={{ fontSize: 13, color: C.t2 }}>
               {lang === 'zh' ? '加载分析数据…' : 'Loading analytics…'}
             </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={pageStyle}>
+        <div style={container}>
+          <CISubNav />
+          <div style={{ ...card, textAlign: 'center', padding: 50, marginTop: 20 }}>
+            <div style={{ fontSize: 28, marginBottom: 10 }}>⚠️</div>
+            <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 8px' }}>
+              {lang === 'zh' ? '加载失败' : 'Could not load analytics'}
+            </h3>
+            <p style={{ fontSize: 12, color: C.t3, margin: 0 }}>
+              {lang === 'zh' ? '请稍后重试。' : 'Check your connection and try again.'}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div style={pageStyle}>
+        <div style={container}>
+          <CISubNav />
+          <div style={{ ...card, textAlign: 'center', padding: 50, marginTop: 20 }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>📊</div>
+            <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 8px' }}>
+              {lang === 'zh' ? '暂无分析数据' : 'No analytics yet'}
+            </h3>
+            <p style={{ fontSize: 12, color: C.t3, margin: 0, lineHeight: 1.6 }}>
+              {lang === 'zh'
+                ? '竞品数据抓取并分析完成后，分析报告将显示在这里。'
+                : 'Analytics will appear here after your first data sync and analysis run.'}
+            </p>
           </div>
         </div>
       </div>

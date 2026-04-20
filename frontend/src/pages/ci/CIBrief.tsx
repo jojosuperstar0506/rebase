@@ -76,6 +76,7 @@ export default function CIBrief() {
   const [domains, setDomains] = useState<DomainScores | null>(null);
   const [hasHistory, setHasHistory] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [showMetrics, setShowMetrics] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -89,6 +90,7 @@ export default function CIBrief() {
 
   useEffect(() => {
     setLoading(true);
+    setError(false);
     Promise.all([
       getBrief(workspaceId),
       getLibrary(workspaceId),
@@ -97,18 +99,21 @@ export default function CIBrief() {
       setBrief(b);
       setHasHistory((lib || []).length > 0);
       setDomains(ds);
-      // hydrate status maps
+      // hydrate status maps namespaced by workspaceId
       if (b) {
         const cMap: Record<string, string> = {};
         b.content_drafts.forEach(c => {
-          const s = getContentStatus(c.id);
+          const s = getContentStatus(c.id, workspaceId);
           if (s) cMap[c.id] = s;
         });
         setContentStatusMap(cMap);
         if (b.product_opportunity) {
-          setOppStatus(getOpportunityStatus(b.product_opportunity.id));
+          setOppStatus(getOpportunityStatus(b.product_opportunity.id, workspaceId));
         }
       }
+      setLoading(false);
+    }).catch(() => {
+      setError(true);
       setLoading(false);
     });
   }, [workspaceId]);
@@ -133,19 +138,19 @@ export default function CIBrief() {
   }
 
   function handleMarkPosted(id: string) {
-    markContentStatus(id, 'posted');
+    markContentStatus(id, 'posted', workspaceId);
     setContentStatusMap(prev => ({ ...prev, [id]: 'posted' }));
   }
   function handleDismissContent(id: string) {
-    markContentStatus(id, 'dismissed');
+    markContentStatus(id, 'dismissed', workspaceId);
     setContentStatusMap(prev => ({ ...prev, [id]: 'dismissed' }));
   }
   function handleAcceptOpp(id: string) {
-    markOpportunityStatus(id, 'accepted');
+    markOpportunityStatus(id, 'accepted', workspaceId);
     setOppStatus('accepted');
   }
   function handleDismissOpp(id: string) {
-    markOpportunityStatus(id, 'dismissed');
+    markOpportunityStatus(id, 'dismissed', workspaceId);
     setOppStatus('dismissed');
   }
 
@@ -162,9 +167,9 @@ export default function CIBrief() {
     padding: isMobile ? 16 : 24,
   };
 
-  // ─── Loading state ─────────────────────────────────────────────────────
+  // ─── Loading / error / empty states ───────────────────────────────────
 
-  if (loading || !brief) {
+  if (loading) {
     return (
       <div style={pageStyle}>
         <div style={container}>
@@ -174,6 +179,62 @@ export default function CIBrief() {
             <div style={{ fontSize: 15, color: C.t2 }}>
               {lang === 'zh' ? '正在生成本周简报…' : 'Generating this week\'s brief…'}
             </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={pageStyle}>
+        <div style={container}>
+          <CISubNav />
+          <div style={{ ...card, textAlign: 'center', padding: 60, marginTop: 20 }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
+            <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px' }}>
+              {lang === 'zh' ? '加载失败' : 'Something went wrong'}
+            </h3>
+            <p style={{ fontSize: 13, color: C.t3, margin: '0 0 18px' }}>
+              {lang === 'zh'
+                ? '无法加载本周简报，请稍后重试。'
+                : 'Could not load this week\'s brief. Check your connection and try again.'}
+            </p>
+            <button
+              onClick={() => { setError(false); setLoading(true); }}
+              style={{
+                background: C.ac, color: '#fff', border: 'none', borderRadius: 8,
+                padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+              }}
+            >
+              {lang === 'zh' ? '重试' : 'Retry'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!brief) {
+    return (
+      <div style={pageStyle}>
+        <div style={container}>
+          <CISubNav />
+          <div style={{ ...card, textAlign: 'center', padding: 60, marginTop: 20 }}>
+            <div style={{ fontSize: 40, marginBottom: 16 }}>📰</div>
+            <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 10px' }}>
+              {lang === 'zh' ? '简报即将出炉' : 'Your brief is on its way'}
+            </h3>
+            <p style={{ fontSize: 14, color: C.t2, margin: '0 0 8px', lineHeight: 1.7, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto' }}>
+              {lang === 'zh'
+                ? '每周简报将在竞品数据抓取并分析完成后自动生成。'
+                : 'Your first brief will appear after your competitors are scraped and analysed.'}
+            </p>
+            <p style={{ fontSize: 12, color: C.t3, margin: 0, lineHeight: 1.6 }}>
+              {lang === 'zh'
+                ? '前往「品牌」页面确认已添加竞品，然后在设置中触发数据同步。'
+                : 'Make sure you\'ve added competitors in the Brands tab, then trigger a sync in Settings.'}
+            </p>
           </div>
         </div>
       </div>

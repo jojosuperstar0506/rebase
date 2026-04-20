@@ -414,36 +414,42 @@ export async function getDomainScores(_workspaceId: string): Promise<DomainScore
   return new Promise(resolve => setTimeout(() => resolve(MOCK_DOMAIN_SCORES_NIKE), 200));
 }
 
-// Status mutations — for now just touch localStorage so buttons have feedback
-export function markContentStatus(id: string, status: ContentStatus): void {
+// Status mutations — localStorage-backed so buttons have instant feedback.
+// Keys are namespaced by workspaceId so dismiss/post in workspace A
+// does not bleed into workspace B.
+export function markContentStatus(id: string, status: ContentStatus, workspaceId?: string): void {
   try {
-    const raw = localStorage.getItem('rebase_ci_content_status') || '{}';
+    const key = workspaceId ? `rebase_ci_content_status_${workspaceId}` : 'rebase_ci_content_status';
+    const raw = localStorage.getItem(key) || '{}';
     const map = JSON.parse(raw) as Record<string, ContentStatus>;
     map[id] = status;
-    localStorage.setItem('rebase_ci_content_status', JSON.stringify(map));
-  } catch { /* quota */ }
+    localStorage.setItem(key, JSON.stringify(map));
+  } catch { /* quota exceeded — silently skip */ }
 }
 
-export function getContentStatus(id: string): ContentStatus | null {
+export function getContentStatus(id: string, workspaceId?: string): ContentStatus | null {
   try {
-    const raw = localStorage.getItem('rebase_ci_content_status') || '{}';
+    const key = workspaceId ? `rebase_ci_content_status_${workspaceId}` : 'rebase_ci_content_status';
+    const raw = localStorage.getItem(key) || '{}';
     const map = JSON.parse(raw) as Record<string, ContentStatus>;
     return map[id] ?? null;
   } catch { return null; }
 }
 
-export function markOpportunityStatus(id: string, status: OpportunityStatus): void {
+export function markOpportunityStatus(id: string, status: OpportunityStatus, workspaceId?: string): void {
   try {
-    const raw = localStorage.getItem('rebase_ci_opportunity_status') || '{}';
+    const key = workspaceId ? `rebase_ci_opportunity_status_${workspaceId}` : 'rebase_ci_opportunity_status';
+    const raw = localStorage.getItem(key) || '{}';
     const map = JSON.parse(raw) as Record<string, OpportunityStatus>;
     map[id] = status;
-    localStorage.setItem('rebase_ci_opportunity_status', JSON.stringify(map));
-  } catch { /* quota */ }
+    localStorage.setItem(key, JSON.stringify(map));
+  } catch { /* quota exceeded — silently skip */ }
 }
 
-export function getOpportunityStatus(id: string): OpportunityStatus | null {
+export function getOpportunityStatus(id: string, workspaceId?: string): OpportunityStatus | null {
   try {
-    const raw = localStorage.getItem('rebase_ci_opportunity_status') || '{}';
+    const key = workspaceId ? `rebase_ci_opportunity_status_${workspaceId}` : 'rebase_ci_opportunity_status';
+    const raw = localStorage.getItem(key) || '{}';
     const map = JSON.parse(raw) as Record<string, OpportunityStatus>;
     return map[id] ?? null;
   } catch { return null; }
