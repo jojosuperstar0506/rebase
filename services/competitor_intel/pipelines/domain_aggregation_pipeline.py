@@ -152,7 +152,14 @@ def run_for_workspace(workspace_id: str) -> int:
                     """,
                     (workspace_id, brand, list(members_tuple)),
                 )
-                scores = {r["metric_type"]: r["score"] for r in cur.fetchall()}
+                # analysis_results.score is NUMERIC in Postgres, which psycopg2
+                # returns as Decimal. Coerce to float immediately so downstream
+                # arithmetic works AND the raw_inputs dict stays JSON-serializable
+                # (json.dumps chokes on Decimal by default).
+                scores = {
+                    r["metric_type"]: float(r["score"]) if r["score"] is not None else 0.0
+                    for r in cur.fetchall()
+                }
 
                 if not scores:
                     print(f"  [{idx+1}/{len(competitors)}] {brand}: "
