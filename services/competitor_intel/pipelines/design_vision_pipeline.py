@@ -30,12 +30,17 @@ import json
 import sys
 import traceback
 from collections import Counter
+from typing import Iterable
 from ..db_bridge import get_conn
+from ..category_baselines import resolve_design_keywords
 
-METRIC_VERSION = "v1.0"
+METRIC_VERSION = "v1.1"  # bumped: per-category keyword vocabularies
 
-# Style keywords (Chinese + English) — extracted from hashtags
-STYLE_KEYWORDS = {
+
+# DEPRECATED — kept for backwards-compat in case anything imports them directly.
+# New code should call resolve_design_keywords(brand_category) instead.
+# These will be removed in v2.0 once we confirm nothing else imports them.
+STYLE_KEYWORDS = frozenset({
     "极简", "简约", "minimalist", "minimal", "简洁",
     "复古", "vintage", "retro", "古着",
     "潮流", "街头", "streetwear", "street", "潮牌",
@@ -46,10 +51,8 @@ STYLE_KEYWORDS = {
     "商务", "office", "通勤", "职场", "professional",
     "文艺", "artsy", "bohemian", "波西米亚",
     "ins风", "网红", "trendy", "时尚",
-}
-
-# Material keywords
-MATERIAL_KEYWORDS = {
+})
+MATERIAL_KEYWORDS = frozenset({
     "真皮", "leather", "头层牛皮", "皮质", "牛皮",
     "帆布", "canvas", "布",
     "尼龙", "nylon",
@@ -60,11 +63,20 @@ MATERIAL_KEYWORDS = {
     "透明", "pvc", "果冻",
     "棉", "cotton", "麻", "linen",
     "羊毛", "wool", "cashmere", "羊绒",
-}
+})
 
 
-def extract_tags_from_hashtags(hashtags_list: list) -> tuple:
-    """Extract style and material tags from a list of hashtag strings."""
+def extract_tags_from_hashtags(hashtags_list: list,
+                                style_keywords: Iterable[str] = STYLE_KEYWORDS,
+                                material_keywords: Iterable[str] = MATERIAL_KEYWORDS) -> tuple:
+    """
+    Extract style and material tags from a list of hashtag strings.
+
+    style_keywords / material_keywords default to the legacy fashion-only
+    sets for backwards-compat. Callers should pass category-specific sets
+    via resolve_design_keywords(brand_category) so sportswear, beauty,
+    food etc. don't get scored against handbag vocabulary.
+    """
     style_found = set()
     material_found = set()
     all_tags = []
@@ -75,13 +87,13 @@ def extract_tags_from_hashtags(hashtags_list: list) -> tuple:
         # Match whole keywords (exact match or the tag IS the keyword)
         # For Chinese: exact match or tag starts/ends with keyword (≥2 chars)
         # For English: word boundary check
-        for kw in STYLE_KEYWORDS:
+        for kw in style_keywords:
             kw_lower = kw.lower()
             if len(kw_lower) >= 2 and (tag_lower == kw_lower or tag_lower.startswith(kw_lower) or tag_lower.endswith(kw_lower)):
                 style_found.add(kw)
             elif len(kw_lower) < 2 and tag_lower == kw_lower:
                 style_found.add(kw)
-        for kw in MATERIAL_KEYWORDS:
+        for kw in material_keywords:
             kw_lower = kw.lower()
             if len(kw_lower) >= 2 and (tag_lower == kw_lower or tag_lower.startswith(kw_lower) or tag_lower.endswith(kw_lower)):
                 material_found.add(kw)
@@ -112,7 +124,17 @@ def run_for_workspace(workspace_id: str):
                 return
 
             total = len(competitors)
-            print(f"[DESIGN] Analyzing {total} competitors in workspace {workspace_id}")
+
+            # Pick category-aware keyword vocabularies for THIS workspace.
+            # Falls back to a union of all categories for unknown brand_category
+            # so we never lose tags purely because the workspace category is
+            # missing or unrecognised.
+            keyword_set = resolve_design_keywords(workspace.get("brand_category"))
+            style_keywords = keyword_set["style"]
+            material_keywords = keyword_set["material"]
+            print(f"[DESIGN] Analyzing {total} competitors in workspace {workspace_id} "
+                  f"(keywords: {keyword_set['source']}/{keyword_set['category_key']}, "
+                  f"{len(style_keywords)} style + {len(material_keywords)} material)")
 
             for idx, comp in enumerate(competitors):
                 brand = comp["brand_name"]
@@ -177,8 +199,11 @@ def run_for_workspace(workspace_id: str):
                         if img_count > 0:
                             notes_with_images += 1
 
-                # Extract style and material signals
-                style_tags, material_tags, all_tags = extract_tags_from_hashtags(all_hashtags)
+                # Extract style and material signals using THIS workspace's
+                # category-specific keyword vocabularies.
+                style_tags, material_tags, all_tags = extract_tags_from_hashtags(
+                    all_hashtags, style_keywords, material_keywords
+                )
 
                 # Compute dominant style (most frequent tag category)
                 tag_freq = Counter(all_tags)
@@ -233,6 +258,9 @@ def run_for_workspace(workspace_id: str):
                     "top_tags": [{"tag": t, "count": c} for t, c in top_tags],
                     "data_source": "hashtags",  # will become "vision" in Phase 2
                     "notes_analyzed": total_notes,
+                    # Transparency on which keyword vocabulary scored this brand
+                    "keyword_category": keyword_set["category_key"],
+                    "keyword_source":   keyword_set["source"],
                 }
 
                 cur.execute(
