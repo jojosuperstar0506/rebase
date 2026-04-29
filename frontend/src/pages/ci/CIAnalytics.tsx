@@ -43,8 +43,10 @@ function deltaStr(d: number | null): string {
   if (d === 0)   return '0';
   return d > 0 ? `+${d}` : `${d}`;
 }
-function domainColor(d: MetricDomain): string {
-  return d === 'consumer' ? '#ec4899' : d === 'product' ? '#f97316' : '#0ea5e9';
+function domainColor(d: MetricDomain, C: ColorSet): string {
+  return d === 'consumer' ? C.domainConsumer
+       : d === 'product'  ? C.domainProduct
+       : C.domainMarketing;
 }
 function domainLabel(d: MetricDomain, lang: string): string {
   if (d === 'consumer')  return lang === 'zh' ? '消费者' : 'Consumer';
@@ -476,7 +478,7 @@ function AllMetricMiniCard({ metric, ownBrand, onClick, C, lang }: {
       onMouseLeave={e => (e.currentTarget.style.borderColor = C.bd)}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-        <span style={{ width: 6, height: 6, background: domainColor(metric.domain), borderRadius: 2 }} />
+        <span style={{ width: 6, height: 6, background: domainColor(metric.domain, C), borderRadius: 2 }} />
         <span style={{ fontSize: 11, color: C.t3 }}>{domainLabel(metric.domain, lang)}</span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>

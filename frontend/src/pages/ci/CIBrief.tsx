@@ -409,7 +409,7 @@ export default function CIBrief() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
                     <span style={{
                       fontSize: 10, fontWeight: 700,
-                      color: '#000', background: '#fe2c55',
+                      color: '#000', background: C.platformDouyin,
                       padding: '3px 8px', borderRadius: 4,
                       letterSpacing: '0.05em', textTransform: 'uppercase',
                     }}>
@@ -419,7 +419,7 @@ export default function CIBrief() {
                       {lang === 'zh' ? '15秒短视频脚本' : '15-sec short video script'}
                     </span>
                     {isPosted && (
-                      <span style={{ fontSize: 11, color: '#22c55e', fontWeight: 700, marginLeft: 'auto' }}>
+                      <span style={{ fontSize: 11, color: C.success, fontWeight: 700, marginLeft: 'auto' }}>
                         ✓ {lang === 'zh' ? '已发布' : 'Posted'}
                       </span>
                     )}
@@ -430,13 +430,13 @@ export default function CIBrief() {
                   {/* Script blocks */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
                     {c.hook_3s && (
-                      <ScriptBlock label={lang === 'zh' ? '开场3秒' : 'Hook (3s)'} text={c.hook_3s} color="#fe2c55" C={C} />
+                      <ScriptBlock label={lang === 'zh' ? '开场3秒' : 'Hook (3s)'} text={c.hook_3s} color={C.platformDouyin} C={C} />
                     )}
                     {c.main_15s && (
                       <ScriptBlock label={lang === 'zh' ? '主体15秒' : 'Main (15s)'} text={c.main_15s} color={C.ac} C={C} />
                     )}
                     {c.cta_3s && (
-                      <ScriptBlock label={lang === 'zh' ? '结尾3秒' : 'CTA (3s)'} text={c.cta_3s} color="#f59e0b" C={C} />
+                      <ScriptBlock label={lang === 'zh' ? '结尾3秒' : 'CTA (3s)'} text={c.cta_3s} color={C.warning} C={C} />
                     )}
                   </div>
 

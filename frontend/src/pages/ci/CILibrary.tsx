@@ -276,7 +276,7 @@ export default function CILibrary() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
                   <span style={{
                     fontSize: 10, fontWeight: 700, color: '#000',
-                    background: c.platform === 'douyin' ? '#fe2c55' : '#ff2442',
+                    background: c.platform === 'douyin' ? C.platformDouyin : C.platformXhs,
                     padding: '3px 8px', borderRadius: 4, textTransform: 'uppercase',
                   }}>
                     {c.platform === 'douyin' ? '抖音' : '小红书'}
@@ -507,7 +507,7 @@ function ContentFullView({ content, C, lang }: {
     <div>
       {/* Script */}
       {content.hook_3s && (
-        <ScriptSection label={lang === 'zh' ? '开场3秒' : 'Hook (3s)'} text={content.hook_3s} color="#fe2c55" C={C} />
+        <ScriptSection label={lang === 'zh' ? '开场3秒' : 'Hook (3s)'} text={content.hook_3s} color={C.platformDouyin} C={C} />
       )}
       {content.main_15s && (
         <ScriptSection label={lang === 'zh' ? '主体15秒' : 'Main (15s)'} text={content.main_15s} color={C.ac} C={C} />

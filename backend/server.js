@@ -355,55 +355,18 @@ app.post("/api/competitor-report/run", async (req, res) => {
   }
 });
 
-// Manual trigger for weekly playbook optimizer
-app.post("/api/intelligence/optimize", async (req, res) => {
-  try {
-    const { runPlaybookOptimizer } = require("./agents/playbook-optimizer");
-    const result = await runPlaybookOptimizer();
-    res.json({ success: true, result });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// Setup a new user for intelligence reports
-app.post("/api/intelligence/setup", (req, res) => {
-  const { userId, name, role, industry, productCategories, competitors, geographyFocus, email, redditCommunities } = req.body;
-  if (!userId || !name || !industry) {
-    return res.status(400).json({ error: "userId, name, and industry are required" });
-  }
-  // Create user folder
-  const userDir = path.join(__dirname, "config/users", userId);
-  fs.mkdirSync(userDir, { recursive: true });
-  // Write profile
-  const profile = {
-    userId, name, role: role || "Business Owner",
-    industry, productCategories: productCategories || [],
-    competitors: competitors || [], geographyFocus: geographyFocus || "both",
-    email: email || "", redditCommunities: redditCommunities || [],
-    createdAt: new Date().toISOString().slice(0, 10), active: true
-  };
-  fs.writeFileSync(path.join(userDir, "profile.json"), JSON.stringify(profile, null, 2));
-  // Create default playbook if not exists
-  const playbookFilePath = path.join(userDir, "playbook.json");
-  if (!fs.existsSync(playbookFilePath)) {
-    const defaultPlaybook = {
-      version: 1, lastOptimized: null,
-      searchStrategy: { queryTemplates: [], preferredSources: [], deprioritizedSources: [], depthRules: "" },
-      focusAreas: { alwaysPrioritize: ["pricing changes","product launches","funding rounds","executive changes"], currentWeekFocus: "", ignoreTopics: [] },
-      sourcePerformance: {}, feedbackLog: [], optimizerNotes: []
-    };
-    fs.writeFileSync(playbookFilePath, JSON.stringify(defaultPlaybook, null, 2));
-  }
-  res.json({ success: true, userId, message: `User ${name} created. Daily report will start tomorrow.` });
-});
-
-// Get user profile
-app.get("/api/intelligence/profile/:userId", (req, res) => {
-  const profilePath = path.join(__dirname, "config/users", req.params.userId, "profile.json");
-  if (!fs.existsSync(profilePath)) return res.status(404).json({ error: "User not found" });
-  res.json(JSON.parse(fs.readFileSync(profilePath, "utf8")));
-});
+// ─── Removed orphan endpoints (audit cleanup, 2026-04-23) ──────────────
+// These three endpoints belonged to the old per-user email-report flow
+// that was superseded by the /api/ci/* CI vFinal API. Confirmed via repo-wide
+// grep — no JS/TS/Python code calls them. Removed to reduce surface area.
+//
+//   POST /api/intelligence/optimize          -> ran agents/playbook-optimizer
+//   POST /api/intelligence/setup             -> wrote per-user profile.json files
+//   GET  /api/intelligence/profile/:userId   -> read those profiles
+//
+// NOTE: GET /intelligence/feedback (below, line ~410) is INTENTIONALLY KEPT
+// because backend/scheduler.js still embeds it in outgoing email feedback
+// links. Don't confuse the two paths.
 
 // ── Feedback endpoint — PUBLIC (no secret header, called from email links) ──
 // GET /intelligence/feedback?userId=X&reportId=X&section=X&rating=up|down&token=X
