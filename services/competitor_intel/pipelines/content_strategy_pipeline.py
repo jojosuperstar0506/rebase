@@ -27,7 +27,7 @@ import sys
 import traceback
 from ..db_bridge import get_conn
 
-METRIC_VERSION = "v1.2"
+METRIC_VERSION = "v1.3"  # bumped: emit reason='no_data' on the no-notes floor
 
 
 def run_for_workspace(workspace_id: str):
@@ -212,6 +212,15 @@ def run_for_workspace(workspace_id: str):
                     "top_content": top_content,
                     "platform": latest.get("platform") or "unknown",
                 }
+                # When this brand has zero scraped notes, the score is purely
+                # a sum of neutral floors (consistency_score=20 by default,
+                # everything else=0) — that's where the '17' default came from.
+                # Tag it so domain_aggregation_pipeline excludes it from the
+                # marketing_domain rollup. Without this tag every Douyin-only
+                # brand contributes a fake 17 and marketing_domain looks
+                # identical (51) across competitors.
+                if total_notes == 0:
+                    raw_inputs["reason"] = "no_data"
 
                 cur.execute(
                     """

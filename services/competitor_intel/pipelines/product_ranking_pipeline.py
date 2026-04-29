@@ -14,7 +14,7 @@ import sys
 import traceback
 from ..db_bridge import get_conn
 
-METRIC_VERSION = "v1.1"
+METRIC_VERSION = "v1.2"  # bumped: emit reason='no_data' on the no-products floor
 
 # New launch window: products first seen within this many days
 NEW_LAUNCH_DAYS = 14
@@ -173,7 +173,16 @@ def run_for_workspace(workspace_id: str):
                     "new_launches": new_launches,
                     "declining": declining[:10],  # cap at 10
                     "catalog_freshness_pct": freshness_pct,
+                    "total_products": total_products,
                 }
+                # When this brand has zero scraped products, the score we just
+                # computed is purely the neutral floor (10 from stability_score)
+                # — not a measurement. Tag it so domain_aggregation_pipeline
+                # excludes it from the product_domain rollup. Without this tag,
+                # every Douyin-only brand contributes a fake "10" to the rollup
+                # and the rollup looks identical across competitors.
+                if total_products == 0:
+                    raw_inputs["reason"] = "no_data"
 
                 cur.execute(
                     """
