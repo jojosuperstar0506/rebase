@@ -43,7 +43,7 @@ import sys
 import traceback
 from ..db_bridge import get_conn
 
-METRIC_VERSION = "v1.0"
+METRIC_VERSION = "v1.1"  # bumped: now respects raw_inputs.reason for n/a detection
 
 # Domain membership. Keys must match the metric_type strings written by
 # existing pipelines. `wtp` comes from scoring_pipeline, not from a
@@ -55,32 +55,71 @@ DOMAIN_MEMBERS = {
     "marketing_domain": ["voice_volume", "content_strategy", "kol_strategy"],
 }
 
+# raw_inputs.reason values that indicate the score is a fallback/default,
+# NOT a real measurement. These rows are excluded from domain rollups so
+# defaults like wtp=50 ("no_price_data") don't drag the rollup down.
+NO_DATA_REASONS = {
+    "no_data",
+    "no_price_data",
+    "no_product_data",
+    "no_kol_data",
+    "no_design_data",
+    "no_content_data",
+    "insufficient_data",
+}
 
-def _aggregate(scores: dict) -> dict:
+
+def _aggregate(metric_data: dict) -> dict:
     """
-    Given a dict of {metric_type: score}, compute each of the 3 domain
-    rollups. Returns {domain_metric_type: {score, raw_inputs}} ready to
-    insert.
+    Given metric_data = {metric_type: {"score": float, "reason": str|None}},
+    compute each of the 3 domain rollups.
+    Returns {domain_metric_type: {score, raw_inputs}} ready to insert.
 
-    - Excludes zero scores from the mean (treats them as not_applicable).
-    - If no members have a non-zero score, the domain score is 0 and
-      `raw_inputs.reason` is 'no_data' so the API emits the right status.
+    Exclusion rules (a member is excluded when ANY of these apply):
+      1. Score is None (metric not yet computed for this brand)
+      2. Score is exactly 0 (metric ran but produced literal zero)
+      3. raw_inputs.reason is in NO_DATA_REASONS
+         (this catches WTP's score=50 "no_price_data" fallback —
+         a non-zero score that's actually a default, not a measurement)
+
+    If every member is excluded the domain score is 0 with reason='no_data'
+    so the API's status enum emits 'not_applicable' / 'no_data' for the
+    rollup row. This matches the per-metric N/A handling and prevents
+    Brief verdicts from saying "your X is bad" when reality is "we
+    couldn't measure your X."
     """
     results = {}
     for domain_type, members in DOMAIN_MEMBERS.items():
         included = []
         component = {}
         excluded = []
+        excluded_with_reason = {}
+
         for m in members:
-            s = scores.get(m)
-            if s is None:
+            md = metric_data.get(m)
+            if md is None:
                 excluded.append(m)
                 continue
-            component[m] = s
-            if s > 0:
-                included.append(s)
-            else:
+
+            score = md.get("score")
+            reason = md.get("reason")
+            component[m] = score
+
+            # Rule 1: missing score
+            if score is None:
                 excluded.append(m)
+                continue
+            # Rule 3: explicit no-data reason (score may be a non-zero default)
+            if reason and reason in NO_DATA_REASONS:
+                excluded.append(m)
+                excluded_with_reason[m] = reason
+                continue
+            # Rule 2: literal zero
+            if score == 0:
+                excluded.append(m)
+                continue
+
+            included.append(score)
 
         if included:
             score = round(sum(included) / len(included))
@@ -90,6 +129,8 @@ def _aggregate(scores: dict) -> dict:
                 "excluded_count": len(excluded),
                 "excluded_members": excluded,
             }
+            if excluded_with_reason:
+                raw["excluded_reasons"] = excluded_with_reason
         else:
             score = 0
             raw = {
@@ -99,6 +140,8 @@ def _aggregate(scores: dict) -> dict:
                 "excluded_members": excluded,
                 "reason": "no_data",
             }
+            if excluded_with_reason:
+                raw["excluded_reasons"] = excluded_with_reason
         results[domain_type] = {"score": score, "raw_inputs": raw}
     return results
 
@@ -139,11 +182,13 @@ def run_for_workspace(workspace_id: str) -> int:
             members_tuple = tuple(all_members)
 
             for idx, brand in enumerate(competitors):
-                # Latest score per metric_type for this brand in this workspace
+                # Latest score+raw_inputs per metric_type for this brand in this workspace.
+                # raw_inputs.reason is what lets us detect "score=50 but it's the
+                # no_price_data fallback, not a real measurement."
                 cur.execute(
                     """
                     SELECT DISTINCT ON (metric_type)
-                        metric_type, score
+                        metric_type, score, raw_inputs
                     FROM analysis_results
                     WHERE workspace_id = %s
                       AND competitor_name = %s
@@ -156,17 +201,25 @@ def run_for_workspace(workspace_id: str) -> int:
                 # returns as Decimal. Coerce to float immediately so downstream
                 # arithmetic works AND the raw_inputs dict stays JSON-serializable
                 # (json.dumps chokes on Decimal by default).
-                scores = {
-                    r["metric_type"]: float(r["score"]) if r["score"] is not None else 0.0
-                    for r in cur.fetchall()
-                }
+                metric_data = {}
+                for r in cur.fetchall():
+                    raw = r.get("raw_inputs") or {}
+                    if isinstance(raw, str):
+                        try:
+                            raw = json.loads(raw)
+                        except (json.JSONDecodeError, TypeError):
+                            raw = {}
+                    metric_data[r["metric_type"]] = {
+                        "score": float(r["score"]) if r["score"] is not None else 0.0,
+                        "reason": raw.get("reason") if isinstance(raw, dict) else None,
+                    }
 
-                if not scores:
+                if not metric_data:
                     print(f"  [{idx+1}/{len(competitors)}] {brand}: "
                           f"no underlying metrics yet — skipped")
                     continue
 
-                rollups = _aggregate(scores)
+                rollups = _aggregate(metric_data)
 
                 for domain_type, payload in rollups.items():
                     cur.execute(
