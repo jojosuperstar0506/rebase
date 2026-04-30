@@ -41,6 +41,13 @@ export default function Onboarding() {
   const s = T.onboarding;
   const nav = T.nav;
 
+  // Logged-in users hitting /onboarding (e.g. via stale CTA or back-button)
+  // would otherwise create a duplicate workspace. Bounce them to /ci instead.
+  useEffect(() => {
+    const loggedIn = !!localStorage.getItem("rebase_token") || !!localStorage.getItem("admin_authed");
+    if (loggedIn) navigate("/ci", { replace: true });
+  }, [navigate]);
+
   // Pre-fill form from calculator data saved in localStorage
   useEffect(() => {
     try {

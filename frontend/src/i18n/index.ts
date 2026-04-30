@@ -273,6 +273,7 @@ export const T = {
       zh: "Rebase 为中国中小企业提供专属AI团队——市场情报、竞品追踪、内容创作、运营自动化——所有功能围绕您的业务定制，集于一个工作台。",
     },
     ctaAccess: { en: "Request Access →", zh: "申请早期使用 →" },
+    ctaContinue: { en: "Continue to Dashboard →", zh: "进入工作台 →" },
     ctaDiag: { en: "Run AI Diagnostic", zh: "运行AI诊断" },
     earlyAccess: { en: "Early access · Invite only · Personally reviewed by Will & Joanna", zh: "限量早期体验 · 仅限邀请 · Will & Joanna 亲自审核" },
     whatWeDoLabel: { en: "What We Do", zh: "我们做什么" },
