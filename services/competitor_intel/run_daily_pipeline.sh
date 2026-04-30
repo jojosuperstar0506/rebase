@@ -87,6 +87,29 @@ for pipeline in keyword_pipeline voice_volume_pipeline product_ranking_pipeline 
   fi
 done
 
+# Step 2c: Roll up the 9 metric scores into 3 domain scores
+# (consumer_domain / product_domain / marketing_domain).
+# Must run AFTER step 2b — reads the rows those pipelines just wrote.
+log "Step 2c: Rolling up domain scores..."
+if $PYTHON -m services.competitor_intel.pipelines.domain_aggregation_pipeline --all >> "$LOG_FILE" 2>&1; then
+  log "Step 2c: Domain aggregation complete"
+else
+  log "Step 2c: Domain aggregation failed"
+  report_failure "domain_aggregation" "Domain rollup pipeline returned non-zero"
+fi
+
+# Step 2d: Generate this week's Brief (verdict + moves)
+# Reads the domain rollups Step 2c just wrote; writes weekly_briefs.
+# Idempotent — UPSERTs on (workspace_id, week_of), so daily reruns just
+# refresh the JSONB with the latest LLM synthesis.
+log "Step 2d: Generating weekly brief (positioning)..."
+if $PYTHON -m services.competitor_intel.brand_positioning_pipeline --all >> "$LOG_FILE" 2>&1; then
+  log "Step 2d: Brief generation complete"
+else
+  log "Step 2d: Brief generation failed (continuing)"
+  report_failure "brand_positioning" "brand_positioning_pipeline returned non-zero"
+fi
+
 # Step 3: Generate narratives
 log "Step 3: Generating AI narratives..."
 if $PYTHON -m services.competitor_intel.narrative_pipeline --all >> "$LOG_FILE" 2>&1; then

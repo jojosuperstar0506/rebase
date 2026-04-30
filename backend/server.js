@@ -968,6 +968,147 @@ app.get('/api/ci/intelligence', async (req, res) => {
   }
 });
 
+// GET /api/ci/brief — current Brief (verdict + moves + drafts + opportunity)
+//
+// Reads weekly_briefs.verdict + .moves (written by brand_positioning_pipeline)
+// joined with the matching week's content_recommendations and product_opportunities.
+// Returns the WeeklyBrief shape that frontend/services/ciMocks.ts declares —
+// flipping USE_MOCKS=false in that file should be a no-op once this row exists.
+//
+// Query params:
+//   workspace_id  (required)  UUID
+//   week_of       (optional)  YYYY-MM-DD; default = the latest brief on file.
+//
+// Responses:
+//   200  full WeeklyBrief
+//   400  missing workspace_id
+//   404  no brief generated yet (frontend shows empty / "run today" CTA)
+//   500  query error
+app.get('/api/ci/brief', async (req, res) => {
+  try {
+    const workspaceId = req.query.workspace_id;
+    if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+    const requestedWeek = req.query.week_of || null;
+
+    // Resolve the brief row: requested week if given, otherwise the latest.
+    const briefSql = requestedWeek
+      ? `SELECT week_of, verdict, moves, generated_at
+           FROM weekly_briefs
+          WHERE workspace_id = $1 AND week_of = $2::date
+          LIMIT 1`
+      : `SELECT week_of, verdict, moves, generated_at
+           FROM weekly_briefs
+          WHERE workspace_id = $1
+          ORDER BY week_of DESC
+          LIMIT 1`;
+    const briefParams = requestedWeek ? [workspaceId, requestedWeek] : [workspaceId];
+    const { rows: briefRows } = await pool.query(briefSql, briefParams);
+
+    if (briefRows.length === 0) {
+      return res.status(404).json({
+        error: 'No brief generated yet for this workspace',
+        workspace_id: workspaceId,
+      });
+    }
+    const brief = briefRows[0];
+    const weekOf = brief.week_of instanceof Date
+      ? brief.week_of.toISOString().slice(0, 10)
+      : String(brief.week_of);
+
+    // Workspace brand name (cheap lookup, used in the response shape)
+    const { rows: wsRows } = await pool.query(
+      'SELECT brand_name FROM workspaces WHERE id = $1',
+      [workspaceId]
+    );
+    const workspaceBrandName = wsRows[0]?.brand_name || '';
+
+    // Content drafts for the same week (excluding dismissed)
+    const { rows: contentRows } = await pool.query(
+      `SELECT id, platform, title, hook_3s, main_15s, cta_3s, post_title, post_body,
+              hashtags, reasoning, why_now, based_on, status, created_at
+         FROM content_recommendations
+        WHERE workspace_id = $1 AND week_of = $2::date AND status <> 'dismissed'
+        ORDER BY created_at ASC`,
+      [workspaceId, weekOf]
+    );
+    const contentDrafts = contentRows.map(r => ({
+      id: r.id,
+      platform: r.platform,
+      title: r.title,
+      hook_3s: r.hook_3s ?? undefined,
+      main_15s: r.main_15s ?? undefined,
+      cta_3s: r.cta_3s ?? undefined,
+      post_title: r.post_title ?? undefined,
+      post_body: r.post_body ?? undefined,
+      hashtags: Array.isArray(r.hashtags) ? r.hashtags : [],
+      reasoning: r.reasoning ?? '',
+      why_now: r.why_now ?? '',
+      based_on: r.based_on ?? '',
+      status: r.status,
+      created_at: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
+    }));
+
+    // Product opportunity for the same week — frontend expects exactly one or null
+    const { rows: oppRows } = await pool.query(
+      `SELECT id, concept_name, positioning, why_now, signals, target_price,
+              target_channels, launch_timeline, status, created_at
+         FROM product_opportunities
+        WHERE workspace_id = $1 AND week_of = $2::date AND status <> 'dismissed'
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [workspaceId, weekOf]
+    );
+    let productOpportunity = null;
+    if (oppRows.length > 0) {
+      const o = oppRows[0];
+      let signals = o.signals;
+      if (typeof signals === 'string') {
+        try { signals = JSON.parse(signals); } catch { signals = []; }
+      }
+      productOpportunity = {
+        id: o.id,
+        concept_name: o.concept_name,
+        positioning: o.positioning,
+        why_now: o.why_now,
+        signals: Array.isArray(signals) ? signals : [],
+        target_price: o.target_price ?? '',
+        target_channels: Array.isArray(o.target_channels) ? o.target_channels : [],
+        launch_timeline: o.launch_timeline ?? '',
+        status: o.status,
+        created_at: o.created_at instanceof Date ? o.created_at.toISOString() : o.created_at,
+      };
+    }
+
+    // verdict + moves come back from psql as already-parsed JS objects/arrays
+    // (the column type is JSONB). Normalize defensively in case the driver
+    // returned strings.
+    let verdict = brief.verdict;
+    if (typeof verdict === 'string') {
+      try { verdict = JSON.parse(verdict); } catch { verdict = {}; }
+    }
+    let moves = brief.moves;
+    if (typeof moves === 'string') {
+      try { moves = JSON.parse(moves); } catch { moves = []; }
+    }
+
+    return res.json({
+      week_of: weekOf,
+      workspace_id: workspaceId,
+      workspace_brand_name: workspaceBrandName,
+      verdict: verdict || {},
+      moves: Array.isArray(moves) ? moves : [],
+      content_drafts: contentDrafts,
+      product_opportunity: productOpportunity,
+      generated_at: brief.generated_at instanceof Date
+        ? brief.generated_at.toISOString()
+        : brief.generated_at,
+    });
+  } catch (err) {
+    console.error('[CI] GET brief error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch brief' });
+  }
+});
+
 // GET /api/ci/connections — list platform connections for a workspace
 app.get('/api/ci/connections', async (req, res) => {
   try {

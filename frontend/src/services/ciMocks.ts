@@ -392,13 +392,38 @@ export const MOCK_DOMAIN_SCORES_NIKE: DomainScores = {
 
 // ─── Mock API functions (feature-flag gated) ─────────────────────────────
 
-const USE_MOCKS = true; // flip to false once real backend lands
+// Default ON until brand_positioning_pipeline + the 6am cron have a verified
+// run on ECS. After that, flip to false in a follow-up commit so the Brief
+// shows real DeepSeek output instead of the hand-written mock.
+const USE_MOCKS = true;
 
-export async function getBrief(_workspaceId: string): Promise<WeeklyBrief | null> {
-  if (!USE_MOCKS) {
-    // TODO: real API call when brief_generator_pipeline.py ships
+/**
+ * Try GET /api/ci/brief; returns null on 404/network error so callers can
+ * decide whether to fall back to a mock or render an empty state.
+ * Kept local to ciMocks (rather than reaching into ciApi.tryApi) so the
+ * mock layer stays a single self-contained file the way it was designed.
+ */
+async function _fetchBriefFromApi(workspaceId: string): Promise<WeeklyBrief | null> {
+  try {
+    const res = await fetch(`/api/ci/brief?workspace_id=${encodeURIComponent(workspaceId)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || !data.verdict) return null; // shape sanity check
+    return data as WeeklyBrief;
+  } catch {
     return null;
   }
+}
+
+export async function getBrief(workspaceId: string): Promise<WeeklyBrief | null> {
+  // Skip the network call for the synthetic "local" workspace_id used when
+  // a user hasn't completed onboarding yet — there's no row to fetch.
+  if (workspaceId && workspaceId !== 'local') {
+    const real = await _fetchBriefFromApi(workspaceId);
+    if (real) return real;
+    // No brief on the backend yet — fall through to mock-or-null below
+  }
+  if (!USE_MOCKS) return null;
   return new Promise(resolve => setTimeout(() => resolve(MOCK_BRIEF_NIKE), 300));
 }
 
