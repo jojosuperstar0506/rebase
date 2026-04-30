@@ -1111,6 +1111,374 @@ app.get('/api/ci/brief', async (req, res) => {
   }
 });
 
+// ─── Analytics + Library + Domain Scores ─────────────────────────────────
+//
+// Static metadata for the 12 metrics rendered on /ci/analytics. Mirrors
+// frontend/src/services/ciMocks.ts MOCK_ALL_METRICS_NIKE entries — same
+// labels / icons / domain assignments. Duplicating here (rather than
+// asking the frontend to merge) keeps the API contract self-contained
+// so the frontend just renders.
+const METRIC_METADATA = [
+  // Consumer domain
+  { metric_key: 'consumer_mindshare', domain: 'consumer', icon: '🧠',
+    label:       { en: 'Mindshare',         zh: '消费心智' },
+    description: { en: 'Share of consumer conversation', zh: '消费者对话份额' } },
+  { metric_key: 'keywords', domain: 'consumer', icon: '🔍',
+    label:       { en: 'Keywords',          zh: '关键词' },
+    description: { en: 'Brand keyword strength vs category', zh: '品牌关键词强度' } },
+  { metric_key: 'threat', domain: 'consumer', icon: '⚡',
+    label:       { en: 'Threat Index',      zh: '威胁指数' },
+    description: { en: 'How much pressure competitors put on you', zh: '竞品施压程度' } },
+  // Product domain
+  { metric_key: 'trending_products', domain: 'product', icon: '🔥',
+    label:       { en: 'Hot Products',      zh: '热门商品' },
+    description: { en: 'Top-selling + new launch momentum', zh: '畅销品与新品势能' } },
+  { metric_key: 'design_profile', domain: 'product', icon: '🎨',
+    label:       { en: 'Design DNA',        zh: '设计分析' },
+    description: { en: 'Visual style + material innovation signals', zh: '视觉风格与材质创新信号' } },
+  { metric_key: 'price_positioning', domain: 'product', icon: '💰',
+    label:       { en: 'Pricing',           zh: '价格定位' },
+    description: { en: 'Price band coverage and premium power', zh: '价格带覆盖与溢价能力' } },
+  { metric_key: 'launch_frequency', domain: 'product', icon: '📦',
+    label:       { en: 'Launch Pace',       zh: '新品频率' },
+    description: { en: 'New SKU cadence over 90 days', zh: '90天新品上架节奏' } },
+  { metric_key: 'wtp', domain: 'product', icon: '💎',
+    label:       { en: 'Price Power',       zh: '溢价能力' },
+    description: { en: 'Willingness-to-pay above category avg', zh: '超越品类均价的意愿' } },
+  // Marketing domain
+  { metric_key: 'voice_volume', domain: 'marketing', icon: '📢',
+    label:       { en: 'Voice Volume',      zh: '品牌声量' },
+    description: { en: 'Total social reach + growth rate', zh: '社交总曝光与增长率' } },
+  { metric_key: 'content_strategy', domain: 'marketing', icon: '📝',
+    label:       { en: 'Content',           zh: '内容策略' },
+    description: { en: 'Post cadence + engagement efficiency', zh: '发布节奏与互动效率' } },
+  { metric_key: 'kol_strategy', domain: 'marketing', icon: '👥',
+    label:       { en: 'KOL Strategy',      zh: 'KOL策略' },
+    description: { en: 'Creator partnership depth and breadth', zh: '创作者合作的深度与广度' } },
+  { metric_key: 'momentum', domain: 'marketing', icon: '🚀',
+    label:       { en: 'Momentum',          zh: '增长势能' },
+    description: { en: 'Composite growth indicator', zh: '综合增长指标' } },
+];
+
+// Compute the ISO Monday for `today` in UTC. Mirrors the Python pipelines
+// so backend and pipelines agree on which week_of a fresh request lands in.
+function isoMondayUtc() {
+  const d = new Date();
+  const utcDow = d.getUTCDay() || 7;          // Mon=1 ... Sun=7 (treat Sunday as 7)
+  d.setUTCDate(d.getUTCDate() - (utcDow - 1));
+  return d.toISOString().slice(0, 10);
+}
+
+// Honest, deterministic, no-LLM rationale for a priority metric. We could
+// generate these via DeepSeek later for warmth, but a template gives the
+// right "show me the gap" framing today and never hallucinates.
+function buildRationale(labelZh, yourScore, bestComp) {
+  const gap = bestComp.score - yourScore;
+  if (gap >= 20) {
+    return `${bestComp.name} 在「${labelZh}」上以 ${bestComp.score} 分大幅领先你的 ${yourScore} 分（差距 ${gap} 分），建议本周优先聚焦改进。`;
+  }
+  if (gap >= 10) {
+    return `${bestComp.name} 在「${labelZh}」上以 ${bestComp.score} 分领先你的 ${yourScore} 分，差距 ${gap} 分，值得跟进。`;
+  }
+  if (gap >= 0) {
+    return `你与 ${bestComp.name} 在「${labelZh}」上接近（差距 ${gap} 分），保持节奏即可。`;
+  }
+  return `你在「${labelZh}」上领先 ${bestComp.name} ${-gap} 分，巩固优势。`;
+}
+
+// GET /api/ci/analytics — priority metrics + white space + all 12 metrics
+//
+// Reads the latest score-per-(competitor × metric) from analysis_results
+// and the white_space_opportunities rows for the same week. Returns the
+// AnalyticsData shape from frontend/src/services/ciMocks.ts.
+//
+// V1 honesty notes:
+//   - delta is ALWAYS null for now. Frontend mocks set explicit deltas;
+//     producing real ones requires per-week snapshot storage we don't
+//     have yet (analysis_results doesn't bucket by week_of).
+//   - trends is ALWAYS {}. Same reason — needs weekly snapshots.
+//   - priority_rationale is template-built (no LLM). Deterministic,
+//     never hallucinated; tone upgrades come in V2.
+app.get('/api/ci/analytics', async (req, res) => {
+  try {
+    const workspaceId = req.query.workspace_id;
+    if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+
+    const { rows: wsRows } = await pool.query(
+      'SELECT brand_name FROM workspaces WHERE id = $1', [workspaceId]
+    );
+    if (wsRows.length === 0) return res.status(404).json({ error: 'Workspace not found' });
+    const workspaceBrandName = wsRows[0].brand_name || '';
+
+    // Anchor on the latest brief's week_of, falling back to current ISO Monday.
+    const { rows: weekRows } = await pool.query(
+      `SELECT week_of::text AS week_of FROM weekly_briefs
+        WHERE workspace_id = $1 ORDER BY week_of DESC LIMIT 1`,
+      [workspaceId]
+    );
+    const weekOf = weekRows[0]?.week_of || isoMondayUtc();
+
+    // White-space opportunities for this week (sorted by score desc).
+    const { rows: wsOpps } = await pool.query(
+      `SELECT id, title, summary, category, opportunity_score,
+              reasoning, supporting_data, suggested_action
+         FROM white_space_opportunities
+        WHERE workspace_id = $1 AND week_of = $2::date
+        ORDER BY opportunity_score DESC`,
+      [workspaceId, weekOf]
+    );
+    const whiteSpace = wsOpps.map(r => {
+      let supporting = r.supporting_data;
+      if (typeof supporting === 'string') {
+        try { supporting = JSON.parse(supporting); } catch { supporting = []; }
+      }
+      return {
+        id:                r.id,
+        title:             r.title,
+        category:          r.category,
+        summary:           r.summary,
+        reasoning:         r.reasoning ?? '',
+        suggested_action:  r.suggested_action ?? '',
+        supporting_data:   Array.isArray(supporting) ? supporting : [],
+        opportunity_score: r.opportunity_score,
+      };
+    });
+
+    // All metric scores (latest per competitor × metric).
+    const { rows: scoreRows } = await pool.query(
+      `SELECT DISTINCT ON (competitor_name, metric_type)
+              competitor_name, metric_type, score
+         FROM analysis_results
+        WHERE workspace_id = $1
+        ORDER BY competitor_name, metric_type, analyzed_at DESC`,
+      [workspaceId]
+    );
+    const scoresByMetric = {};
+    for (const r of scoreRows) {
+      (scoresByMetric[r.metric_type] ||= {})[r.competitor_name] = parseFloat(r.score);
+    }
+
+    // Project METRIC_METADATA × scoresByMetric into FullMetric[] shape.
+    // Metrics with no analysis_results data still appear (empty scores
+    // object) so the UI can show "pending / no_data" via the existing
+    // metric_status enum.
+    const allMetrics = METRIC_METADATA.map(meta => ({
+      metric_key:  meta.metric_key,
+      label:       meta.label,
+      icon:        meta.icon,
+      domain:      meta.domain,
+      description: meta.description,
+      scores:      scoresByMetric[meta.metric_key] || {},
+      delta:       null, // V1: no per-week delta yet; honest null
+    }));
+
+    // Priority metrics: rank by abs gap-to-best-competitor, take top 5.
+    // We exclude the user's own brand from "best competitor" math.
+    const priorityCandidates = [];
+    for (const m of allMetrics) {
+      const yourScore = m.scores[workspaceBrandName] ?? 0;
+      let best = { name: '', score: -1 };
+      for (const [brand, score] of Object.entries(m.scores)) {
+        if (brand === workspaceBrandName) continue;
+        if (score > best.score) best = { name: brand, score };
+      }
+      if (!best.name) continue; // metric with only own-brand data — skip
+      priorityCandidates.push({
+        metric_key:         m.metric_key,
+        label:              m.label,
+        icon:               m.icon,
+        domain:             m.domain,
+        your_score:         yourScore,
+        best_competitor:    best,
+        delta:              null,
+        priority_rationale: buildRationale(m.label.zh, yourScore, best),
+        _absGap:            Math.abs(best.score - yourScore),
+      });
+    }
+    priorityCandidates.sort((a, b) => b._absGap - a._absGap);
+    const priorityMetrics = priorityCandidates.slice(0, 5).map(({ _absGap, ...rest }) => rest);
+
+    return res.json({
+      week_of: weekOf,
+      workspace_brand_name: workspaceBrandName,
+      priority_metrics: priorityMetrics,
+      white_space: whiteSpace,
+      all_metrics: allMetrics,
+      trends: {}, // V1: empty — needs week-bucketed snapshots, future work
+    });
+  } catch (err) {
+    console.error('[CI] GET analytics error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch analytics' });
+  }
+});
+
+// GET /api/ci/library — last N weeks of briefs as LibraryEntry[]
+//
+// Joins weekly_briefs with content_recommendations + product_opportunities
+// per-week. Returns at most `limit` (default 12) entries, newest first.
+app.get('/api/ci/library', async (req, res) => {
+  try {
+    const workspaceId = req.query.workspace_id;
+    if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+    const limit = Math.min(parseInt(req.query.limit, 10) || 12, 52);
+
+    const { rows: briefs } = await pool.query(
+      `SELECT week_of::text AS week_of, verdict, moves, generated_at
+         FROM weekly_briefs
+        WHERE workspace_id = $1
+        ORDER BY week_of DESC
+        LIMIT $2`,
+      [workspaceId, limit]
+    );
+
+    if (briefs.length === 0) return res.json([]);
+
+    const weekOfList = briefs.map(b => b.week_of);
+
+    // Content drafts for any of these weeks (excluding dismissed)
+    const { rows: contentRows } = await pool.query(
+      `SELECT id, week_of::text AS week_of, platform, title, hook_3s, main_15s, cta_3s,
+              post_title, post_body, hashtags, reasoning, why_now, based_on,
+              status, created_at
+         FROM content_recommendations
+        WHERE workspace_id = $1
+          AND week_of = ANY($2::date[])
+          AND status <> 'dismissed'
+        ORDER BY created_at ASC`,
+      [workspaceId, weekOfList]
+    );
+    const contentByWeek = {};
+    for (const r of contentRows) {
+      (contentByWeek[r.week_of] ||= []).push({
+        id: r.id,
+        platform: r.platform,
+        title: r.title,
+        hook_3s: r.hook_3s ?? undefined,
+        main_15s: r.main_15s ?? undefined,
+        cta_3s: r.cta_3s ?? undefined,
+        post_title: r.post_title ?? undefined,
+        post_body: r.post_body ?? undefined,
+        hashtags: Array.isArray(r.hashtags) ? r.hashtags : [],
+        reasoning: r.reasoning ?? '',
+        why_now: r.why_now ?? '',
+        based_on: r.based_on ?? '',
+        status: r.status,
+        created_at: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
+      });
+    }
+
+    // Latest non-dismissed product opportunity per week
+    const { rows: oppRows } = await pool.query(
+      `SELECT DISTINCT ON (week_of)
+              id, week_of::text AS week_of, concept_name, positioning, why_now,
+              signals, target_price, target_channels, launch_timeline,
+              status, created_at
+         FROM product_opportunities
+        WHERE workspace_id = $1
+          AND week_of = ANY($2::date[])
+          AND status <> 'dismissed'
+        ORDER BY week_of, created_at DESC`,
+      [workspaceId, weekOfList]
+    );
+    const oppByWeek = {};
+    for (const o of oppRows) {
+      let signals = o.signals;
+      if (typeof signals === 'string') {
+        try { signals = JSON.parse(signals); } catch { signals = []; }
+      }
+      oppByWeek[o.week_of] = {
+        id: o.id,
+        concept_name: o.concept_name,
+        positioning: o.positioning,
+        why_now: o.why_now,
+        signals: Array.isArray(signals) ? signals : [],
+        target_price: o.target_price ?? '',
+        target_channels: Array.isArray(o.target_channels) ? o.target_channels : [],
+        launch_timeline: o.launch_timeline ?? '',
+        status: o.status,
+        created_at: o.created_at instanceof Date ? o.created_at.toISOString() : o.created_at,
+      };
+    }
+
+    const entries = briefs.map(b => {
+      let verdict = b.verdict;
+      if (typeof verdict === 'string') {
+        try { verdict = JSON.parse(verdict); } catch { verdict = {}; }
+      }
+      let moves = b.moves;
+      if (typeof moves === 'string') {
+        try { moves = JSON.parse(moves); } catch { moves = []; }
+      }
+      return {
+        week_of: b.week_of,
+        verdict_headline: (verdict && verdict.headline) || '',
+        trend: (verdict && verdict.trend) || 'steady',
+        moves_count: Array.isArray(moves) ? moves.length : 0,
+        content_drafts: contentByWeek[b.week_of] || [],
+        product_opportunity: oppByWeek[b.week_of] || null,
+      };
+    });
+
+    return res.json(entries);
+  } catch (err) {
+    console.error('[CI] GET library error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch library' });
+  }
+});
+
+// GET /api/ci/domain-scores — three domain rollups per brand for the
+// "See all metrics" collapsible on the Brief.
+//
+// Returns DomainScores shape: { consumer/product/marketing: { own, competitors } }.
+app.get('/api/ci/domain-scores', async (req, res) => {
+  try {
+    const workspaceId = req.query.workspace_id;
+    if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+
+    const { rows: wsRows } = await pool.query(
+      'SELECT brand_name FROM workspaces WHERE id = $1', [workspaceId]
+    );
+    if (wsRows.length === 0) return res.status(404).json({ error: 'Workspace not found' });
+    const ownBrand = wsRows[0].brand_name || '';
+
+    const { rows: rollups } = await pool.query(
+      `SELECT DISTINCT ON (competitor_name, metric_type)
+              competitor_name, metric_type, score
+         FROM analysis_results
+        WHERE workspace_id = $1
+          AND metric_type = ANY($2::text[])
+        ORDER BY competitor_name, metric_type, analyzed_at DESC`,
+      [workspaceId, ['consumer_domain', 'product_domain', 'marketing_domain']]
+    );
+
+    const out = {
+      consumer:  { own: 0, competitors: {} },
+      product:   { own: 0, competitors: {} },
+      marketing: { own: 0, competitors: {} },
+    };
+    const keyMap = {
+      consumer_domain:  'consumer',
+      product_domain:   'product',
+      marketing_domain: 'marketing',
+    };
+    for (const r of rollups) {
+      const k = keyMap[r.metric_type];
+      if (!k) continue;
+      const score = parseFloat(r.score);
+      if (r.competitor_name === ownBrand) {
+        out[k].own = score;
+      } else {
+        out[k].competitors[r.competitor_name] = score;
+      }
+    }
+
+    return res.json(out);
+  } catch (err) {
+    console.error('[CI] GET domain-scores error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch domain scores' });
+  }
+});
+
 // GET /api/ci/connections — list platform connections for a workspace
 app.get('/api/ci/connections', async (req, res) => {
   try {

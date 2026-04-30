@@ -427,12 +427,57 @@ export async function getBrief(workspaceId: string): Promise<WeeklyBrief | null>
   return new Promise(resolve => setTimeout(() => resolve(MOCK_BRIEF_NIKE), 300));
 }
 
-export async function getLibrary(_workspaceId: string): Promise<LibraryEntry[]> {
+/** Try GET /api/ci/library; null on 404/network/empty so callers can fall back to mock. */
+async function _fetchLibraryFromApi(workspaceId: string): Promise<LibraryEntry[] | null> {
+  try {
+    const res = await fetch(`/api/ci/library?workspace_id=${encodeURIComponent(workspaceId)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data)) return null;
+    if (data.length === 0) return null; // empty library → let mock show until first brief lands
+    return data as LibraryEntry[];
+  } catch {
+    return null;
+  }
+}
+
+export async function getLibrary(workspaceId: string): Promise<LibraryEntry[]> {
+  if (workspaceId && workspaceId !== 'local') {
+    const real = await _fetchLibraryFromApi(workspaceId);
+    if (real) return real;
+  }
   if (!USE_MOCKS) return [];
   return new Promise(resolve => setTimeout(() => resolve(MOCK_LIBRARY_NIKE), 200));
 }
 
-export async function getDomainScores(_workspaceId: string): Promise<DomainScores> {
+/** Try GET /api/ci/domain-scores; null on 404/network/empty. */
+async function _fetchDomainScoresFromApi(workspaceId: string): Promise<DomainScores | null> {
+  try {
+    const res = await fetch(`/api/ci/domain-scores?workspace_id=${encodeURIComponent(workspaceId)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    // Shape sanity check — must have all 3 domain keys.
+    if (!data || !data.consumer || !data.product || !data.marketing) return null;
+    // If every domain came back empty (no scores yet), prefer mock
+    // so the "See all metrics" panel isn't blank.
+    const totalCompetitors =
+      Object.keys(data.consumer.competitors || {}).length +
+      Object.keys(data.product.competitors || {}).length +
+      Object.keys(data.marketing.competitors || {}).length;
+    if (totalCompetitors === 0 && data.consumer.own === 0 && data.product.own === 0 && data.marketing.own === 0) {
+      return null;
+    }
+    return data as DomainScores;
+  } catch {
+    return null;
+  }
+}
+
+export async function getDomainScores(workspaceId: string): Promise<DomainScores> {
+  if (workspaceId && workspaceId !== 'local') {
+    const real = await _fetchDomainScoresFromApi(workspaceId);
+    if (real) return real;
+  }
   if (!USE_MOCKS) {
     return { consumer: { own: 0, competitors: {} }, product: { own: 0, competitors: {} }, marketing: { own: 0, competitors: {} } };
   }
@@ -783,7 +828,30 @@ export const MOCK_SIGNAL_SOURCES: Record<string, SignalSource> = {
 
 // ─── Mock API — analytics ────────────────────────────────────────────────
 
-export async function getAnalytics(_workspaceId: string): Promise<AnalyticsData | null> {
+/** Try GET /api/ci/analytics; null on 404/network/empty so callers can fall back to mock. */
+async function _fetchAnalyticsFromApi(workspaceId: string): Promise<AnalyticsData | null> {
+  try {
+    const res = await fetch(`/api/ci/analytics?workspace_id=${encodeURIComponent(workspaceId)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || !Array.isArray(data.all_metrics)) return null; // shape sanity
+    // If the workspace has no metric data at all, fall through to mock
+    // rather than render a fully blank Analytics tab.
+    const hasAnyScores = data.all_metrics.some(
+      (m: FullMetric) => m.scores && Object.keys(m.scores).length > 0
+    );
+    if (!hasAnyScores) return null;
+    return data as AnalyticsData;
+  } catch {
+    return null;
+  }
+}
+
+export async function getAnalytics(workspaceId: string): Promise<AnalyticsData | null> {
+  if (workspaceId && workspaceId !== 'local') {
+    const real = await _fetchAnalyticsFromApi(workspaceId);
+    if (real) return real;
+  }
   if (!USE_MOCKS) return null;
   return new Promise(resolve => setTimeout(() => resolve(MOCK_ANALYTICS_NIKE), 250));
 }
