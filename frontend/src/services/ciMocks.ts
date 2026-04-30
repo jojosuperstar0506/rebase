@@ -392,10 +392,16 @@ export const MOCK_DOMAIN_SCORES_NIKE: DomainScores = {
 
 // ─── Mock API functions (feature-flag gated) ─────────────────────────────
 
-// Default ON until brand_positioning_pipeline + the 6am cron have a verified
-// run on ECS. After that, flip to false in a follow-up commit so the Brief
-// shows real DeepSeek output instead of the hand-written mock.
-const USE_MOCKS = true;
+// Day 2 fully verified on ECS (2026-04-30):
+//   - brand_positioning, gtm_content, product_opportunity, white_space all
+//     producing grounded prose that cites real scoring deltas
+//   - /api/ci/brief / /api/ci/analytics / /api/ci/library / /api/ci/domain-scores
+//     return correct shapes and populated content for the Songmont workspace
+//   - The fetch helpers below already degrade gracefully (null on 404 / network
+//     error / empty data), so flipping this off just means we stop overlaying
+//     Nike-themed mocks on workspaces whose pipelines haven't run yet
+// Easy revert: change to true and redeploy. No data migration involved.
+const USE_MOCKS = false;
 
 /**
  * Try GET /api/ci/brief; returns null on 404/network error so callers can
