@@ -991,12 +991,16 @@ app.get('/api/ci/brief', async (req, res) => {
     const requestedWeek = req.query.week_of || null;
 
     // Resolve the brief row: requested week if given, otherwise the latest.
+    // NOTE: cast week_of::text in the SELECT — node-postgres parses DATE as
+    // a local-tz JS Date, and `.toISOString().slice(0,10)` then shifts the
+    // Monday backwards to Sunday on a UTC+N server. Casting to text returns
+    // the literal calendar string (e.g. '2026-04-27') with no TZ math.
     const briefSql = requestedWeek
-      ? `SELECT week_of, verdict, moves, generated_at
+      ? `SELECT week_of::text AS week_of, verdict, moves, generated_at
            FROM weekly_briefs
           WHERE workspace_id = $1 AND week_of = $2::date
           LIMIT 1`
-      : `SELECT week_of, verdict, moves, generated_at
+      : `SELECT week_of::text AS week_of, verdict, moves, generated_at
            FROM weekly_briefs
           WHERE workspace_id = $1
           ORDER BY week_of DESC
@@ -1011,9 +1015,7 @@ app.get('/api/ci/brief', async (req, res) => {
       });
     }
     const brief = briefRows[0];
-    const weekOf = brief.week_of instanceof Date
-      ? brief.week_of.toISOString().slice(0, 10)
-      : String(brief.week_of);
+    const weekOf = String(brief.week_of); // already 'YYYY-MM-DD' from the cast above
 
     // Workspace brand name (cheap lookup, used in the response shape)
     const { rows: wsRows } = await pool.query(
