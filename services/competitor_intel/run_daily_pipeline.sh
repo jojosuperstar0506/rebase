@@ -110,6 +110,20 @@ else
   report_failure "brand_positioning" "brand_positioning_pipeline returned non-zero"
 fi
 
+# Step 2e: Generate Douyin content drafts grounded in this week's moves.
+# Reads weekly_briefs (written by 2d); writes content_recommendations.
+# Idempotent BUT skip-if-exists rather than UPSERT — preserves the user's
+# mark_posted / dismiss decisions. The first run of the ISO-week creates
+# drafts; subsequent runs that day no-op. --force is intentionally NOT
+# used here; the cron should never silently destroy user state.
+log "Step 2e: Generating Douyin content drafts..."
+if $PYTHON -m services.competitor_intel.gtm_content_pipeline --all >> "$LOG_FILE" 2>&1; then
+  log "Step 2e: Content drafts complete"
+else
+  log "Step 2e: Content draft generation failed (continuing)"
+  report_failure "gtm_content" "gtm_content_pipeline returned non-zero"
+fi
+
 # Step 3: Generate narratives
 log "Step 3: Generating AI narratives..."
 if $PYTHON -m services.competitor_intel.narrative_pipeline --all >> "$LOG_FILE" 2>&1; then
