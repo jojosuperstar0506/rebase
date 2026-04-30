@@ -124,6 +124,29 @@ else
   report_failure "gtm_content" "gtm_content_pipeline returned non-zero"
 fi
 
+# Step 2f: Generate this week's product opportunity (1 concept per workspace).
+# Reads weekly_briefs + analysis_results.keywords (when present).
+# Writes product_opportunities. Same skip-if-exists discipline as 2e —
+# accept/dismiss state must survive cron reruns.
+log "Step 2f: Generating product opportunities..."
+if $PYTHON -m services.competitor_intel.product_opportunity_pipeline --all >> "$LOG_FILE" 2>&1; then
+  log "Step 2f: Product opportunity complete"
+else
+  log "Step 2f: Product opportunity generation failed (continuing)"
+  report_failure "product_opportunity" "product_opportunity_pipeline returned non-zero"
+fi
+
+# Step 2g: Generate this week's white-space opportunities (2-4 per workspace).
+# Reads weekly_briefs + domain rollup scores; writes white_space_opportunities.
+# Skip-if-exists same as the others.
+log "Step 2g: Generating white space opportunities..."
+if $PYTHON -m services.competitor_intel.white_space_pipeline --all >> "$LOG_FILE" 2>&1; then
+  log "Step 2g: White space complete"
+else
+  log "Step 2g: White space generation failed (continuing)"
+  report_failure "white_space" "white_space_pipeline returned non-zero"
+fi
+
 # Step 3: Generate narratives
 log "Step 3: Generating AI narratives..."
 if $PYTHON -m services.competitor_intel.narrative_pipeline --all >> "$LOG_FILE" 2>&1; then
