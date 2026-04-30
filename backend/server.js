@@ -200,7 +200,13 @@ app.post("/api/onboarding", async (req, res) => {
     // Auto-create CI workspace if competitors field is present (non-fatal side effect)
     if (competitors && competitors.trim()) {
       try {
-        const userId = email || phone || `applicant-${Date.now()}`;
+        // user_id precedence MUST match POST /api/auth/verify-code's JWT.sub
+        // construction (line ~487): phone first, email second. Phone is a
+        // required field so this always resolves; if we used email-first here
+        // and a user supplied both, the JWT's sub (=phone) wouldn't match the
+        // workspace's user_id (=email) on first login → "no workspace found"
+        // on the very first /ci visit. Same precedence both places.
+        const userId = phone || email || `applicant-${Date.now()}`;
 
         // Create workspace
         const { rows: [workspace] } = await pool.query(
@@ -1645,48 +1651,29 @@ app.post('/api/ci/run-analysis', async (req, res) => {
 
     const job = rows[0];
 
-    // Spawn scoring pipeline with job-id for progress tracking
+    // Spawn the FULL post-scrape analysis chain (orchestrator script).
+    // Replaces the previous "10 detached pipelines in parallel" approach,
+    // which only ran scoring + 9 metric pipelines and skipped every
+    // downstream stage — meaning the user's Brief never refreshed when
+    // they clicked "Run Today's Analysis." The orchestrator runs all 7
+    // stages in dependency order: scoring → metrics → domain rollup →
+    // brief → content drafts → product opportunity → white space.
+    // It owns the ci_analysis_jobs row through completion.
     const { spawn } = require('child_process');
-    const pythonBin = process.env.PYTHON_BIN || 'python3';
-    const proc = spawn(pythonBin, [
-      '-m', 'services.competitor_intel.scoring_pipeline',
-      '--workspace-id', workspace_id,
-      '--job-id', job.id,
-    ], {
-      cwd: process.cwd().replace('/backend', ''),
+    const path = require('path');
+    const repoRoot = process.cwd().replace('/backend', '');
+    const orchestratorPath = path.join(
+      repoRoot, 'services/competitor_intel/run_analysis_for_workspace.sh'
+    );
+    const proc = spawn('bash', [orchestratorPath, workspace_id, job.id], {
+      cwd: repoRoot,
       env: { ...process.env },
       detached: true,
       stdio: 'ignore',
     });
     proc.unref();
 
-    // Spawn additional intelligence pipelines (detached, fire-and-forget)
-    const pipelineCwd = process.cwd().replace('/backend', '');
-    const pipelineEnv = { ...process.env };
-    const pipelineOpts = { cwd: pipelineCwd, env: pipelineEnv, detached: true, stdio: 'ignore' };
-
-    const extraPipelines = [
-      'services.competitor_intel.pipelines.keyword_pipeline',
-      'services.competitor_intel.pipelines.voice_volume_pipeline',
-      'services.competitor_intel.pipelines.product_ranking_pipeline',
-      'services.competitor_intel.pipelines.price_analysis_pipeline',
-      'services.competitor_intel.pipelines.launch_tracker_pipeline',
-      'services.competitor_intel.pipelines.mindshare_pipeline',
-      'services.competitor_intel.pipelines.content_strategy_pipeline',
-      'services.competitor_intel.pipelines.kol_tracker_pipeline',
-      'services.competitor_intel.pipelines.design_vision_pipeline',
-    ];
-    for (const mod of extraPipelines) {
-      try {
-        const p = spawn(pythonBin, ['-m', mod, '--workspace-id', workspace_id], pipelineOpts);
-        p.unref();
-        console.log(`[CI] Spawned ${mod} for workspace ${workspace_id}`);
-      } catch (spawnErr) {
-        console.warn(`[CI] Failed to spawn ${mod}: ${spawnErr.message}`);
-      }
-    }
-
-    console.log(`[CI] Started analysis job ${job.id} for workspace ${workspace_id} (${totalBrands} brands)`);
+    console.log(`[CI] Started analysis chain ${job.id} for workspace ${workspace_id} (${totalBrands} brands)`);
 
     res.json({
       job_id: job.id,
