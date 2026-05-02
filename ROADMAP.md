@@ -2,14 +2,15 @@
 
 > Single source of truth for product progress. Pull this up every session.
 
-**Last updated:** 2026-05-02
+**Last updated:** 2026-05-03
 
 > **In-flight reference docs (read first if you're catching up):**
 > - 🔒 **`SPEC-COMPOSITE-INDICES-V1.md`** — **THE source of truth for the 3-pillar / 12-index framework** (locked 2026-05-03, owner: William)
+> - 📋 **`HANDOFF-WILLIAM-2026-05-03.md`** — Active work breakdown + ownership + dependencies for William
 > - `WILL-TO-JOANNA-2026-04-30.md` — William's Day 1 + Day 2 + lifecycle handoff
 > - `WILLIAM-HANDOFF-2026-04-23.md` — Joanna's scraper hardening handoff to William
 > - `DATA-FLOW-AND-METRICS-ANALYSIS-2026-05-02.md` — Full pipeline trace + 3 critical data-quality fixes
-> - `FRONTEND-BACKEND-GAP-ANALYSIS-2026-05-02.md` — Endpoint inventory + workplan update + decisions for next sync
+> - `FRONTEND-BACKEND-GAP-ANALYSIS-2026-05-02.md` — Endpoint inventory + workplan
 > - `METRIC-LOGIC-INVESTIGATION-2026-05-02.md` — root-cause investigation (partly superseded by indices spec)
 > - `SPEC-COMPARISON-SETS-V2.md` — Comparison sets + auto-segmentation spec (V2 work, owner: William)
 
@@ -57,7 +58,7 @@ Converts prospects to believers               Proves intelligence layer works on
 
 ---
 
-## Where We Are Now (as of 2026-05-02)
+## Where We Are Now (as of 2026-05-03)
 
 | Stream | Owner | Status | Layer | Notes |
 |--------|-------|--------|-------|-------|
@@ -67,16 +68,18 @@ Converts prospects to believers               Proves intelligence layer works on
 | Product Structure Agent (ERP intelligence demo) | Joanna | ✅ v0.1 Done | 2 | 3-file ERP export analysis, Streamlit UI |
 | 3-screen visualization dashboard | Joanna | ✅ Done | 2 | Department map, before/after toggle, ROI summary — on Vercel |
 | **OMI Competitive Intelligence v2** | **Joanna** | **✅ Done** | **3** | **Full pipeline: scrape → temporal → scoring → narrative → dashboard → WeChat delivery** |
-| **CI vFinal — Brief / Analytics / Library** | **William** | **✅ Live (PR #26 merged 2026-04-30)** | **—** | **Day 1 + Day 2 + lifecycle: 7 LLM pipelines, 4 backend endpoints, 3 CI pages render real DeepSeek output. End-to-end loop in 12s on Songmont workspace** |
-| **Scraper hardening + central rules YAML + endpoint gate** | **Joanna** | **✅ Live (PR #25 merged 2026-04-30)** | **—** | **XHS scraper: account picker via verified ranking, 万-aware count parser, auth-wall detection. `scraping_rules.yml` + loader. `/api/ci/scrape` gated by SCRAPER_ENABLED** |
-| Frontend polish (PR #27) | Joanna | 🟡 Open — awaiting merge | — | Real `runAnalysis` polling on Refresh, relative-time freshness, stale-data banner, workspace context block, AI-deltas disclaimer |
-| Data-quality cleanup (DB) | Joanna | ✅ Done 2026-05-02 | — | Deleted 5 buggy zero-follower scrape rows + 334 duplicate analysis_results (-42%) |
+| **CI vFinal — Brief / Analytics / Library** | **William** | **✅ Live (PR #26 merged)** | **—** | **Day 1 + Day 2 + lifecycle: 7 LLM pipelines, 4 backend endpoints, 3 CI pages render real DeepSeek output** |
+| **Scraper hardening + central rules YAML + endpoint gate** | **Joanna** | **✅ Live (PR #25 merged)** | **—** | **XHS scraper hardened; `scraping_rules.yml` + loader; `/api/ci/scrape` gated by SCRAPER_ENABLED** |
+| Frontend polish (PR #27) | Joanna | ✅ Live | — | Real `runAnalysis` polling on Refresh, relative-time freshness, stale-data banner, workspace context block, AI-deltas disclaimer |
+| UI bugfixes (PR #29) | Parallel Claude | 🟡 Open — ready for merge | — | Workspace switcher UI, brand-link parser, brand_insight panel, Coverage-pending pills, refetch loop fix. Switcher fully functional only after W6+W7 backend. |
+| Composite Indices spec (PR #28) | Joanna → William | 🟡 Open — awaiting William ack | — | 3 pillars × 12 proprietary indices, locked spec at `SPEC-COMPOSITE-INDICES-V1.md` |
+| Data-quality cleanup (DB) | Joanna | ✅ Done | — | Deleted 5 buggy zero-follower scrape rows + 334 duplicate analysis_results (-42%) |
 | FRD (functional requirements) | Joanna | In progress | All | Defining overall product features |
 | AI Intake Agent (Dify build) | William | TODO | 2 | Next: bring prompt architecture to life in Dify |
 | XHS Virtual Employee (Joanna VE) | Joanna | TODO | 3 | Next: one-button XHS content creator |
 | ERP connector research | William | TODO | 2-3 | Kingdee/QuickBooks API assessment |
-| Comparison Sets + Auto-Segmentation | William | 📋 Spec ready (`SPEC-COMPARISON-SETS-V2.md`) | 3 | V2 work, ~6-day sprint. Allows comparing OMI vs international/value/国潮 segments separately |
-| B0 — burner XHS account for fresh scraping | Joanna | 🔴 Blocked / pending | — | Personal XHS account banned 2026-04-22 by anti-bot. Need fresh SIM + 2-3 day pre-warm before any further scraping |
+| Comparison Sets + Auto-Segmentation | William | 📋 Spec ready (`SPEC-COMPARISON-SETS-V2.md`) | 3 | V2 — LLM auto-clusters competitors into 国际启发 / 价值挑战者 / 国潮新锐 segments |
+| B0 — burner XHS account for fresh scraping | Joanna | 🔴 Blocked / pending | — | Personal XHS account banned 2026-04-22 by anti-bot. Need fresh SIM + manual pre-warm before any further scraping |
 
 ### 🔴 Only One Blocker Remaining
 
@@ -90,6 +93,30 @@ The platform works out of the box with built-in defaults — no Vercel env vars 
 - `RESEND_API_KEY` + `NOTIFICATION_EMAIL` — to receive onboarding application emails in your inbox
 - `ACCESS_CODE` — change from the default `rebase2026` to a custom invite code
 - `VITE_ADMIN_PASSWORD` — change from default `rebase-admin-2026` before sharing with more admins
+
+---
+
+## 🚀 CI vFinal — Current Focus Snapshot
+
+**Product maturity (no timelines, just stages):**
+
+| Stage | Status | What it covers |
+|---|---|---|
+| **V1 Launchable** | ✅ Live on `main` | Brief/Analytics/Library on real DeepSeek data; Songmont as canonical demo |
+| **V1 Trust Polish** | 🟡 In flight (William's queue) | Numeric coherence, dark-metric audit, follower-zero guard, dedup, admin tool, English i18n, workspace-list endpoint |
+| **V1.5 Composite Indices** | 📋 Spec locked (PR #28 awaiting William) | 3 pillars × 12 proprietary indices, pre-computed, drill-down |
+| **V2 Comparison Sets** | 📋 Spec ready (`SPEC-COMPARISON-SETS-V2.md`) | LLM auto-clustering of competitors into segments |
+| **V2 Snapshot table** | 🔴 Queued | True WoW deltas + 8-week sparklines |
+| **V2 Merchant scrapers** | 🔴 Queued | 抖店 / 品牌号 / 千牛 — different risk model, unique data |
+| **V3 Customer installer** | 🔴 Queued | One-button Mac/Windows installer for self-serve onboarding |
+
+**PRs in flight:**
+| PR | State | Owner | Dependency |
+|---|---|---|---|
+| #28 — composite indices spec | Open, awaiting William ack | Joanna (spec) → William (review + implement) | William reads + answers §10 questions |
+| #29 — UI bugfixes (workspace switcher, brand-link parser, brand_insight panel, coverage-pending badges, refetch loop fix) | Open, ready for review | Parallel Claude session (done) | Workspace switcher fully functional only after W6+W7 backend lands |
+
+**Everything in detail lives in `HANDOFF-WILLIAM-2026-05-03.md` §4-§5.** Don't duplicate the task tables here — single source of truth.
 
 ---
 
@@ -136,19 +163,19 @@ The platform works out of the box with built-in defaults — no Vercel env vars 
 | Formatted Excel output (2 sheets, 8 sections) | Joanna | Done | Ready for Feishu Bitable import |
 | Streamlit UI | Joanna | Done | Upload, auto-detect, analyze, download |
 | FastAPI endpoints | Joanna | Done | POST /upload, GET /result, GET /excel |
-| Add Kingdee export format support | Joanna | TODO | Sprint 2 — expand beyond 聚水潭 |
-| Add true COGS column support | Joanna | TODO | Sprint 2 — replace 40% estimate |
-| Deploy to Alibaba Cloud | Joanna | TODO | Sprint 2 — Streamlit on ECS |
+| Add Kingdee export format support | Joanna | TODO | expand beyond 聚水潭 |
+| Add true COGS column support | Joanna | TODO | replace 40% estimate |
+| Deploy to Alibaba Cloud | Joanna | TODO | Streamlit on ECS |
 
 ### 2D. ERP Connectors (William — New Track)
 > Bidirectional connections to Kingdee, Yonyou, QuickBooks — the backbone of the intelligence layer
 
 | Task | Owner | Status | Notes |
 |------|-------|--------|-------|
-| Research Kingdee KIS/K3 API capabilities | William | TODO | Sprint 1 — what data is accessible? |
-| Research QuickBooks API (US market) | William | TODO | Sprint 1 — endpoints, auth, data model |
-| ERP connector v0 — read-only Kingdee or QuickBooks | William | TODO | Sprint 2 — pull transaction data |
-| ERP connector v1 — bidirectional (read + write) | William | TODO | Sprint 3 — post journal entries, update POs |
+| Research Kingdee KIS/K3 API capabilities | William | TODO | what data is accessible? |
+| Research QuickBooks API (US market) | William | TODO | endpoints, auth, data model |
+| ERP connector v0 — read-only Kingdee or QuickBooks | William | TODO | pull transaction data |
+| ERP connector v1 — bidirectional (read + write) | William | TODO | post journal entries, update POs |
 | Computer-use agent for legacy Kingdee (no API) | William | TODO | Future — UI automation for older versions |
 
 ### 2E. Report Generator (William)
@@ -229,10 +256,10 @@ Phase 2 (Scale):   Add Alibaba Cloud Guangzhou — enterprise-ready
 | Set `ANTHROPIC_API_KEY` in Vercel | William | ✅ Done | XHS War Room AI calls working |
 | Set `ACCESS_CODE` in Vercel | William | ✅ Done | Needed for user login |
 | Set `RESEND_API_KEY` in Vercel | William | 🟡 TODO | Needed for email notifications |
-| Set up RDS PostgreSQL | Joanna | TODO | Sprint 2 |
-| Set up OSS bucket | Joanna | TODO | Sprint 2 |
+| Set up RDS PostgreSQL | Joanna | TODO | queued |
+| Set up OSS bucket | Joanna | TODO | queued |
 | Domain name registration | Joanna | TODO | |
-| Start ICP filing (parallel) | Joanna | TODO | 1-3 weeks |
+| Start ICP filing (parallel) | Joanna | TODO | required for mainland China hosting; long lead time |
 | `.env.example` + `CLAUDE.md` | Both | ✅ Done | Environment variable guardrails |
 
 **Environment Variables Rule:** All external service URLs, API keys, and region-specific config MUST come from `.env` — never hardcoded. See `CLAUDE.md`.
@@ -303,108 +330,96 @@ Already built as Product Structure Agent. See Section 2C above.
 
 | Task | Owner | Status | Sprint | Notes |
 |------|-------|--------|--------|-------|
-| Define brand voice & tone guidelines | Joanna | TODO | Sprint 2 | What does Rebase sound like on XHS? |
-| Content templates per post type | Joanna | TODO | Sprint 2 | Educational, case study, behind-the-scenes |
-| Pre-built business assumptions | Joanna | TODO | Sprint 2 | Target audience, value props, key messages |
-| Image + copy generation pipeline | Joanna | TODO | Sprint 2 | One button → ready-to-post XHS content |
-| Pull revenue/product data from ERP for campaign analysis | Joanna | TODO | Sprint 3 | Connect to Product Agent data |
+| Define brand voice & tone guidelines | Joanna | TODO | queued | What does Rebase sound like on XHS? |
+| Content templates per post type | Joanna | TODO | queued | Educational, case study, behind-the-scenes |
+| Pre-built business assumptions | Joanna | TODO | queued | Target audience, value props, key messages |
+| Image + copy generation pipeline | Joanna | TODO | queued | One button → ready-to-post XHS content |
+| Pull revenue/product data from ERP for campaign analysis | Joanna | TODO | queued | Connect to Product Agent data |
 
 ### Virtual Employee 4: Image Generator (Marketing Toolkit)
 > High-quality image generation for marketing and client deliverables
 
 | Task | Owner | Status | Sprint | Notes |
 |------|-------|--------|--------|-------|
-| Define use cases & style guide | Joanna | TODO | Sprint 3 | Luxury brand aesthetic |
-| Model selection & API setup | Joanna | TODO | Sprint 3 | Midjourney/Flux/DALL-E |
-| Prompt templates per use case | Joanna | TODO | Sprint 3 | Marketing visuals, report graphics |
-| One-button generation workflow | Joanna | TODO | Sprint 3 | Input context → polished image |
+| Define use cases & style guide | Joanna | TODO | queued | Luxury brand aesthetic |
+| Model selection & API setup | Joanna | TODO | queued | Midjourney/Flux/DALL-E |
+| Prompt templates per use case | Joanna | TODO | queued | Marketing visuals, report graphics |
+| One-button generation workflow | Joanna | TODO | queued | Input context → polished image |
 
 ---
 
-## Sprint Plan (2-week sprints)
+## Active Work + Queue (no timelines, just sequence + dependencies)
 
-### Sprint 0 (Completed — Foundation & Platform)
+> **CI vFinal tasks are in `HANDOFF-WILLIAM-2026-05-03.md` §4** — not duplicated here. This section covers the broader product (Layer 2 + 3) outside the CI vFinal launch push.
 
-> Will built the full client-facing platform. Joanna built the core intelligence prototypes.
+### What's already shipped (foundation)
 
 **William — DONE:**
-| Task | Status | Notes |
-|------|--------|-------|
-| Vercel frontend deployment + CI/CD | ✅ Done | Auto-deploys on push to `main` |
-| Alibaba Cloud ECS backend (HK) | ✅ Done | Node.js + PM2 + Nginx at 8.217.242.191 |
-| AI Diagnostics Calculator | ✅ Done | `/calculator.html` — bilingual, 5-step, lead capture |
-| User onboarding form + submission API | ✅ Done | `/onboarding` + `POST /api/onboarding` |
-| Invite code access gate + JWT auth | ✅ Done | `/login` + `POST /api/auth/verify-code` |
-| Admin panel + applicant management APIs | ✅ Done | `/admin` + `/api/admin/*` |
-| Global dark/light theme + bilingual (all pages) | ✅ Done | `AppContext` — every page uses `C.*` tokens and `lang` |
-| All 5 agent pages themed + bilingual | ✅ Done | AgentMonitor, XhsWarroom, MarketIntelligence, WorkflowScout, CostDashboard |
-| Market Intelligence daily cron | ✅ Done | 6:30am HK — news fetch → Claude analysis → email report |
+- Vercel frontend deployment + CI/CD (auto-deploys on push to `main`)
+- Alibaba Cloud ECS backend (HK) — Node.js + PM2 + Nginx
+- AI Diagnostics Calculator (`/calculator.html`)
+- User onboarding form + submission API
+- Invite code access gate + JWT auth
+- Admin panel + applicant management APIs
+- Global dark/light theme + bilingual across all pages
+- 5 agent pages themed + bilingual (AgentMonitor, XhsWarroom, MarketIntelligence, WorkflowScout, CostDashboard)
+- Market Intelligence daily cron — news fetch → Claude analysis → email report
+- **CI vFinal Day 1 + Day 2 + lifecycle** (PRs #25, #26 — Brief/Analytics/Library on real data)
 
 **Joanna — DONE:**
-| Task | Status | Notes |
-|------|--------|-------|
-| 3-screen visualization dashboard | ✅ Done | On Vercel |
-| Product Structure Agent v0.1 | ✅ Done | 3-file ERP analysis, Streamlit, FastAPI |
-| OMI Competitive Intelligence v2 | ✅ Done | Full pipeline: scrape → temporal → score → narrative → WeChat |
+- 3-screen visualization dashboard (on Vercel)
+- Product Structure Agent v0.1 — 3-file ERP analysis, Streamlit, FastAPI
+- OMI Competitive Intelligence v2 — full pipeline: scrape → temporal → score → narrative → WeChat
+- **CI vFinal scraper hardening + central scraping_rules.yml** (PR #25)
+- **CI vFinal frontend polish** (PR #27 — runAnalysis polling, freshness honesty, workspace context)
+- **CI vFinal data-flow analysis + DB cleanup** (today)
+- **Composite Indices framework spec locked** (PR #28)
 
----
+### Active queue — by owner, with dependencies
 
-### Sprint 1 (Current — First Users + AI Intake): Target: April 2026
+#### William's queue (priority order)
 
-**William:**
-| Task | Status | Notes |
-|------|--------|-------|
-| Set `ANTHROPIC_API_KEY` in Vercel | ✅ Done | XHS War Room AI calls working |
-| Add ECS backend routes for admin panel (`/api/admin/*`) | TODO | So admin panel shows real applicants instead of empty |
-| Build & deploy Dify AI Intake chatflow | TODO | Bring 5-phase prompt architecture to life |
-| Validate intake agent with 3-5 mock client sessions | TODO | Refine conversation quality |
-| Research Kingdee/QuickBooks APIs | TODO | What data is accessible, auth, rate limits |
+> All CI vFinal V1 trust polish + V1.5 composite indices: see `HANDOFF-WILLIAM-2026-05-03.md` §4-§5. Briefly:
 
-**Joanna:**
-| Task | Status | Notes |
-|------|--------|-------|
-| Share platform link with 3-5 target SMB contacts | TODO | Real user feedback on onboarding + calculator |
-| Joanna Virtual Employee (XHS) v1 | TODO | Brand voice + content templates + one-button pipeline |
-| Connect 3-screen dashboard to live API data | TODO | Replace mock data |
-| FRD — diagnostics + workflow discovery scope | In progress | |
+| # | Task | Blocks | Blocked by |
+|---|---|---|---|
+| W1-W4 | V1 trust polish: numeric coercer, dark-metric audit, follower=0 guard, dedup UPSERT | Customer trust on Brief | — |
+| W5 | Admin pending-scrapes tool (`/api/admin/pending-scrapes`) | New-customer self-serve onboarding | — |
+| W6 | `GET /api/ci/workspaces` list endpoint | PR #29 workspace switcher dropdown populating | — |
+| W7 | Fix `POST /api/ci/workspace` to insert (not upsert) | PR #29 "+ New Workspace" button | — |
+| W8 | English i18n audit (Joanna flagged: `formatScriptForCopy` Chinese-only headers, etc.) | English-locale customer onboarding | — |
+| W9-W11 | Composite Indices V1 implementation per `SPEC-COMPOSITE-INDICES-V1.md` | V1.5 product launch | William reads PR #28 + answers §10 questions |
+| — | Add ECS backend routes for admin panel (`/api/admin/*`) — show real applicants | Admin panel useful | — |
+| — | Build & deploy Dify AI Intake chatflow (Layer 2 entry) | Layer 2 client journey | — |
+| — | Research Kingdee/QuickBooks APIs | ERP connector v0 | — |
+| — | ERP connector v0 — read-only | Live ERP-data Product Agent | API research |
+| — | Document classification + field extraction + metrics layer (Layer 2 diagnostic) | Layer 2 report generator | Live intake data |
+| — | Report generator + chart engine | End-to-end Layer 2 demo | Document classification + extraction |
 
----
+#### Joanna's queue
 
-### Sprint 2 (Weeks 3-4): Depth + ERP
+| # | Task | Blocks | Blocked by |
+|---|---|---|---|
+| J1 | Validate composite-index outputs against intuition once they ship | V1.5 weight tuning | William implements W9-W11 |
+| J2 | B0 burner XHS account procurement + manual pre-warm | All fresh-data work, merchant scrapers | — (start anytime) |
+| J3 | Optimize Overview tab (data shown + match with backend) | Customer-facing demo polish | V1 trust polish + V1.5 indices live |
+| J4 | Review/merge PR #28 (composite indices spec) + PR #29 (UI bugfixes) | William starting impl | William's ack on PR #28 |
+| J5 | Share platform link with 3-5 target SMB contacts | Real user feedback | — |
+| J6 | Joanna Virtual Employee (XHS) v1 — brand voice + content templates + one-button pipeline | Layer 3 prototype #3 | Brand voice doc |
+| J7 | Connect 3-screen dashboard to live API data | Real-data visualization layer | Live ERP / scraped data |
+| J8 | Image Generator v1 — API + prompts + luxury aesthetic | Marketing toolkit | — |
+| J9 | Product Structure Agent v2 — Kingdee export support | Beyond 聚水潭 ERP coverage | — |
+| J10 | FRD — full feature requirements doc across 5 layers | Strategic clarity | — |
 
-**William:**
-| Task | Status | Notes |
-|------|--------|-------|
-| Document classification system | TODO | Multi-stage LLM pipeline |
-| Field extraction engine | TODO | Per-doc-type extraction |
-| Metrics computation layer | TODO | Volume, timing, error analytics |
-| ERP connector v0 — read-only Kingdee or QuickBooks | TODO | Pull transaction data |
+### Cross-cutting dependencies (the ones that bite)
 
-**Joanna:**
-| Task | Status | Notes |
-|------|--------|-------|
-| XHS Virtual Employee v1 | TODO | Brand voice + content templates |
-| Product Structure Agent v2 — Kingdee export support | TODO | Expand beyond 聚水潭 |
-| FRD — agent execution + cost optimization scope | TODO | |
-
----
-
-### Sprint 3 (Weeks 5-6): Polish + Integration
-
-**William:**
-| Task | Status | Notes |
-|------|--------|-------|
-| Report generation system | TODO | Auto-generated HTML findings report |
-| Chart/visualization engine | TODO | Inline SVG charts |
-| ERP connector v1 — bidirectional | TODO | Read + write back to ERP |
-| End-to-end pipeline: intake → analysis → report | TODO | |
-
-**Joanna:**
-| Task | Status | Notes |
-|------|--------|-------|
-| Image Generator v1 | TODO | API integration, prompt templates, luxury aesthetic |
-| XHS Marketing Agent v2 — batch generation + scheduling | TODO | |
-| End-to-end demo flow | TODO | ERP data → intelligence → virtual employee → results |
+| Dependency | What it blocks |
+|---|---|
+| **B0 burner XHS account** (J2) | All XHS scraping; merchant scrapers; dark metrics getting un-dark; fresh data for new customers |
+| **William's PR #28 ack** | V1.5 composite indices implementation + everything that builds on indices (cleaner Analytics, future Comparison Sets indices integration) |
+| **W6 + W7 (workspace endpoints)** | PR #29 workspace switcher actually working; multi-workspace customer scenarios |
+| **Live ERP data** | Layer 2 diagnostic agent producing real outputs; Product Agent v2 |
+| **W5 admin pending-scrapes** | New customers can be onboarded without manual SSH-and-run-scrape-runner |
 
 ---
 
@@ -419,14 +434,16 @@ Already built as Product Structure Agent. See Section 2C above.
 
 ---
 
-## Handoff Points
+## Handoff Points (sequential dependencies)
 
-| When | What | From → To | Notes |
-|------|------|-----------|-------|
-| Sprint 1 | ERP API research complete | William → Joanna | Joanna can plan Kingdee export support for Product Agent v2 |
-| Sprint 2 | Live intake data available | William → Joanna | Dashboard can show real client data |
-| Sprint 2 | ERP connector v0 | William → Joanna | Product Agent can pull live data instead of file uploads |
-| Sprint 3 | Analysis output available | William → Joanna | Virtual employee outputs reference real metrics |
+| Trigger | What | From → To | Notes |
+|---|---|---|---|
+| ERP API research complete | API access patterns documented | William → Joanna | Joanna can plan Kingdee export support for Product Agent v2 |
+| Live intake data available | Real client conversation data | William → Joanna | Dashboard can show real client data |
+| ERP connector v0 ships | Read-only ERP access | William → Joanna | Product Agent can pull live data instead of file uploads |
+| Analysis output available | Layer 2 diagnostic output | William → Joanna | Virtual employee outputs reference real metrics |
+| Composite indices V1 ships | Indices live in production | William → Joanna | Joanna validates outputs against intuition; weights iterated if off |
+| Burner XHS account ready | New scraping account online | Joanna → both | Unblocks fresh data, dark metrics, merchant scrapers |
 | Future | Agent prototypes → execution framework | Joanna → William | William wraps virtual employees in Temporal with retry/checkpoint |
 
 ---
