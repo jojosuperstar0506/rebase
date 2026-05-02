@@ -15,7 +15,7 @@
  * ship on ECS.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useApp } from '../../context/AppContext';
 import type { ColorSet } from '../../theme/colors';
@@ -29,6 +29,63 @@ import {
   type WeeklyBrief, type ContentDraft, type ProductOpportunity,
   type DomainScores, type TrendDirection,
 } from '../../services/ciMocks';
+import { runAnalysis, getAnalysisStatus, type AnalysisJob } from '../../services/ciApi';
+
+// Show "data is stale" warning if the brief is older than this many days.
+const STALE_DAYS_THRESHOLD = 7;
+
+// Pretty-print a relative timestamp: "2 hours ago", "5 days ago", "just now".
+// Falls back to absolute date for anything > 30 days.
+function formatRelativeTime(iso: string, lang: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return iso;
+  const diffMs = Date.now() - then;
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHr = Math.floor(diffMs / 3_600_000);
+  const diffDay = Math.floor(diffMs / 86_400_000);
+
+  if (diffMin < 1) return lang === 'zh' ? '刚刚' : 'just now';
+  if (diffMin < 60) {
+    return lang === 'zh' ? `${diffMin} 分钟前` : `${diffMin} min ago`;
+  }
+  if (diffHr < 24) {
+    return lang === 'zh' ? `${diffHr} 小时前` : `${diffHr}h ago`;
+  }
+  if (diffDay < 30) {
+    return lang === 'zh' ? `${diffDay} 天前` : `${diffDay} day${diffDay === 1 ? '' : 's'} ago`;
+  }
+  // > 30 days — fall back to absolute date
+  const d = new Date(iso);
+  return d.toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US', {
+    year: 'numeric', month: 'short', day: 'numeric',
+  });
+}
+
+function ageInDays(iso: string): number {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return 0;
+  return Math.floor((Date.now() - then) / 86_400_000);
+}
+
+// Map an in-flight AnalysisJob.status into the user-facing label shown on the
+// Refresh button. Mirrors the orchestrator stages from
+// services/competitor_intel/run_analysis_for_workspace.sh.
+function jobStageLabel(status: AnalysisJob['status'] | null, lang: string): string {
+  switch (status) {
+    case 'queued':
+      return lang === 'zh' ? '排队中…' : 'Queued…';
+    case 'scoring':
+      return lang === 'zh' ? '评分竞品…' : 'Scoring competitors…';
+    case 'narrating':
+      return lang === 'zh' ? '生成简报…' : 'Generating brief…';
+    case 'complete':
+      return lang === 'zh' ? '完成 ✓' : 'Done ✓';
+    case 'failed':
+      return lang === 'zh' ? '分析失败' : 'Analysis failed';
+    default:
+      return lang === 'zh' ? '准备中…' : 'Starting…';
+  }
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -70,7 +127,7 @@ export default function CIBrief() {
   const { colors: C, lang } = useApp();
   const bp = useBreakpoint();
   const isMobile = bp === 'mobile';
-  const { workspace } = useCIData();
+  const { workspace, competitors } = useCIData();
 
   const [brief, setBrief] = useState<WeeklyBrief | null>(null);
   const [domains, setDomains] = useState<DomainScores | null>(null);
@@ -78,6 +135,12 @@ export default function CIBrief() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  // While regenerating: track the orchestrator stage so the user sees real
+  // progress (queued → scoring → narrating → complete) rather than a fake
+  // spinner. Polled from /api/ci/analysis/status.
+  const [jobStatus, setJobStatus] = useState<AnalysisJob['status'] | null>(null);
+  const [jobError, setJobError] = useState<string | null>(null);
+  const pollTimerRef = useRef<number | null>(null);
   const [showMetrics, setShowMetrics] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -118,13 +181,103 @@ export default function CIBrief() {
     });
   }, [workspaceId]);
 
+  // Cleanup any in-flight polling when the component unmounts.
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current !== null) {
+        window.clearTimeout(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  // Trigger the real run_analysis_for_workspace.sh orchestrator and poll status
+  // every 1.5s. The orchestrator transitions queued → scoring → narrating →
+  // complete in roughly 12s on a small workspace; we hard-cap polling at 3 min
+  // so a wedged backend doesn't leave the UI spinning forever.
   async function handleRegenerate() {
+    if (regenerating) return;
+    if (!workspaceId || workspaceId === 'mock' || workspaceId === 'local') {
+      // No real workspace — bail rather than firing a useless API call.
+      return;
+    }
+
     setRegenerating(true);
-    // Simulate analysis delay — replace with real runAnalysis + polling later
-    await new Promise(r => setTimeout(r, 1400));
-    const fresh = await getBrief(workspaceId);
-    setBrief(fresh);
-    setRegenerating(false);
+    setJobError(null);
+    setJobStatus('queued');
+
+    const job = await runAnalysis(workspaceId);
+    if (!job || !job.job_id) {
+      setJobError(lang === 'zh'
+        ? '启动分析失败,请稍后重试'
+        : 'Could not start analysis. Please try again.');
+      setJobStatus('failed');
+      // Keep the failed state visible for ~3s so the user can read it
+      window.setTimeout(() => {
+        setRegenerating(false);
+        setJobStatus(null);
+      }, 3000);
+      return;
+    }
+    setJobStatus(job.status || 'queued');
+
+    const POLL_MS = 1500;
+    const MAX_POLLS = Math.floor((3 * 60_000) / POLL_MS); // 3-minute hard cap
+    let polls = 0;
+
+    const poll = async () => {
+      polls += 1;
+      const status = await getAnalysisStatus(workspaceId);
+      if (!status) {
+        // Network blip — back off but keep trying
+        if (polls < MAX_POLLS) {
+          pollTimerRef.current = window.setTimeout(poll, POLL_MS);
+        }
+        return;
+      }
+      setJobStatus(status.status);
+
+      if (status.status === 'complete') {
+        // Refresh the brief + domains + library now that the pipeline finished
+        const [fresh, lib, ds] = await Promise.all([
+          getBrief(workspaceId),
+          getLibrary(workspaceId),
+          getDomainScores(workspaceId),
+        ]);
+        setBrief(fresh);
+        setHasHistory((lib || []).length > 0);
+        setDomains(ds);
+        // Show the ✓ briefly, then reset
+        window.setTimeout(() => {
+          setRegenerating(false);
+          setJobStatus(null);
+        }, 1200);
+        return;
+      }
+      if (status.status === 'failed') {
+        setJobError(status.error
+          || (lang === 'zh' ? '分析失败,请重试' : 'Analysis failed. Please retry.'));
+        window.setTimeout(() => {
+          setRegenerating(false);
+          setJobStatus(null);
+        }, 3000);
+        return;
+      }
+      if (polls >= MAX_POLLS) {
+        setJobError(lang === 'zh'
+          ? '分析超时(>3分钟),请稍后查看'
+          : 'Analysis is taking longer than expected. Refresh the page in a few minutes.');
+        setJobStatus('failed');
+        window.setTimeout(() => {
+          setRegenerating(false);
+          setJobStatus(null);
+        }, 3000);
+        return;
+      }
+      pollTimerRef.current = window.setTimeout(poll, POLL_MS);
+    };
+
+    pollTimerRef.current = window.setTimeout(poll, POLL_MS);
   }
 
   async function handleCopy(c: ContentDraft) {
@@ -225,15 +378,15 @@ export default function CIBrief() {
             <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 10px' }}>
               {lang === 'zh' ? '简报即将出炉' : 'Your brief is on its way'}
             </h3>
-            <p style={{ fontSize: 14, color: C.t2, margin: '0 0 8px', lineHeight: 1.7, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto' }}>
+            <p style={{ fontSize: 14, color: C.t2, margin: '0 0 8px', lineHeight: 1.7, maxWidth: 460, marginLeft: 'auto', marginRight: 'auto' }}>
               {lang === 'zh'
-                ? '每周简报将在竞品数据抓取并分析完成后自动生成。'
-                : 'Your first brief will appear after your competitors are scraped and analysed.'}
+                ? '我们正在为您抓取竞品数据并生成首份简报,通常在 24-48 小时内完成。'
+                : 'We\'re gathering data for your competitors and preparing your first brief. This usually takes 24–48 hours.'}
             </p>
-            <p style={{ fontSize: 12, color: C.t3, margin: 0, lineHeight: 1.6 }}>
+            <p style={{ fontSize: 12, color: C.t3, margin: 0, lineHeight: 1.6, maxWidth: 460, marginLeft: 'auto', marginRight: 'auto' }}>
               {lang === 'zh'
-                ? '前往「品牌」页面确认已添加竞品，然后在设置中触发数据同步。'
-                : 'Make sure you\'ve added competitors in the Brands tab, then trigger a sync in Settings.'}
+                ? '准备好后我们会通过邮件通知您。如需添加或修改竞品,请前往「品牌」页面。'
+                : 'We\'ll email you when it\'s ready. To add or edit competitors in the meantime, visit the Brands tab.'}
             </p>
           </div>
         </div>
@@ -257,10 +410,36 @@ export default function CIBrief() {
             {formatWeek(brief.week_of, lang)}
           </h1>
           <div style={{ marginTop: 8, fontSize: 13, color: C.t3 }}>
-            {brief.workspace_brand_name} · {lang === 'zh'
-              ? `更新于 ${new Date(brief.generated_at).toLocaleString('zh-CN')}`
-              : `Updated ${new Date(brief.generated_at).toLocaleString('en-US')}`}
+            {brief.workspace_brand_name} · {lang === 'zh' ? '更新于' : 'Updated'} {formatRelativeTime(brief.generated_at, lang)}
           </div>
+          {workspace?.brand_name && competitors.length > 0 && (
+            <div style={{
+              marginTop: 10,
+              fontSize: 12,
+              color: C.t3,
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 6,
+              justifyContent: isMobile ? 'flex-start' : 'center',
+              alignItems: 'center',
+              maxWidth: 600,
+              marginLeft: isMobile ? 0 : 'auto',
+              marginRight: isMobile ? 0 : 'auto',
+              lineHeight: 1.6,
+            }}>
+              <span>
+                {lang === 'zh' ? '对比' : 'Tracking'}{' '}
+                <strong style={{ color: C.t2 }}>{workspace.brand_name}</strong>
+                {workspace.brand_category ? ` (${workspace.brand_category})` : ''}{' '}
+                {lang === 'zh' ? '对比于' : 'vs'}
+              </span>
+              {competitors.map(c => (
+                <span key={c.id || c.brand_name} style={{
+                  background: C.s2, padding: '2px 8px', borderRadius: 12, fontSize: 11, color: C.t2,
+                }}>{c.brand_name}</span>
+              ))}
+            </div>
+          )}
           <button
             onClick={handleRegenerate}
             disabled={regenerating}
@@ -272,14 +451,57 @@ export default function CIBrief() {
               fontSize: 13, fontWeight: 700,
               cursor: regenerating ? 'default' : 'pointer',
               display: 'inline-flex', alignItems: 'center', gap: 8,
+              minWidth: 220,
+              justifyContent: 'center',
             }}
           >
             <span>{regenerating ? '⏳' : '🔄'}</span>
             <span>{regenerating
-              ? (lang === 'zh' ? '分析中…' : 'Analyzing…')
+              ? jobStageLabel(jobStatus, lang)
               : (lang === 'zh' ? '更新本周简报' : "Refresh This Week's Brief")}</span>
           </button>
+          {jobError && (
+            <div style={{
+              marginTop: 10,
+              fontSize: 12,
+              color: '#ef4444',
+              padding: '6px 12px',
+              background: '#ef444411',
+              border: '1px solid #ef444433',
+              borderRadius: 6,
+              display: 'inline-block',
+              maxWidth: 480,
+            }}>
+              {jobError}
+            </div>
+          )}
         </header>
+
+        {/* Stale-data warning — softly nudges the user to refresh if the brief
+            is older than STALE_DAYS_THRESHOLD days. Disappears while a refresh
+            is in progress to avoid flicker. */}
+        {!regenerating && brief.generated_at && ageInDays(brief.generated_at) >= STALE_DAYS_THRESHOLD && (
+          <div style={{
+            marginBottom: 24,
+            padding: '12px 16px',
+            background: '#f59e0b14',
+            border: '1px solid #f59e0b55',
+            borderRadius: 10,
+            fontSize: 13,
+            color: C.t2,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            lineHeight: 1.6,
+          }}>
+            <span style={{ fontSize: 16 }}>⏰</span>
+            <span>
+              {lang === 'zh'
+                ? `本周简报已生成 ${ageInDays(brief.generated_at)} 天,可能已过期。点击上方"更新本周简报"重新分析。`
+                : `This brief is ${ageInDays(brief.generated_at)} days old and may be stale. Click "Refresh This Week's Brief" above to regenerate.`}
+            </span>
+          </div>
+        )}
 
         {/* ─── SECTION 1: Verdict ─────────────────────────────────────── */}
         <section style={{ marginBottom: 28 }}>
