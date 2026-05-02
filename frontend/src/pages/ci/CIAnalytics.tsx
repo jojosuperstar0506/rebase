@@ -31,6 +31,7 @@ import {
   type AnalyticsData, type PriorityMetric, type WhiteSpace, type FullMetric,
   type MetricDomain,
 } from '../../services/ciMocks';
+import { getBrandInsights } from '../../services/ciApi';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -63,6 +64,7 @@ export default function CIAnalytics() {
   const { workspace } = useCIData();
 
   const [data, setData] = useState<AnalyticsData | null>(null);
+  const [insights, setInsights] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [showAllMetrics, setShowAllMetrics] = useState(false);
@@ -87,6 +89,14 @@ export default function CIAnalytics() {
       setError(true);
       setLoading(false);
     });
+    // brand_insight rows live in analysis_results.ai_narrative; the analytics
+    // grid intentionally omits them (they're text, not scores). Surface them
+    // alongside as a separate panel.
+    if (workspaceId && workspaceId !== 'mock') {
+      getBrandInsights(workspaceId).then(setInsights).catch(() => setInsights({}));
+    } else {
+      setInsights({});
+    }
   }, [workspaceId]);
 
   // ─── Styles ────────────────────────────────────────────────────────────
@@ -199,6 +209,36 @@ export default function CIAnalytics() {
             ))}
           </div>
         </section>
+
+        {/* ─── §A.5 Brand insights (DeepSeek narratives per competitor) ── */}
+        {Object.keys(insights).length > 0 && (
+          <section style={{ marginBottom: 36 }}>
+            <SectionHeader
+              title={lang === 'zh' ? 'AI 品牌洞察' : 'AI brand insights'}
+              subtitle={lang === 'zh'
+                ? '每个被追踪品牌的一段 AI 综合诊断，基于本周所有指标得分自动生成。'
+                : 'A short AI diagnosis per tracked brand, synthesized from this week’s metric scores.'}
+              count={Object.keys(insights).length}
+              C={C}
+            />
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))',
+              gap: 12,
+            }}>
+              {Object.entries(insights).map(([brand, narrative]) => (
+                <BrandInsightCard
+                  key={brand}
+                  brand={brand}
+                  isOwn={brand === data.workspace_brand_name}
+                  narrative={narrative}
+                  C={C}
+                  lang={lang}
+                />
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ─── §B. White space opportunities ───────────────────────────── */}
         <section style={{ marginBottom: 36 }}>
@@ -345,6 +385,37 @@ function SectionHeader({ title, subtitle, count, C }: {
   );
 }
 
+function BrandInsightCard({ brand, isOwn, narrative, C, lang }: {
+  brand: string; isOwn: boolean; narrative: string; C: ColorSet; lang: string;
+}) {
+  return (
+    <div style={{
+      background: C.s1,
+      border: `1px solid ${isOwn ? `${C.ac}55` : C.bd}`,
+      borderLeft: `4px solid ${isOwn ? C.ac : C.t3}`,
+      borderRadius: 12,
+      padding: 14,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+        {isOwn && <span style={{ fontSize: 12 }}>🏷️</span>}
+        <span style={{ fontSize: 14, fontWeight: 700, color: C.tx }}>{brand}</span>
+        {isOwn && (
+          <span style={{
+            fontSize: 10, fontWeight: 700, color: C.ac,
+            background: `${C.ac}15`, padding: '2px 6px', borderRadius: 4,
+            letterSpacing: '0.05em', textTransform: 'uppercase',
+          }}>
+            {lang === 'zh' ? '你的品牌' : 'You'}
+          </span>
+        )}
+      </div>
+      <p style={{ fontSize: 13, color: C.t2, margin: 0, lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
+        {narrative}
+      </p>
+    </div>
+  );
+}
+
 function PriorityMetricCard({ metric, rank, onClick, C, lang }: {
   metric: PriorityMetric; rank: number; onClick: () => void; C: ColorSet; lang: string;
 }) {
@@ -458,24 +529,44 @@ function WhiteSpaceCard({ item, onClick, C, lang, isMobile }: {
   );
 }
 
+// Metric_keys whose scoring pipelines exist but whose scraper inputs aren't
+// captured yet (note-feed enrichment is paused post-burner). They show 0
+// across every brand, which makes the product look broken — render an honest
+// "coverage pending" pill instead. See METRIC-LOGIC-INVESTIGATION-2026-05-02.
+const COVERAGE_PENDING_METRICS = new Set(['design_profile', 'kol_strategy']);
+
+function isCoveragePending(metric: FullMetric): boolean {
+  if (!COVERAGE_PENDING_METRICS.has(metric.metric_key)) return false;
+  const scores = Object.values(metric.scores);
+  if (scores.length === 0) return true;
+  return scores.every(s => s === 0);
+}
+
 function AllMetricMiniCard({ metric, ownBrand, onClick, C, lang }: {
   metric: FullMetric; ownBrand: string; onClick: () => void; C: ColorSet; lang: string;
 }) {
+  const pending = isCoveragePending(metric);
   const scores = Object.entries(metric.scores);
   const ownScore = metric.scores[ownBrand] ?? 0;
   const bestEntry = scores.filter(([n]) => n !== ownBrand).sort((a, b) => b[1] - a[1])[0];
   const leading = bestEntry ? ownScore >= bestEntry[1] : true;
   const dColor = deltaColor(metric.delta, C);
 
+  const pendingTooltip = lang === 'zh'
+    ? '该指标的评分管线已就绪，但所需的笔记/作者/材料数据尚未抓取。下个迭代恢复笔记流抓取后即可上线。'
+    : 'Scoring pipeline is ready, but the underlying note-feed scrape (authors, materials, top notes) is paused. Coverage lands once the burner-account scraper resumes.';
+
   return (
     <div
-      onClick={onClick}
+      onClick={pending ? undefined : onClick}
+      title={pending ? pendingTooltip : undefined}
       style={{
         background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 10,
-        padding: 12, cursor: 'pointer', transition: 'all 0.15s',
+        padding: 12, cursor: pending ? 'help' : 'pointer', transition: 'all 0.15s',
+        opacity: pending ? 0.85 : 1,
       }}
-      onMouseEnter={e => (e.currentTarget.style.borderColor = `${C.ac}55`)}
-      onMouseLeave={e => (e.currentTarget.style.borderColor = C.bd)}
+      onMouseEnter={e => { if (!pending) e.currentTarget.style.borderColor = `${C.ac}55`; }}
+      onMouseLeave={e => { if (!pending) e.currentTarget.style.borderColor = C.bd; }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
         <span style={{ width: 6, height: 6, background: domainColor(metric.domain, C), borderRadius: 2 }} />
@@ -487,22 +578,35 @@ function AllMetricMiniCard({ metric, ownBrand, onClick, C, lang }: {
           {lang === 'zh' ? metric.label.zh : metric.label.en}
         </span>
       </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-        <span style={{ fontSize: 22, fontWeight: 700, color: leading ? '#22c55e' : C.tx }}>
-          {ownScore}
-        </span>
-        <span style={{ fontSize: 11, color: C.t3 }}>/ 100</span>
-        {metric.delta !== null && (
-          <span style={{ fontSize: 11, fontWeight: 700, color: dColor, marginLeft: 'auto' }}>
-            {deltaStr(metric.delta)}
-          </span>
-        )}
-      </div>
-      {bestEntry && (
-        <div style={{ fontSize: 10, color: C.t3, marginTop: 4 }}>
-          {lang === 'zh' ? '领先者：' : 'Leader: '}
-          {bestEntry[0]} ({bestEntry[1]})
+      {pending ? (
+        <div style={{
+          display: 'inline-block', marginTop: 2,
+          fontSize: 11, fontWeight: 600, color: C.t3,
+          background: C.s2, border: `1px dashed ${C.bd}`,
+          padding: '3px 9px', borderRadius: 12,
+        }}>
+          {lang === 'zh' ? '数据抓取中（敬请期待）' : 'Coverage pending'}
         </div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <span style={{ fontSize: 22, fontWeight: 700, color: leading ? '#22c55e' : C.tx }}>
+              {ownScore}
+            </span>
+            <span style={{ fontSize: 11, color: C.t3 }}>/ 100</span>
+            {metric.delta !== null && (
+              <span style={{ fontSize: 11, fontWeight: 700, color: dColor, marginLeft: 'auto' }}>
+                {deltaStr(metric.delta)}
+              </span>
+            )}
+          </div>
+          {bestEntry && (
+            <div style={{ fontSize: 10, color: C.t3, marginTop: 4 }}>
+              {lang === 'zh' ? '领先者：' : 'Leader: '}
+              {bestEntry[0]} ({bestEntry[1]})
+            </div>
+          )}
+        </>
       )}
     </div>
   );
