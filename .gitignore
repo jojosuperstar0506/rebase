@@ -38,3 +38,6 @@ build/
 *.log
 .vercel
 .claude/worktrees/
+
+# Scraper debug dumps (ephemeral, contain banned-account auth-wall HTML)
+.debug/

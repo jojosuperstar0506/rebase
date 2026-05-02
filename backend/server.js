@@ -1265,7 +1265,23 @@ app.get('/api/ci/analysis/status', async (req, res) => {
 });
 
 // POST /api/ci/scrape — trigger a scrape for a specific brand (background process)
+//
+// ⚠️  Gated by SCRAPER_ENABLED env var. Default: disabled.
+//     Reason: 2026-04-22 — Joanna's personal XHS account (7K+ followers) was
+//     banned by XHS anti-bot after ~20h of testing. Until we move to burner
+//     accounts + rate-limit config (see services/competitor_intel/scraping_rules.yml),
+//     this endpoint must stay off on ECS so stray calls can't replay banned
+//     cookies from platform_connections. Flip to 'true' in backend/.env after
+//     Phase B0 (burner account) + Phase C (rate-limit enforcement) are done.
 app.post('/api/ci/scrape', async (req, res) => {
+  if (process.env.SCRAPER_ENABLED !== 'true') {
+    console.warn('[CI] /api/ci/scrape called but SCRAPER_ENABLED!=true — refusing');
+    return res.status(503).json({
+      error: 'scraper_paused',
+      message: 'Scraping is paused pending burner-account migration. See services/competitor_intel/scraping_rules.yml and .claude/plans/hazy-mapping-blossom.md Phase B0.',
+    });
+  }
+
   const { brand_name, platform, tier } = req.body;
   if (!brand_name || !platform) {
     return res.status(400).json({ error: 'Missing brand_name or platform' });
