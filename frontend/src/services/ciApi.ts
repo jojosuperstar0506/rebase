@@ -1,4 +1,7 @@
-import { getCIWorkspace, getCICompetitors, getCIConnections, saveCIWorkspace, saveCICompetitors } from '../utils/ciStorage';
+import {
+  getCIWorkspace, getCICompetitors, getCIConnections, saveCIWorkspace, saveCICompetitors,
+  getActiveWorkspaceId, getKnownWorkspaces, addKnownWorkspace,
+} from '../utils/ciStorage';
 
 const API_BASE = '/api/ci';
 
@@ -63,6 +66,31 @@ export async function getWorkspace(): Promise<{ data: Workspace | null; source: 
   // Try API first — backend route is /api/ci/workspace/me
   const apiData = await tryApi<Workspace>('/workspace/me');
   if (apiData && apiData.id) {
+    // Cache so the workspace switcher can list it later
+    addKnownWorkspace({
+      id: apiData.id,
+      brand_name: apiData.brand_name,
+      brand_category: apiData.brand_category,
+    });
+    // Honor an explicit active-workspace selection that differs from the
+    // backend default. The backend has no by-id workspace endpoint today,
+    // so we hydrate from the local cache. All downstream calls already
+    // accept ?workspace_id= so they pivot correctly.
+    const activeId = getActiveWorkspaceId();
+    if (activeId && activeId !== apiData.id) {
+      const cached = getKnownWorkspaces().find(w => w.id === activeId);
+      if (cached) {
+        return {
+          data: {
+            ...apiData,
+            id: cached.id,
+            brand_name: cached.brand_name,
+            brand_category: cached.brand_category,
+          },
+          source: 'api',
+        };
+      }
+    }
     return { data: apiData, source: 'api' };
   }
   // Fall back to localStorage

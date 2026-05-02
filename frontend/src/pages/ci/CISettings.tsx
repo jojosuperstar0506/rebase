@@ -246,14 +246,41 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
     setNameSuggestions([]);
   }
 
+  // Detect URLs the user pasted into the brand-name field. Without this,
+  // strings like "https://xiaohongshu.com/user/profile/xyz" get saved
+  // verbatim as a brand name, which then poisons scraped_brand_profiles.
+  function looksLikeBrandUrl(s: string): boolean {
+    return /^https?:\/\//i.test(s)
+      || /\b(xiaohongshu\.com|xhs\.link|douyin\.com|taobao\.com|tmall\.com|jd\.com)\b/i.test(s);
+  }
+
   async function handleAddName() {
-    const name = nameInput.trim();
-    if (!name) return;
+    const raw = nameInput.trim();
+    if (!raw) return;
     if (watchlistCount >= MAX_WATCHLIST) { setError(t(T.ci.maxWatchlist, lang as any)); return; }
     setNameAdding(true);
+    setError('');
+
+    let name = raw;
     let platformIds = resolvedPlatformIds;
-    if (Object.keys(platformIds).length === 0) {
-      // Unknown brand — try to resolve
+    let addedVia: CICompetitor['added_via'] = 'manual';
+
+    if (looksLikeBrandUrl(raw)) {
+      const parsed = await parseLink(raw);
+      const resolvedName = parsed?.parsed ? parsed.brand_name?.trim() : '';
+      if (!resolvedName) {
+        setNameAdding(false);
+        setError(lang === 'zh'
+          ? '无法识别该链接，请直接输入品牌名称。'
+          : "We couldn't parse that link — please paste the brand name manually.");
+        return;
+      }
+      name = resolvedName;
+      addedVia = 'link_paste';
+      platformIds = parsed!.platform_ids
+        ?? (parsed!.platform && parsed!.identifier ? { [parsed!.platform]: parsed!.identifier } : {});
+      setResolveSource('registry');
+    } else if (Object.keys(platformIds).length === 0) {
       const resolved = await resolveBrand(name);
       if (resolved) {
         platformIds = Object.fromEntries(
@@ -262,19 +289,19 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
         setResolveSource(resolved.source);
       }
     }
+
     onAdd({
       id: crypto.randomUUID(),
       brand_name: name,
       tier: watchlistCount < MAX_WATCHLIST ? 'watchlist' : 'landscape',
       platform_ids: platformIds,
-      added_via: 'manual',
+      added_via: addedVia,
       created_at: new Date().toISOString(),
     });
     setNameInput('');
     setResolvedPlatformIds({});
     setResolveSource(null);
     setNameAdding(false);
-    setError('');
   }
 
   // ── Link tab state ──────────────────────────────────────────────
