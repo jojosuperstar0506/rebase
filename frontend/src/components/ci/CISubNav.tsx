@@ -1,5 +1,6 @@
 import { useApp } from '../../context/AppContext';
 import { Link, useLocation } from 'react-router-dom';
+import WorkspaceSwitcher from './WorkspaceSwitcher';
 
 /**
  * CI sub-navigation. After the Brief-centric redesign the tabs are:
@@ -36,6 +37,9 @@ export default function CISubNav() {
   return (
     <>
       <style>{`.ci-subnav::-webkit-scrollbar { display: none }`}</style>
+      <div style={{ paddingTop: 8, marginBottom: 4 }}>
+        <WorkspaceSwitcher />
+      </div>
       <div
         className="ci-subnav"
         style={{

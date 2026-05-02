@@ -54,6 +54,50 @@ export function saveCIConnections(connections: CIConnection[]) {
   notifyCIUpdate();
 }
 
+// ── Multi-workspace switching ─────────────────────────────────────
+// The backend currently only returns the user's latest workspace from
+// /api/ci/workspace/me (LIMIT 1) — no list endpoint exists yet. To support
+// switching between known workspaces, we cache each workspace's metadata
+// locally as the user visits it, and store an "active" id that overrides
+// the backend default for downstream calls (analytics, brief, etc — all
+// already accept ?workspace_id=).
+export interface KnownWorkspace {
+  id: string;
+  brand_name: string;
+  brand_category: string | null;
+  cached_at: string;
+}
+
+export function getKnownWorkspaces(): KnownWorkspace[] {
+  const raw = localStorage.getItem('rebase_ci_known_workspaces');
+  return raw ? JSON.parse(raw) : [];
+}
+
+export function addKnownWorkspace(ws: Omit<KnownWorkspace, 'cached_at'>) {
+  if (!ws.id || ws.id === 'local' || ws.id === 'mock') return;
+  const list = getKnownWorkspaces().filter(w => w.id !== ws.id);
+  list.unshift({ ...ws, cached_at: new Date().toISOString() });
+  localStorage.setItem('rebase_ci_known_workspaces', JSON.stringify(list));
+  notifyCIUpdate();
+}
+
+export function removeKnownWorkspace(id: string) {
+  const list = getKnownWorkspaces().filter(w => w.id !== id);
+  localStorage.setItem('rebase_ci_known_workspaces', JSON.stringify(list));
+  if (getActiveWorkspaceId() === id) setActiveWorkspaceId(null);
+  else notifyCIUpdate();
+}
+
+export function getActiveWorkspaceId(): string | null {
+  return localStorage.getItem('rebase_ci_active_workspace_id');
+}
+
+export function setActiveWorkspaceId(id: string | null) {
+  if (id) localStorage.setItem('rebase_ci_active_workspace_id', id);
+  else localStorage.removeItem('rebase_ci_active_workspace_id');
+  notifyCIUpdate();
+}
+
 export function parsePlatformFromUrl(url: string): { platform: string; identifier: string } | null {
   try {
     const u = new URL(url);
