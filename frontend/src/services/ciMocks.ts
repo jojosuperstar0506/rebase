@@ -392,22 +392,98 @@ export const MOCK_DOMAIN_SCORES_NIKE: DomainScores = {
 
 // ─── Mock API functions (feature-flag gated) ─────────────────────────────
 
-const USE_MOCKS = true; // flip to false once real backend lands
+// Day 2 fully verified on ECS (2026-04-30):
+//   - brand_positioning, gtm_content, product_opportunity, white_space all
+//     producing grounded prose that cites real scoring deltas
+//   - /api/ci/brief / /api/ci/analytics / /api/ci/library / /api/ci/domain-scores
+//     return correct shapes and populated content for the Songmont workspace
+//   - The fetch helpers below already degrade gracefully (null on 404 / network
+//     error / empty data), so flipping this off just means we stop overlaying
+//     Nike-themed mocks on workspaces whose pipelines haven't run yet
+// Easy revert: change to true and redeploy. No data migration involved.
+const USE_MOCKS = false;
 
-export async function getBrief(_workspaceId: string): Promise<WeeklyBrief | null> {
-  if (!USE_MOCKS) {
-    // TODO: real API call when brief_generator_pipeline.py ships
+/**
+ * Try GET /api/ci/brief; returns null on 404/network error so callers can
+ * decide whether to fall back to a mock or render an empty state.
+ * Kept local to ciMocks (rather than reaching into ciApi.tryApi) so the
+ * mock layer stays a single self-contained file the way it was designed.
+ */
+async function _fetchBriefFromApi(workspaceId: string): Promise<WeeklyBrief | null> {
+  try {
+    const res = await fetch(`/api/ci/brief?workspace_id=${encodeURIComponent(workspaceId)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || !data.verdict) return null; // shape sanity check
+    return data as WeeklyBrief;
+  } catch {
     return null;
   }
+}
+
+export async function getBrief(workspaceId: string): Promise<WeeklyBrief | null> {
+  // Skip the network call for the synthetic "local" workspace_id used when
+  // a user hasn't completed onboarding yet — there's no row to fetch.
+  if (workspaceId && workspaceId !== 'local') {
+    const real = await _fetchBriefFromApi(workspaceId);
+    if (real) return real;
+    // No brief on the backend yet — fall through to mock-or-null below
+  }
+  if (!USE_MOCKS) return null;
   return new Promise(resolve => setTimeout(() => resolve(MOCK_BRIEF_NIKE), 300));
 }
 
-export async function getLibrary(_workspaceId: string): Promise<LibraryEntry[]> {
+/** Try GET /api/ci/library; null on 404/network/empty so callers can fall back to mock. */
+async function _fetchLibraryFromApi(workspaceId: string): Promise<LibraryEntry[] | null> {
+  try {
+    const res = await fetch(`/api/ci/library?workspace_id=${encodeURIComponent(workspaceId)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data)) return null;
+    if (data.length === 0) return null; // empty library → let mock show until first brief lands
+    return data as LibraryEntry[];
+  } catch {
+    return null;
+  }
+}
+
+export async function getLibrary(workspaceId: string): Promise<LibraryEntry[]> {
+  if (workspaceId && workspaceId !== 'local') {
+    const real = await _fetchLibraryFromApi(workspaceId);
+    if (real) return real;
+  }
   if (!USE_MOCKS) return [];
   return new Promise(resolve => setTimeout(() => resolve(MOCK_LIBRARY_NIKE), 200));
 }
 
-export async function getDomainScores(_workspaceId: string): Promise<DomainScores> {
+/** Try GET /api/ci/domain-scores; null on 404/network/empty. */
+async function _fetchDomainScoresFromApi(workspaceId: string): Promise<DomainScores | null> {
+  try {
+    const res = await fetch(`/api/ci/domain-scores?workspace_id=${encodeURIComponent(workspaceId)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    // Shape sanity check — must have all 3 domain keys.
+    if (!data || !data.consumer || !data.product || !data.marketing) return null;
+    // If every domain came back empty (no scores yet), prefer mock
+    // so the "See all metrics" panel isn't blank.
+    const totalCompetitors =
+      Object.keys(data.consumer.competitors || {}).length +
+      Object.keys(data.product.competitors || {}).length +
+      Object.keys(data.marketing.competitors || {}).length;
+    if (totalCompetitors === 0 && data.consumer.own === 0 && data.product.own === 0 && data.marketing.own === 0) {
+      return null;
+    }
+    return data as DomainScores;
+  } catch {
+    return null;
+  }
+}
+
+export async function getDomainScores(workspaceId: string): Promise<DomainScores> {
+  if (workspaceId && workspaceId !== 'local') {
+    const real = await _fetchDomainScoresFromApi(workspaceId);
+    if (real) return real;
+  }
   if (!USE_MOCKS) {
     return { consumer: { own: 0, competitors: {} }, product: { own: 0, competitors: {} }, marketing: { own: 0, competitors: {} } };
   }
@@ -758,7 +834,30 @@ export const MOCK_SIGNAL_SOURCES: Record<string, SignalSource> = {
 
 // ─── Mock API — analytics ────────────────────────────────────────────────
 
-export async function getAnalytics(_workspaceId: string): Promise<AnalyticsData | null> {
+/** Try GET /api/ci/analytics; null on 404/network/empty so callers can fall back to mock. */
+async function _fetchAnalyticsFromApi(workspaceId: string): Promise<AnalyticsData | null> {
+  try {
+    const res = await fetch(`/api/ci/analytics?workspace_id=${encodeURIComponent(workspaceId)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || !Array.isArray(data.all_metrics)) return null; // shape sanity
+    // If the workspace has no metric data at all, fall through to mock
+    // rather than render a fully blank Analytics tab.
+    const hasAnyScores = data.all_metrics.some(
+      (m: FullMetric) => m.scores && Object.keys(m.scores).length > 0
+    );
+    if (!hasAnyScores) return null;
+    return data as AnalyticsData;
+  } catch {
+    return null;
+  }
+}
+
+export async function getAnalytics(workspaceId: string): Promise<AnalyticsData | null> {
+  if (workspaceId && workspaceId !== 'local') {
+    const real = await _fetchAnalyticsFromApi(workspaceId);
+    if (real) return real;
+  }
   if (!USE_MOCKS) return null;
   return new Promise(resolve => setTimeout(() => resolve(MOCK_ANALYTICS_NIKE), 250));
 }

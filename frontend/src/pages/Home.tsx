@@ -6,6 +6,7 @@ export default function Home() {
   const { colors: C, lang } = useApp();
   const navigate = useNavigate();
   const h = T.home;
+  const isLoggedIn = !!localStorage.getItem("rebase_token") || !!localStorage.getItem("admin_authed");
 
   return (
     <div style={{ background: C.bg, minHeight: "100vh", fontFamily: "system-ui, -apple-system, sans-serif", color: C.tx }}>
@@ -32,8 +33,8 @@ export default function Home() {
           {t(h.heroSubtitle, lang)}
         </p>
         <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
-          <button onClick={() => navigate("/onboarding")} style={{ padding: "14px 32px", background: `linear-gradient(135deg, ${C.ac}, ${C.ac2})`, border: "none", borderRadius: 8, color: "#fff", fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
-            {t(h.ctaAccess, lang)}
+          <button onClick={() => navigate(isLoggedIn ? "/ci" : "/onboarding")} style={{ padding: "14px 32px", background: `linear-gradient(135deg, ${C.ac}, ${C.ac2})`, border: "none", borderRadius: 8, color: "#fff", fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
+            {t(isLoggedIn ? h.ctaContinue : h.ctaAccess, lang)}
           </button>
           <a href="/calculator.html" style={{ padding: "14px 32px", background: "transparent", border: `1px solid ${C.bd}`, borderRadius: 8, color: C.tx, fontWeight: 600, fontSize: 15, textDecoration: "none", display: "inline-block" }}>
             {t(h.ctaDiag, lang)}
@@ -131,8 +132,8 @@ export default function Home() {
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "64px 24px", textAlign: "center" }}>
         <h2 style={{ fontSize: 28, fontWeight: 800, margin: "0 0 16px" }}>{t(h.finalTitle, lang)}</h2>
         <p style={{ fontSize: 16, color: C.t2, marginBottom: 32 }}>{t(h.finalSub, lang)}</p>
-        <button onClick={() => navigate("/onboarding")} style={{ padding: "16px 40px", background: `linear-gradient(135deg, ${C.ac}, ${C.ac2})`, border: "none", borderRadius: 8, color: "#fff", fontWeight: 700, fontSize: 16, cursor: "pointer" }}>
-          {t(h.finalCta, lang)}
+        <button onClick={() => navigate(isLoggedIn ? "/ci" : "/onboarding")} style={{ padding: "16px 40px", background: `linear-gradient(135deg, ${C.ac}, ${C.ac2})`, border: "none", borderRadius: 8, color: "#fff", fontWeight: 700, fontSize: 16, cursor: "pointer" }}>
+          {t(isLoggedIn ? h.ctaContinue : h.finalCta, lang)}
         </button>
       </div>
 
