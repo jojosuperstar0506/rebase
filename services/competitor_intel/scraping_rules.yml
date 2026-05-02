@@ -1,0 +1,167 @@
+# ============================================================================
+# Rebase Scraping Rules — Central config for selectors, URLs, rate limits
+# ============================================================================
+#
+# SINGLE SOURCE OF TRUTH for per-platform scraping behavior.
+#
+# Both William and Joanna edit THIS file (not scraper method bodies) when:
+#   - XHS/Douyin change a CSS class → update `selectors`
+#   - A platform bans our IP → tighten `rate_limit`
+#   - A URL pattern changes → update `urls`
+#
+# See `services/competitor_intel/scraping_config.py` for the loader.
+# Scrapers read this at startup: `from .scraping_config import load_rules`.
+#
+# ---- History ----
+# 2026-04-22  Created after Joanna's personal XHS account got banned. Safe
+#             rate limits below are MUCH slower than what we were doing.
+#             Do not loosen without Joanna + William sign-off.
+# ============================================================================
+
+xhs:
+  urls:
+    home:         "https://www.xiaohongshu.com/explore"
+    profile:      "https://www.xiaohongshu.com/user/profile/{user_id}"
+    search_notes: "https://www.xiaohongshu.com/search_result?keyword={keyword}&type=51"
+    search_users: "https://www.xiaohongshu.com/search_result?keyword={keyword}&type=users"
+
+  # CSS / XPath selectors — update when XHS changes their UI
+  selectors:
+    follower_count:      "span:has-text('粉丝')"
+    like_count:          "span:has-text('获赞与收藏')"
+    note_card:           "section.note-item, a.cover"
+    profile_anchor:      "a[href*='/user/profile/']"
+    verified_badge:      "[class*='verified'], [class*='official']"
+    rate_limit_marker:   ".captcha-container, [class*='slider-verify']"
+
+  # Markers that indicate the page we landed on is an auth/login wall
+  # (mirrored in xhs_scraper.py:_XHS_AUTH_WALL_MARKERS)
+  auth_wall_markers:
+    - "Scan with logged-in"
+    - "扫码登录"
+    - "QR code expires"
+    - "扫描二维码"
+    - "登录后查看"
+    - "登录小红书"
+
+  # Account-picker scoring when multiple candidates show on user-search results
+  account_scoring:
+    verified_weight:        10
+    name_match_weight:       5
+    name_en_match_weight:    5
+    keyword_match_weight:    3
+    followers_weight:        20  # capped additive bonus from follower count
+    verify_markers:
+      - "官方账号"
+      - "官方号"
+      - "品牌号"
+      - "已认证"
+      - "蓝V"
+      - "蓝v"
+      - "专业号"
+      - "企业号"
+      - "认证"
+      - "verified"
+      - "official"
+
+  # ⚠️ RATE LIMITS — tuned to survive XHS anti-bot. Do NOT loosen.
+  # Last ban: 2026-04-22 after ~25 navs in 50 min with 7-13s delays.
+  # These numbers assume ONE account. If you add account rotation (C-2),
+  # the per-account limits still apply.
+  rate_limit:
+    # Range in seconds between `page.goto()` calls inside a single brand scrape
+    # (search → profile → scroll). Jittered uniformly.
+    nav_delay_seconds: [7, 13]
+
+    # Range in SECONDS between brand scrapes. 5-15 min jittered.
+    # Previously: no enforced delay (back-to-back). That's what got us banned.
+    between_brands_seconds: [300, 900]
+
+    # Max navigations within a single brand scrape. We used to do 4 (search →
+    # user-tab → profile → feed-scroll). Cap prevents rogue loops.
+    max_navs_per_brand: 6
+
+    # After this many successful brand scrapes, force an idle cooldown.
+    cooldown_after_n_brands: 5
+    cooldown_duration_seconds: [3600, 7200]   # 1–2 hr
+
+    # Daily cap PER ACCOUNT. 20 brands * 1 scrape/day = 20 navs baseline.
+    # Cap at 10 to leave headroom for retries and to avoid XHS's daily quota.
+    max_scrapes_per_account_per_day: 10
+
+    # Only scrape during normal human-active hours (local time).
+    # Avoid 2–7 AM when real users are asleep — our traffic sticks out.
+    active_hours_local: [9, 23]
+
+    # Hard block: never scrape from a datacenter IP. Checked via reverse DNS.
+    forbidden_ip_hostname_substrings:
+      - "aliyun"
+      - "amazonaws"
+      - "googleusercontent"
+      - "digitalocean"
+      - "linode"
+
+  pagination:
+    max_note_cards: 60          # hard ceiling on notes pulled per brand
+    scroll_step_px: 800
+    scroll_pause_seconds: [1.5, 3.0]
+
+douyin:
+  urls:
+    home:         "https://www.douyin.com"
+    profile:      "https://www.douyin.com/user/{sec_user_id}"
+    search:       "https://www.douyin.com/search/{keyword}"
+
+  selectors:
+    follower_count:      "[data-e2e='user-fans']"
+    like_count:          "[data-e2e='user-liked']"
+    video_card:          "[data-e2e='user-post-item']"
+    rate_limit_marker:   ".verify-wrap, [class*='captcha']"
+
+  auth_wall_markers:
+    - "登录抖音"
+    - "扫码登录"
+    - "请先登录"
+
+  # Same conservative posture as XHS — Douyin's anti-bot is, if anything,
+  # more aggressive. Use these numbers verbatim when A5 resumes.
+  rate_limit:
+    nav_delay_seconds: [8, 15]
+    between_brands_seconds: [300, 900]
+    max_navs_per_brand: 5
+    cooldown_after_n_brands: 5
+    cooldown_duration_seconds: [3600, 7200]
+    max_scrapes_per_account_per_day: 10
+    active_hours_local: [9, 23]
+    forbidden_ip_hostname_substrings:
+      - "aliyun"
+      - "amazonaws"
+      - "googleusercontent"
+      - "digitalocean"
+      - "linode"
+
+  pagination:
+    max_video_cards: 40
+    scroll_step_px: 800
+    scroll_pause_seconds: [2.0, 4.0]
+
+# Tmall 生意参谋 / SYCM — merchant backend. Different risk model (we're a
+# legitimate logged-in seller), so rate limits can be looser. Still conservative.
+sycm:
+  urls:
+    home: "https://sycm.taobao.com"
+
+  auth_wall_markers:
+    - "请登录"
+    - "淘宝登录"
+
+  rate_limit:
+    nav_delay_seconds: [3, 7]
+    between_brands_seconds: [60, 180]
+    max_navs_per_brand: 10
+    cooldown_after_n_brands: 10
+    cooldown_duration_seconds: [1800, 3600]
+    max_scrapes_per_account_per_day: 30
+    active_hours_local: [9, 23]
+    # sycm can run from ECS — it's an authenticated seller session, not a crawler
+    forbidden_ip_hostname_substrings: []

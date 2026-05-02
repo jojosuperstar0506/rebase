@@ -19,6 +19,7 @@ For Aliyun deployment, rotate proxies and use signed cookie auth.
 
 import asyncio
 import json
+import random
 import re
 import time
 import logging
@@ -27,6 +28,39 @@ from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field, asdict
 
 logger = logging.getLogger(__name__)
+
+
+# Phrases XHS shows when it's challenging the session with a re-auth QR code.
+# If any of these are in the page text after a goto, the cookies are still
+# technically valid but XHS anti-bot has flagged the navigation pattern.
+# Fix is (a) re-run setup_profiles to refresh cookies, (b) slow down nav.
+#
+# SOURCE OF TRUTH: services/competitor_intel/scraping_rules.yml -> xhs.auth_wall_markers
+# This module-level fallback exists only for cases where the YAML loader fails
+# (missing file, parse error). Add new markers to the YAML, not here.
+from ..scraping_config import (
+    auth_wall_markers as _yaml_auth_wall_markers,
+    nav_delay as _yaml_nav_delay,
+    ScrapingRulesError,
+)
+
+try:
+    _XHS_AUTH_WALL_MARKERS = _yaml_auth_wall_markers("xhs") or (
+        "Scan with logged-in", "扫码登录", "QR code expires",
+        "扫描二维码", "登录后查看", "登录小红书",
+    )
+except ScrapingRulesError as _e:
+    logging.getLogger(__name__).warning(
+        "Failed to load auth_wall_markers from scraping_rules.yml (%s). Using defaults.", _e,
+    )
+    _XHS_AUTH_WALL_MARKERS = (
+        "Scan with logged-in", "扫码登录", "QR code expires",
+        "扫描二维码", "登录后查看", "登录小红书",
+    )
+
+
+class XhsAuthChallengedError(Exception):
+    """XHS served a login-wall / QR re-auth instead of the requested page."""
 
 
 @dataclass
@@ -47,6 +81,7 @@ class XhsBrandData:
     d2_total_likes: int = 0
     d2_official_account_id: str = ""
     d2_official_account_name: str = ""
+    d2_is_verified: bool = False  # True if XHS shows 官方账号 / 已认证 / 品牌号 / 蓝V badge
 
     # D3: Content Strategy
     d3_content_types: Dict[str, int] = field(default_factory=dict)
@@ -94,6 +129,43 @@ class XhsScraper:
 
     # ─── Browser Mode (Cowork / Playwright) ────────────────────────────────
 
+    @staticmethod
+    async def _safe_goto(page, url: str, min_wait: Optional[float] = None, max_wait: Optional[float] = None):
+        """Navigate with human-ish jitter AND check for XHS auth wall.
+
+        Raises XhsAuthChallengedError immediately if XHS served a login wall.
+        Use this everywhere instead of raw page.goto(...) so we (a) don't burn
+        through anti-bot budget and (b) surface auth failures clearly.
+
+        Delay is read from scraping_rules.yml -> xhs.rate_limit.nav_delay_seconds.
+        `min_wait`/`max_wait` kwargs are honored only if explicitly set (override).
+        """
+        await page.goto(url)
+        try:
+            await page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass  # networkidle can time out on XHS lazy-load; proceed anyway
+        # Jittered human-ish delay; XHS's pattern detection backs off
+        # when gaps between navs look organic rather than machine-fast.
+        if min_wait is not None and max_wait is not None:
+            delay_s = random.uniform(min_wait, max_wait)
+        else:
+            try:
+                delay_s = _yaml_nav_delay("xhs")
+            except ScrapingRulesError:
+                delay_s = random.uniform(7.0, 13.0)
+        await page.wait_for_timeout(int(delay_s * 1000))
+        # Auth-wall probe — if we hit a QR challenge, abort loudly
+        probe = await page.evaluate(
+            "() => (document.body ? document.body.innerText : '').slice(0, 500)"
+        )
+        if any(marker in probe for marker in _XHS_AUTH_WALL_MARKERS):
+            raise XhsAuthChallengedError(
+                f"XHS served auth wall at {url}. Session flagged by anti-bot. "
+                f"Fix: re-run `python -m services.competitor_intel.setup_profiles --platform xhs` "
+                f"to refresh cookies, and wait 10-30 min before retrying if this keeps happening."
+            )
+
     async def scrape_brand_browser(self, brand: dict, page) -> XhsBrandData:
         """
         Scrape a brand using Playwright browser page.
@@ -130,7 +202,23 @@ class XhsScraper:
                     data.d2_official_account_id, page, data, max_pages=10
                 )
 
+            # Notes-count fallback: XHS profile top-bar shows 关注/粉丝/获赞与收藏 but
+            # NOT a notes count — that only appears as a tab label below. If we couldn't
+            # extract it from the state object or text, count the paginated catalog.
+            if data.d2_total_notes == 0 and data.full_note_catalog:
+                data.d2_total_notes = len(data.full_note_catalog)
+                logger.info(
+                    f"XHS notes count: using catalog length "
+                    f"({data.d2_total_notes}) as fallback — top-bar has no notes count"
+                )
+
             data.scrape_status = "success"
+        except XhsAuthChallengedError as e:
+            # Anti-bot challenged the session. Cookies may still be valid; just
+            # need to refresh via setup_profiles. Don't mark as 'failed' — the
+            # caller uses status to decide cookie-invalidation behavior.
+            logger.error(f"XHS auth challenge for {brand['name']}: {e}")
+            data.scrape_status = "auth_challenged"
         except Exception as e:
             logger.error(f"XHS browser scrape failed for {brand['name']}: {e}")
             data.scrape_status = "partial" if data.d2_total_notes > 0 else "failed"
@@ -142,9 +230,7 @@ class XhsScraper:
         keyword = brand["xhs_keyword"]
         search_url = f"https://www.xiaohongshu.com/search_result?keyword={keyword}&type=51"
 
-        await page.goto(search_url)
-        await page.wait_for_load_state("networkidle")
-        await page.wait_for_timeout(3000)  # Extra wait for dynamic content
+        await self._safe_goto(page, search_url)
 
         # Get page content via accessibility tree (most reliable on XHS)
         text = await page.evaluate("document.body ? document.body.innerText : ''")
@@ -159,34 +245,298 @@ class XhsScraper:
         # Classify content types (D3)
         data.d3_content_types = self._classify_content_types(cards)
 
-        # Look for official account in results
+        # Look for official account in results (notes tab — works only if brand
+        # posts a lot of "官方" text in their captions; usually misses)
         official = self._find_official_account(text, brand)
         if official:
             data.d2_official_account_id = official.get("id", "")
             data.d2_official_account_name = official.get("name", "")
 
+        # Fallback: dedicated user-tab search — picks the best verified (blue-check)
+        # account matching the brand name. This is how a human would pick.
+        if not data.d2_official_account_id:
+            await self._find_official_account_via_user_tab_browser(brand, page, data)
+
+    async def _find_official_account_via_user_tab_browser(
+        self, brand: dict, page, data: XhsBrandData
+    ):
+        """
+        Navigate to XHS's dedicated user-search tab (&type=users) and pick the
+        best-matching VERIFIED account. Ranks candidates by:
+          +10 verified (官方账号 / 已认证 / 品牌号 / 蓝V / 专业号 in card text)
+          +5  brand['name'] appears in nickname/card text (case-insensitive)
+          +5  brand['name_en'] appears
+          +3  xhs_keyword appears
+          +N  where N = min(followers_in_万, 20)  — real brand is usually most-followed
+        """
+        keyword = brand["xhs_keyword"]
+        url = f"https://www.xiaohongshu.com/search_result?keyword={keyword}&type=users"
+        try:
+            await self._safe_goto(page, url)
+
+            # Extract candidate user cards: {id, text} from the rendered DOM.
+            # innerText of card container gives us nickname + verify badge + follower count.
+            cards = await page.evaluate(
+                """
+                () => {
+                    const anchors = Array.from(document.querySelectorAll('a[href*="/user/profile/"]'));
+                    const seen = new Set();
+                    const out = [];
+                    for (const a of anchors) {
+                        const href = a.getAttribute('href') || '';
+                        const idMatch = href.match(/\\/user\\/profile\\/([a-f0-9]+)/);
+                        if (!idMatch) continue;
+                        const id = idMatch[1];
+                        if (seen.has(id)) continue;
+                        seen.add(id);
+                        // Walk up to the smallest ancestor that contains exactly one profile link
+                        let card = a;
+                        for (let i = 0; i < 6 && card.parentElement; i++) {
+                            const p = card.parentElement;
+                            if (p.querySelectorAll('a[href*="/user/profile/"]').length > 1) break;
+                            card = p;
+                        }
+                        const text = (card.innerText || '').slice(0, 600);
+                        if (text.trim()) out.push({ id, text });
+                        if (out.length >= 20) break;
+                    }
+                    return out;
+                }
+                """
+            )
+
+            if not cards:
+                logger.warning(
+                    f"XHS user-tab: no candidate accounts for brand={brand['name']!r} "
+                    f"keyword={keyword!r} — XHS UI may have changed or IP is rate-limited."
+                )
+                return
+
+            best = self._pick_best_account(cards, brand)
+            if best and best["score"] > 0:
+                data.d2_official_account_id = best["id"]
+                data.d2_official_account_name = best["name"]
+                data.d2_is_verified = best["verified"]
+                logger.info(
+                    f"XHS account picked for {brand['name']!r}: {best['name']!r} "
+                    f"id={best['id']} verified={best['verified']} "
+                    f"followers={best['followers']} score={best['score']} "
+                    f"(from {len(cards)} candidates)"
+                )
+            else:
+                top_names = [c["text"].split("\n")[0] for c in cards[:5]]
+                logger.warning(
+                    f"XHS user-tab: {len(cards)} candidates but none matched {brand['name']!r}. "
+                    f"Top 5 nicknames: {top_names}"
+                )
+        except Exception as e:
+            logger.warning(f"XHS user-tab search failed for {brand['name']}: {e}")
+
+    @staticmethod
+    def _pick_best_account(cards: List[Dict[str, str]], brand: dict) -> Optional[dict]:
+        """Score candidates from user-tab search. See ranking logic in caller docstring."""
+        name = (brand.get("name") or "").lower()
+        name_en = (brand.get("name_en") or "").lower()
+        keyword = (brand.get("xhs_keyword") or "").lower()
+
+        VERIFY_MARKERS = (
+            "官方账号", "官方号", "品牌号", "已认证", "蓝V", "蓝v",
+            "专业号", "企业号", "认证", "verified", "official",
+        )
+
+        scored = []
+        for c in cards:
+            text = c["text"]
+            text_lower = text.lower()
+            first_line = text.split("\n", 1)[0].strip()
+
+            score = 0
+            verified = any(m in text for m in VERIFY_MARKERS)
+            if verified:
+                score += 10
+            if name and name in text_lower:
+                score += 5
+            if name_en and name_en != name and name_en in text_lower:
+                score += 5
+            if keyword and keyword in text_lower and keyword not in (name, name_en):
+                score += 3
+
+            # Parse follower count — XHS renders as "45.6万粉丝" or "1234粉丝"
+            followers = 0
+            m = re.search(r"(\d+(?:\.\d+)?)\s*万\s*粉丝", text)
+            if m:
+                followers = int(float(m.group(1)) * 10000)
+            else:
+                m2 = re.search(r"(\d[\d,]*)\s*粉丝", text)
+                if m2:
+                    try:
+                        followers = int(m2.group(1).replace(",", ""))
+                    except ValueError:
+                        followers = 0
+            score += min(followers // 10000, 20)  # cap the follower bonus at +20
+
+            scored.append({
+                "id": c["id"],
+                "name": first_line,
+                "verified": verified,
+                "followers": followers,
+                "score": score,
+            })
+
+        if not scored:
+            return None
+        scored.sort(key=lambda x: (-x["score"], -x["followers"]))
+        return scored[0]
+
     async def _scrape_xhs_profile_browser(self, account_id: str, page, data: XhsBrandData):
-        """Scrape official brand profile for D2 metrics."""
+        """Scrape official brand profile for D2 metrics.
+
+        Two-step extraction:
+          1. Try window.__INITIAL_STATE__ / __INITIAL_SSR_STATE__ / __NEXT_DATA__
+             (exact integer counts — most reliable).
+          2. Fall back to innerText parsing (handles BOTH orderings:
+             "45.6万粉丝" AND "粉丝\n45.6万" + the 万 10k qualifier).
+        If both return 0, dump the page text to .debug/ for inspection.
+        """
         profile_url = f"https://www.xiaohongshu.com/user/profile/{account_id}"
-        await page.goto(profile_url)
-        await page.wait_for_load_state("networkidle")
-        await page.wait_for_timeout(3000)
+        await self._safe_goto(page, profile_url)
 
-        text = await page.evaluate("document.body ? document.body.innerText : ''")
+        # Step 1: structured state read
+        try:
+            state = await page.evaluate(
+                """() => window.__INITIAL_STATE__
+                     || window.__INITIAL_SSR_STATE__
+                     || (window.__NEXT_DATA__ && window.__NEXT_DATA__.props)
+                     || null"""
+            )
+            if state:
+                counts = self._find_counts_in_state(state)
+                if counts.get("fans") or counts.get("notes") or counts.get("likes"):
+                    data.d2_official_followers = counts.get("fans", 0)
+                    data.d2_total_notes = counts.get("notes", 0)
+                    data.d2_total_likes = counts.get("likes", 0)
+                    logger.info(
+                        f"XHS profile (from state): followers={data.d2_official_followers} "
+                        f"notes={data.d2_total_notes} likes={data.d2_total_likes}"
+                    )
+                    return
+        except Exception as e:
+            logger.debug(f"XHS __INITIAL_STATE__ read failed for {account_id}: {e}")
 
-        # Extract follower/note/like counts
-        data.d2_official_followers = self._extract_number(text, r"(\d[\d,.]*)\s*(?:粉丝|followers)", 0)
-        data.d2_total_notes = self._extract_number(text, r"(\d[\d,.]*)\s*(?:笔记|notes)", 0)
-        data.d2_total_likes = self._extract_number(text, r"(\d[\d,.]*)\s*(?:获赞|赞藏|likes)", 0)
+        # Step 2: text fallback
+        text = await page.evaluate("() => document.body ? document.body.innerText : ''")
+        data.d2_official_followers = self._extract_xhs_count(text, ("粉丝", "followers"))
+        data.d2_total_notes = self._extract_xhs_count(text, ("笔记", "作品", "帖子", "notes", "posts"))
+        data.d2_total_likes = self._extract_xhs_count(text, ("获赞与收藏", "获赞", "赞藏", "likes"))
+        logger.info(
+            f"XHS profile (from text): followers={data.d2_official_followers} "
+            f"notes={data.d2_total_notes} likes={data.d2_total_likes}"
+        )
+
+        # Debug dump if still zero
+        if data.d2_official_followers == 0 and data.d2_total_notes == 0:
+            import os as _os
+            _os.makedirs(".debug", exist_ok=True)
+            debug_path = f".debug/xhs_profile_{account_id}_{int(time.time())}.txt"
+            try:
+                with open(debug_path, "w") as f:
+                    f.write(f"# URL: {profile_url}\n# Brand: {data.brand_name}\n\n")
+                    f.write(text[:8000])
+                logger.warning(
+                    f"XHS profile extraction returned zeros. Dump: {debug_path} "
+                    f"(first ~8KB of innerText — inspect to see how XHS now renders counts)"
+                )
+            except Exception as dump_e:
+                logger.warning(f"XHS debug dump failed: {dump_e}")
+
+    @staticmethod
+    def _find_counts_in_state(state) -> Dict[str, int]:
+        """Recursively walk a nested dict/list looking for follower/note/like counts.
+        XHS state-object shape varies — look for any key matching known patterns."""
+        FANS_KEYS = {"fansCount", "fans", "fansNumber", "fansTotal", "followerCount", "followers"}
+        NOTES_KEYS = {
+            "noteCount", "notesCount", "noteTotal", "notes",
+            "postCount", "workCount", "publishedNoteCount", "userNoteCount",
+        }
+        LIKES_KEYS = {"likedCount", "likeCount", "collectedCount", "likedAndCollectedCount"}
+        out: Dict[str, int] = {}
+
+        def _to_int(v) -> Optional[int]:
+            if isinstance(v, bool):
+                return None
+            if isinstance(v, (int, float)):
+                return int(v)
+            if isinstance(v, str):
+                s = v.strip().replace(",", "")
+                if s.isdigit():
+                    return int(s)
+            return None
+
+        def walk(node):
+            if isinstance(node, dict):
+                for k, v in node.items():
+                    if k in FANS_KEYS and "fans" not in out:
+                        n = _to_int(v)
+                        if n is not None:
+                            out["fans"] = n
+                    if k in NOTES_KEYS and "notes" not in out:
+                        n = _to_int(v)
+                        if n is not None:
+                            out["notes"] = n
+                    if k in LIKES_KEYS and "likes" not in out:
+                        n = _to_int(v)
+                        if n is not None:
+                            out["likes"] = n
+                    walk(v)
+            elif isinstance(node, list):
+                for item in node:
+                    walk(item)
+
+        try:
+            walk(state)
+        except Exception:
+            pass
+        return out
+
+    @staticmethod
+    def _extract_xhs_count(text: str, labels: tuple) -> int:
+        """Extract a count from XHS profile text — handles both orderings + 万 (10k) suffix.
+        Tries patterns in order:
+          A) NUMBER [万|w]? LABEL         e.g. "45.6万粉丝" or "45.6 万 粉丝"
+          B) LABEL [whitespace|newline] NUMBER [万|w]?   e.g. "粉丝\n45.6万"
+        Returns first match across all labels, applying 万 multiplier when present.
+        """
+        def _parse(num_str: str, wan: Optional[str]) -> int:
+            try:
+                n = float(num_str.replace(",", ""))
+            except ValueError:
+                return 0
+            if wan:
+                n *= 10000
+            return int(n)
+
+        for label in labels:
+            label_esc = re.escape(label)
+            # Pattern A: number BEFORE label
+            m = re.search(rf"(\d[\d,.]*)\s*(万|w|W)?\s*{label_esc}", text)
+            if m:
+                n = _parse(m.group(1), m.group(2))
+                if n > 0:
+                    return n
+            # Pattern B: label BEFORE number (separated by up to 6 whitespace/newline chars)
+            m = re.search(rf"{label_esc}[\s\n]{{0,6}}(\d[\d,.]*)\s*(万|w|W)?", text)
+            if m:
+                n = _parse(m.group(1), m.group(2))
+                if n > 0:
+                    return n
+        return 0
 
     async def _scrape_xhs_ugc_browser(self, brand: dict, page, data: XhsBrandData):
         """Scrape UGC notes for D6 consumer mindshare keywords."""
         keyword = brand["xhs_keyword"] + " 测评"
         search_url = f"https://www.xiaohongshu.com/search_result?keyword={keyword}&type=51"
 
-        await page.goto(search_url)
-        await page.wait_for_load_state("networkidle")
-        await page.wait_for_timeout(3000)
+        await self._safe_goto(page, search_url)
 
         text = await page.evaluate("document.body ? document.body.innerText : ''")
 
@@ -204,9 +554,7 @@ class XhsScraper:
         """
         profile_url = f"https://www.xiaohongshu.com/user/profile/{account_id}"
         try:
-            await page.goto(profile_url)
-            await page.wait_for_load_state("networkidle")
-            await page.wait_for_timeout(3000)
+            await self._safe_goto(page, profile_url)
 
             all_notes = []
             seen_ids = set()

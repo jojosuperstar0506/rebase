@@ -7,6 +7,8 @@
 ```
 services/competitor-intel/
 ├── config.py                    # Brand registry, URLs, env config
+├── scraping_rules.yml           # ⭐ Central: selectors, URLs, rate limits (EDIT THIS)
+├── scraping_config.py           # Loader for scraping_rules.yml
 ├── orchestrator.py              # Main pipeline coordinator
 ├── html_generator.py            # Dashboard HTML generator
 ├── requirements.txt             # Python dependencies
@@ -17,6 +19,45 @@ services/competitor-intel/
 └── analysis/
     └── anthropic_analyzer.py   # Claude API analysis engine
 ```
+
+## Editing scraping behavior — use `scraping_rules.yml`, not scraper code
+
+**Rule:** selectors, URLs, delays, rate limits, and auth-wall markers live in
+`services/competitor_intel/scraping_rules.yml`. Both William and Joanna edit
+this file. The scraper `.py` files read from it at startup.
+
+Common edits:
+
+| Scenario | What to change |
+|---|---|
+| XHS changes a CSS class → follower count broken | `xhs.selectors.follower_count` in YAML |
+| Getting rate-limited → need slower scrapes | `xhs.rate_limit.between_brands_seconds` (widen the range) |
+| New XHS login-wall phrase appears in `.debug/` dumps | Append to `xhs.auth_wall_markers` |
+| XHS changes a URL pattern | `xhs.urls.*` |
+
+**Do NOT** add hardcoded selectors / URLs / delays back into `xhs_scraper.py` or
+`douyin_scraper.py`. If you need something the YAML doesn't expose, add it to
+the YAML + the `scraping_config.py` loader, then read it from the scraper.
+
+Quick check that your YAML edit is valid:
+```bash
+python -m services.competitor_intel.scraping_config  # prints rate-limit summary
+```
+
+### ⚠️ Rate limits — do not loosen without sign-off
+
+The `rate_limit` section in `scraping_rules.yml` was tuned after Joanna's
+personal XHS account (7K+ followers) got banned on 2026-04-22 for automation
+patterns. Key protections:
+
+- `between_brands_seconds: [300, 900]` — 5–15 min jittered gap between brands
+- `max_scrapes_per_account_per_day: 10`
+- `active_hours_local: [9, 23]` — no 2-7 AM scraping
+- `forbidden_ip_hostname_substrings: [aliyun, ...]` — blocks datacenter IPs
+
+Loosening these requires a written reason in the YAML comment block + both
+engineers' sign-off. See `.claude/plans/hazy-mapping-blossom.md` Phase C.
+
 
 ## 7 Dimensions
 
