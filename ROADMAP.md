@@ -5,10 +5,12 @@
 **Last updated:** 2026-05-02
 
 > **In-flight reference docs (read first if you're catching up):**
+> - 🔒 **`SPEC-COMPOSITE-INDICES-V1.md`** — **THE source of truth for the 3-pillar / 12-index framework** (locked 2026-05-03, owner: William)
 > - `WILL-TO-JOANNA-2026-04-30.md` — William's Day 1 + Day 2 + lifecycle handoff
 > - `WILLIAM-HANDOFF-2026-04-23.md` — Joanna's scraper hardening handoff to William
 > - `DATA-FLOW-AND-METRICS-ANALYSIS-2026-05-02.md` — Full pipeline trace + 3 critical data-quality fixes
 > - `FRONTEND-BACKEND-GAP-ANALYSIS-2026-05-02.md` — Endpoint inventory + workplan update + decisions for next sync
+> - `METRIC-LOGIC-INVESTIGATION-2026-05-02.md` — root-cause investigation (partly superseded by indices spec)
 > - `SPEC-COMPARISON-SETS-V2.md` — Comparison sets + auto-segmentation spec (V2 work, owner: William)
 
 ---
