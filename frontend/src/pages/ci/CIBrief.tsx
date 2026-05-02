@@ -563,6 +563,19 @@ export default function CIBrief() {
                 : 'ℹ️ Week 1 brief is based on current snapshot only. Week-over-week deltas start next week.'}
             </div>
           )}
+          {/* AI-generated deltas disclaimer — interim trust signal until the
+              brand_positioning_pipeline coercer validates numbers against
+              raw_inputs. See DATA-FLOW-AND-METRICS-ANALYSIS-2026-05-02.md §3
+              Issue 3. Remove this block after the coercer ships. */}
+          <div style={{
+            padding: '8px 12px', fontSize: 11, color: C.t3,
+            background: 'transparent', borderLeft: `2px solid ${C.bd}`,
+            marginBottom: 14, lineHeight: 1.6, fontStyle: 'italic',
+          }}>
+            {lang === 'zh'
+              ? '提示:行动叙述由 AI 基于评分数据生成,具体数字请以「分析」页为准。'
+              : 'Note: move details are AI-generated from underlying scores. For exact figures, see the Analytics tab.'}
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {brief.moves.map((m, i) => (
               <div key={m.id} style={{

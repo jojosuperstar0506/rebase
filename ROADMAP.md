@@ -2,7 +2,16 @@
 
 > Single source of truth for product progress. Pull this up every session.
 
-**Last updated:** 2026-04-01
+**Last updated:** 2026-05-02
+
+> **In-flight reference docs (read first if you're catching up):**
+> - 🔒 **`SPEC-COMPOSITE-INDICES-V1.md`** — **THE source of truth for the 3-pillar / 12-index framework** (locked 2026-05-03, owner: William)
+> - `WILL-TO-JOANNA-2026-04-30.md` — William's Day 1 + Day 2 + lifecycle handoff
+> - `WILLIAM-HANDOFF-2026-04-23.md` — Joanna's scraper hardening handoff to William
+> - `DATA-FLOW-AND-METRICS-ANALYSIS-2026-05-02.md` — Full pipeline trace + 3 critical data-quality fixes
+> - `FRONTEND-BACKEND-GAP-ANALYSIS-2026-05-02.md` — Endpoint inventory + workplan update + decisions for next sync
+> - `METRIC-LOGIC-INVESTIGATION-2026-05-02.md` — root-cause investigation (partly superseded by indices spec)
+> - `SPEC-COMPARISON-SETS-V2.md` — Comparison sets + auto-segmentation spec (V2 work, owner: William)
 
 ---
 
@@ -48,7 +57,7 @@ Converts prospects to believers               Proves intelligence layer works on
 
 ---
 
-## Where We Are Now (as of 2026-04-01)
+## Where We Are Now (as of 2026-05-02)
 
 | Stream | Owner | Status | Layer | Notes |
 |--------|-------|--------|-------|-------|
@@ -57,12 +66,17 @@ Converts prospects to believers               Proves intelligence layer works on
 | ECS Backend (Node.js) | William | ✅ Live | — | 8.217.242.191 — Express API, PM2, Nginx, Market Intelligence cron at 6:30am HK |
 | Product Structure Agent (ERP intelligence demo) | Joanna | ✅ v0.1 Done | 2 | 3-file ERP export analysis, Streamlit UI |
 | 3-screen visualization dashboard | Joanna | ✅ Done | 2 | Department map, before/after toggle, ROI summary — on Vercel |
-| **OMI Competitive Intelligence** | **Joanna** | **✅ v2 Done** | **3** | **Full pipeline: scrape → temporal → scoring → narrative → dashboard → WeChat delivery** |
-| **Competitive Intelligence vFinal** | **Both** | **✅ Complete** | **—** | **Full CI platform: dashboard, landscape, competitors, deep dive, alerts, export, mobile, AI narratives, local scraping agent** |
+| **OMI Competitive Intelligence v2** | **Joanna** | **✅ Done** | **3** | **Full pipeline: scrape → temporal → scoring → narrative → dashboard → WeChat delivery** |
+| **CI vFinal — Brief / Analytics / Library** | **William** | **✅ Live (PR #26 merged 2026-04-30)** | **—** | **Day 1 + Day 2 + lifecycle: 7 LLM pipelines, 4 backend endpoints, 3 CI pages render real DeepSeek output. End-to-end loop in 12s on Songmont workspace** |
+| **Scraper hardening + central rules YAML + endpoint gate** | **Joanna** | **✅ Live (PR #25 merged 2026-04-30)** | **—** | **XHS scraper: account picker via verified ranking, 万-aware count parser, auth-wall detection. `scraping_rules.yml` + loader. `/api/ci/scrape` gated by SCRAPER_ENABLED** |
+| Frontend polish (PR #27) | Joanna | 🟡 Open — awaiting merge | — | Real `runAnalysis` polling on Refresh, relative-time freshness, stale-data banner, workspace context block, AI-deltas disclaimer |
+| Data-quality cleanup (DB) | Joanna | ✅ Done 2026-05-02 | — | Deleted 5 buggy zero-follower scrape rows + 334 duplicate analysis_results (-42%) |
 | FRD (functional requirements) | Joanna | In progress | All | Defining overall product features |
 | AI Intake Agent (Dify build) | William | TODO | 2 | Next: bring prompt architecture to life in Dify |
 | XHS Virtual Employee (Joanna VE) | Joanna | TODO | 3 | Next: one-button XHS content creator |
 | ERP connector research | William | TODO | 2-3 | Kingdee/QuickBooks API assessment |
+| Comparison Sets + Auto-Segmentation | William | 📋 Spec ready (`SPEC-COMPARISON-SETS-V2.md`) | 3 | V2 work, ~6-day sprint. Allows comparing OMI vs international/value/国潮 segments separately |
+| B0 — burner XHS account for fresh scraping | Joanna | 🔴 Blocked / pending | — | Personal XHS account banned 2026-04-22 by anti-bot. Need fresh SIM + 2-3 day pre-warm before any further scraping |
 
 ### 🔴 Only One Blocker Remaining
 
@@ -481,6 +495,12 @@ Already built as Product Structure Agent. See Section 2C above.
 | 2026-04-01 | Auth model: shared `ACCESS_CODE` + JWT (30-day) | William | MVP decision — single master code for all approved users. Rotate by changing Vercel env var. Per-user codes deferred to when ECS has persistent DB. |
 | 2026-04-01 | Vercel serverless functions as API proxy layer | William | `frontend/api/` handles onboarding, auth, admin — proxies to ECS when configured, falls back to email notifications otherwise. Zero-config fallback means platform works before ECS routes are built. |
 | 2026-04-01 | All pages now use `AppContext` `C.*` tokens | William | Eliminated all hardcoded dark colors. Light/dark mode works across every page including XhsWarroom and MarketIntelligence which previously had hardcoded `#0c0c14` etc. |
+| 2026-04-22 | Joanna's personal XHS account banned by anti-bot after ~20h of testing | Joanna | Triggered 4-phase scraper hardening plan + scraping_rules.yml central config. **Future scraping requires burner account**. See `WILLIAM-HANDOFF-2026-04-23.md`. |
+| 2026-04-30 | Will's 2-day plan complete — Brief / Analytics / Library go live on real data | William | 7 LLM pipelines, 4 backend endpoints, USE_MOCKS=false. Songmont workspace verified end-to-end (PR #26). |
+| 2026-04-30 | OMI/Songmont identity collision fixed in prod | William | Songmont was both workspace brand and "competitor of self". Fix applied via direct SQL. Diagnostic SQL provided for sweeping other workspaces (no other collisions found 2026-05-02). |
+| 2026-05-02 | DB cleanup: 5 buggy zero-follower scrape rows + 334 duplicate analysis_results | Joanna | Buggy rows were poisoning voice_volume + growth scores → brief was telling Songmont they're losing when they're not. See `DATA-FLOW-AND-METRICS-ANALYSIS-2026-05-02.md`. |
+| 2026-05-02 | Decided: Comparison Sets architecture (Option B over multi-workspace) | Joanna | LLM-driven free-form clustering of competitors (国际启发/价值挑战者/国潮新锐 etc.). Spec written, owner: William. ~6-day sprint. |
+| 2026-05-02 | Frontend ↔ backend gap analysis: 3 orphaned components, 4 unused endpoints, 4 quick presentation wins | Joanna | See `FRONTEND-BACKEND-GAP-ANALYSIS-2026-05-02.md` for the full inventory + 22-item prioritized workplan. |
 
 ---
 
