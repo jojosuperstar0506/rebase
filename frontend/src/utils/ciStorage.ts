@@ -75,7 +75,15 @@ export function getKnownWorkspaces(): KnownWorkspace[] {
 
 export function addKnownWorkspace(ws: Omit<KnownWorkspace, 'cached_at'>) {
   if (!ws.id || ws.id === 'local' || ws.id === 'mock') return;
-  const list = getKnownWorkspaces().filter(w => w.id !== ws.id);
+  const existing = getKnownWorkspaces();
+  const prior = existing.find(w => w.id === ws.id);
+  // Skip the write (and the ci-data-updated event) when nothing user-visible
+  // changed — getWorkspace() runs this on every load, so an unconditional
+  // notify creates a refetch loop with useCIData.
+  if (prior && prior.brand_name === ws.brand_name && prior.brand_category === ws.brand_category) {
+    return;
+  }
+  const list = existing.filter(w => w.id !== ws.id);
   list.unshift({ ...ws, cached_at: new Date().toISOString() });
   localStorage.setItem('rebase_ci_known_workspaces', JSON.stringify(list));
   notifyCIUpdate();
