@@ -1880,33 +1880,114 @@ export default function CISettings() {
 
         {/* 2 — My Competitors (renamed from "Manage Competitors") */}
         <Section title={t(T.ci.myCompetitors, lang as any)} C={C}>
-          <AddCompetitorSection
-            C={C}
-            lang={lang}
-            competitors={competitors}
-            onAdd={handleAddCompetitor}
-          />
+          {/* When the workspace already has competitors tracked, the
+              prominent "Type Name / Paste Link / AI Suggestions" tabs
+              feel noisy — the user is already configured. Show a
+              "configured" status banner + collapse the add UI behind a
+              disclosure. Reset path goes via the ResetDataCard above
+              (not duplicated here). When no competitors yet, show the
+              add UI inline (the prominent setup flow). */}
+          {competitors.length > 0 ? (
+            <>
+              {/* Configured banner */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '12px 16px', marginBottom: 16,
+                background: `${C.success}12`,
+                border: `1px solid ${C.success}33`,
+                borderRadius: 10,
+                fontSize: 13, color: C.tx,
+              }}>
+                <span style={{ fontSize: 16, color: C.success }}>✓</span>
+                <span style={{ flex: 1 }}>
+                  {lang === 'zh' ? (
+                    <>
+                      已配置 <strong>{competitors.length}</strong> 个竞品。如需重新设置，请使用上方的{' '}
+                      <strong>重置所有数据</strong>。
+                    </>
+                  ) : (
+                    <>
+                      <strong>{competitors.length}</strong> competitor{competitors.length === 1 ? '' : 's'} configured. To start over, use{' '}
+                      <strong>Reset all data</strong> above.
+                    </>
+                  )}
+                </span>
+              </div>
 
-          {/* "Now tracking" toast */}
-          {recentlyAdded && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '8px 14px', background: `${C.success}15`,
-              border: `1px solid ${C.success}44`, borderRadius: 8,
-              marginBottom: 12, fontSize: 13, color: C.success, fontWeight: 600,
-            }}>
-              <span>✓</span>
-              <span>{t(T.ci.nowTracking, lang as any)}: <strong>{recentlyAdded}</strong></span>
-            </div>
+              {/* "Now tracking" toast (only on add) */}
+              {recentlyAdded && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '8px 14px', background: `${C.success}15`,
+                  border: `1px solid ${C.success}44`, borderRadius: 8,
+                  marginBottom: 12, fontSize: 13, color: C.success, fontWeight: 600,
+                }}>
+                  <span>✓</span>
+                  <span>{t(T.ci.nowTracking, lang as any)}: <strong>{recentlyAdded}</strong></span>
+                </div>
+              )}
+
+              <CompetitorList
+                C={C}
+                lang={lang}
+                competitors={competitors}
+                onChange={handleCompetitorsChange}
+                isMobile={isMobile}
+              />
+
+              {/* Add-more disclosure — collapsed by default */}
+              <details style={{ marginTop: 16 }}>
+                <summary style={{
+                  cursor: 'pointer', userSelect: 'none',
+                  padding: '8px 12px',
+                  background: C.s2, border: `1px solid ${C.bd}`, borderRadius: 8,
+                  fontSize: 13, color: C.t2,
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                }}>
+                  <span style={{ fontSize: 14 }}>+</span>
+                  {lang === 'zh' ? '添加更多竞品' : 'Add another competitor'}
+                </summary>
+                <div style={{ marginTop: 12, paddingTop: 4 }}>
+                  <AddCompetitorSection
+                    C={C}
+                    lang={lang}
+                    competitors={competitors}
+                    onAdd={handleAddCompetitor}
+                  />
+                </div>
+              </details>
+            </>
+          ) : (
+            <>
+              {/* Empty state — show prominent add UI inline */}
+              <AddCompetitorSection
+                C={C}
+                lang={lang}
+                competitors={competitors}
+                onAdd={handleAddCompetitor}
+              />
+
+              {recentlyAdded && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '8px 14px', background: `${C.success}15`,
+                  border: `1px solid ${C.success}44`, borderRadius: 8,
+                  marginBottom: 12, fontSize: 13, color: C.success, fontWeight: 600,
+                }}>
+                  <span>✓</span>
+                  <span>{t(T.ci.nowTracking, lang as any)}: <strong>{recentlyAdded}</strong></span>
+                </div>
+              )}
+
+              <CompetitorList
+                C={C}
+                lang={lang}
+                competitors={competitors}
+                onChange={handleCompetitorsChange}
+                isMobile={isMobile}
+              />
+            </>
           )}
-
-          <CompetitorList
-            C={C}
-            lang={lang}
-            competitors={competitors}
-            onChange={handleCompetitorsChange}
-            isMobile={isMobile}
-          />
         </Section>
 
         {/* 3 — Start Analysis card (shown when ready) */}
