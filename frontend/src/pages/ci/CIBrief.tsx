@@ -174,8 +174,8 @@ export default function CIBrief() {
     setLoading(true);
     setError(false);
     Promise.all([
-      getBrief(workspaceId),
-      getLibrary(workspaceId),
+      getBrief(workspaceId, lang),
+      getLibrary(workspaceId, lang),
       getDomainScores(workspaceId),
     ]).then(([b, lib, ds]) => {
       setBrief(b);
@@ -198,7 +198,7 @@ export default function CIBrief() {
       setError(true);
       setLoading(false);
     });
-  }, [workspaceId]);
+  }, [workspaceId, lang]);
 
   // Cleanup any in-flight polling when the component unmounts.
   useEffect(() => {
@@ -259,8 +259,8 @@ export default function CIBrief() {
       if (status.status === 'complete') {
         // Refresh the brief + domains + library now that the pipeline finished
         const [fresh, lib, ds] = await Promise.all([
-          getBrief(workspaceId),
-          getLibrary(workspaceId),
+          getBrief(workspaceId, lang),
+          getLibrary(workspaceId, lang),
           getDomainScores(workspaceId),
         ]);
         setBrief(fresh);

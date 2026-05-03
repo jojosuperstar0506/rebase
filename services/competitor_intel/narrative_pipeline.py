@@ -142,7 +142,16 @@ Top engagement metrics: {json.dumps(profile.get('engagement_metrics', {}), ensur
 
 Write ONLY the insight paragraph, no headers or bullet points."""
 
-    return _call_llm(prompt, LLM_CONFIG["brand_model"], max_tokens=300)
+    zh_text = _call_llm(prompt, LLM_CONFIG["brand_model"], max_tokens=300)
+    try:
+        en_text = _call_llm(
+            f"Translate the following Chinese competitive intelligence insight "
+            f"into fluent English. Return ONLY the translated text, no explanation.\n\n{zh_text}",
+            LLM_CONFIG["brand_model"], max_tokens=300,
+        )
+        return json.dumps({"zh": zh_text, "en": en_text.strip()}, ensure_ascii=False)
+    except Exception:
+        return zh_text
 
 
 # ---------------------------------------------------------------------------

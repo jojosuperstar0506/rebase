@@ -471,10 +471,10 @@ export default function CICompetitors() {
   // Fetch per-brand AI insights from API (falls back gracefully if endpoint absent)
   useEffect(() => {
     if (!workspace?.id || workspace.id === 'local') return;
-    getBrandInsights(workspace.id).then(insights => {
+    getBrandInsights(workspace.id, lang).then(insights => {
       setBrandInsights(insights);
     });
-  }, [workspace?.id]);
+  }, [workspace?.id, lang]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [deepDiveOpen, setDeepDiveOpen] = useState<string | null>(null);

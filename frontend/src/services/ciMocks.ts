@@ -418,9 +418,9 @@ const USE_MOCKS = false;
  * Kept local to ciMocks (rather than reaching into ciApi.tryApi) so the
  * mock layer stays a single self-contained file the way it was designed.
  */
-async function _fetchBriefFromApi(workspaceId: string): Promise<WeeklyBrief | null> {
+async function _fetchBriefFromApi(workspaceId: string, lang: string = 'zh'): Promise<WeeklyBrief | null> {
   try {
-    const res = await fetch(`/api/ci/brief?workspace_id=${encodeURIComponent(workspaceId)}`);
+    const res = await fetch(`/api/ci/brief?workspace_id=${encodeURIComponent(workspaceId)}&lang=${lang}`);
     if (!res.ok) return null;
     const data = await res.json();
     if (!data || !data.verdict) return null; // shape sanity check
@@ -430,11 +430,11 @@ async function _fetchBriefFromApi(workspaceId: string): Promise<WeeklyBrief | nu
   }
 }
 
-export async function getBrief(workspaceId: string): Promise<WeeklyBrief | null> {
+export async function getBrief(workspaceId: string, lang: string = 'zh'): Promise<WeeklyBrief | null> {
   // Skip the network call for the synthetic "local" workspace_id used when
   // a user hasn't completed onboarding yet — there's no row to fetch.
   if (workspaceId && workspaceId !== 'local') {
-    const real = await _fetchBriefFromApi(workspaceId);
+    const real = await _fetchBriefFromApi(workspaceId, lang);
     if (real) return real;
     // No brief on the backend yet — fall through to mock-or-null below
   }
@@ -443,9 +443,9 @@ export async function getBrief(workspaceId: string): Promise<WeeklyBrief | null>
 }
 
 /** Try GET /api/ci/library; null on 404/network/empty so callers can fall back to mock. */
-async function _fetchLibraryFromApi(workspaceId: string): Promise<LibraryEntry[] | null> {
+async function _fetchLibraryFromApi(workspaceId: string, lang: string = 'zh'): Promise<LibraryEntry[] | null> {
   try {
-    const res = await fetch(`/api/ci/library?workspace_id=${encodeURIComponent(workspaceId)}`);
+    const res = await fetch(`/api/ci/library?workspace_id=${encodeURIComponent(workspaceId)}&lang=${lang}`);
     if (!res.ok) return null;
     const data = await res.json();
     if (!Array.isArray(data)) return null;
@@ -456,9 +456,9 @@ async function _fetchLibraryFromApi(workspaceId: string): Promise<LibraryEntry[]
   }
 }
 
-export async function getLibrary(workspaceId: string): Promise<LibraryEntry[]> {
+export async function getLibrary(workspaceId: string, lang: string = 'zh'): Promise<LibraryEntry[]> {
   if (workspaceId && workspaceId !== 'local') {
-    const real = await _fetchLibraryFromApi(workspaceId);
+    const real = await _fetchLibraryFromApi(workspaceId, lang);
     if (real) return real;
   }
   if (!USE_MOCKS) return [];
@@ -844,9 +844,9 @@ export const MOCK_SIGNAL_SOURCES: Record<string, SignalSource> = {
 // ─── Mock API — analytics ────────────────────────────────────────────────
 
 /** Try GET /api/ci/analytics; null on 404/network/empty so callers can fall back to mock. */
-async function _fetchAnalyticsFromApi(workspaceId: string): Promise<AnalyticsData | null> {
+async function _fetchAnalyticsFromApi(workspaceId: string, lang: string = 'zh'): Promise<AnalyticsData | null> {
   try {
-    const res = await fetch(`/api/ci/analytics?workspace_id=${encodeURIComponent(workspaceId)}`);
+    const res = await fetch(`/api/ci/analytics?workspace_id=${encodeURIComponent(workspaceId)}&lang=${lang}`);
     if (!res.ok) return null;
     const data = await res.json();
     if (!data || !Array.isArray(data.all_metrics)) return null; // shape sanity
@@ -862,9 +862,9 @@ async function _fetchAnalyticsFromApi(workspaceId: string): Promise<AnalyticsDat
   }
 }
 
-export async function getAnalytics(workspaceId: string): Promise<AnalyticsData | null> {
+export async function getAnalytics(workspaceId: string, lang: string = 'zh'): Promise<AnalyticsData | null> {
   if (workspaceId && workspaceId !== 'local') {
-    const real = await _fetchAnalyticsFromApi(workspaceId);
+    const real = await _fetchAnalyticsFromApi(workspaceId, lang);
     if (real) return real;
   }
   if (!USE_MOCKS) return null;
