@@ -21,6 +21,41 @@ const CATEGORIES = ['女包', '男包', '箱包配件', '鞋类', '服饰', '其
 const PLATFORM_OPTIONS = ['淘宝/天猫', '京东', '小红书', '抖音'];
 const MAX_WATCHLIST = 10;
 
+// Reject inputs that aren't a real brand name. We saw production rows with
+// brand_name = "XHS: 5d1c0475000000001203c34b" — the user typed/accepted the
+// platform identifier as a name, and the scraper then can't find the brand
+// because brand-keyed analysis lookups never match. Catches: "XHS: <id>"
+// style prefixed strings, raw 16+ char hex IDs (XHS UIDs), and 14+ digit
+// numeric IDs (Douyin sec_uid / Taobao shop ids).
+function looksLikePlatformId(s: string): boolean {
+  const t = s.trim();
+  if (!t) return false;
+  if (/^(xhs|douyin|taobao|tmall|jd|京东|淘宝|抖音|小红书)\s*[:：]\s*\S+/i.test(t)) return true;
+  if (/^[a-f0-9]{16,}$/i.test(t)) return true;
+  if (/^\d{14,}$/.test(t)) return true;
+  return false;
+}
+
+// Inverse of the parser in backend/server.js — given a stored platform_id
+// (which is what we end up with for badly-named legacy rows), rebuild a URL
+// that the backend's POST /api/ci/parse-link can chew on so its DB lookup +
+// registry + og:title chain has a chance of recovering the real name. Best
+// guess per platform; returns null if we can't form a reasonable URL.
+function reconstructPlatformUrl(platform: string, identifier: string): string | null {
+  if (!platform || !identifier) return null;
+  switch (platform) {
+    case 'xhs':    return `https://www.xiaohongshu.com/user/profile/${identifier}`;
+    case 'douyin': return `https://www.douyin.com/user/${identifier}`;
+    case 'taobao':
+      // Numeric → shop search; otherwise treat as subdomain
+      if (/^\d+$/.test(identifier)) return `https://shop.taobao.com/?id=${identifier}`;
+      return `https://${identifier}.taobao.com`;
+    case 'tmall':  return `https://${identifier}.tmall.com`;
+    case 'jd':     return `https://mall.jd.com/index-${identifier}.html`;
+    default: return null;
+  }
+}
+
 const PLATFORM_COLORS: Record<string, string> = {
   xhs: '#ff2442',
   taobao: '#ff6a00',
@@ -71,6 +106,7 @@ function BrandProfileSection({ C, lang, isMobile }: { C: ReturnType<typeof useAp
     platforms: saved?.platforms ?? [],
   });
   const [savedOk, setSavedOk] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   function togglePlatform(p: string) {
     setForm(f => ({
@@ -79,8 +115,30 @@ function BrandProfileSection({ C, lang, isMobile }: { C: ReturnType<typeof useAp
     }));
   }
 
-  function handleSave() {
+  async function handleSave() {
+    setSaving(true);
+    // Local first so reads inside this session are immediate even if API is down.
     saveCIWorkspace(form);
+    // Push to API so the workspace pill (which reads from /workspace/me via
+    // useCIData) reflects the new brand name across every CI page. Without
+    // this, the pill stays stale and "Save" only updates localStorage.
+    if (form.brand_name && form.brand_category) {
+      // W7 split: saveWorkspace dispatches to PATCH when an id is passed,
+      // POST otherwise. We need to PATCH the existing workspace, not create
+      // a new one — so look up the current workspace's id first.
+      const current = await getWorkspace();
+      const existingId = current.data?.id && current.data.id !== 'local' ? current.data.id : undefined;
+      await saveWorkspace({
+        ...(existingId ? { id: existingId } : {}),
+        brand_name: form.brand_name,
+        brand_category: form.brand_category,
+        brand_price_range: form.price_range,
+        brand_platforms: form.platforms.length ? Object.fromEntries(form.platforms.map(p => [p, ''])) : null,
+      });
+      // Force useCIData to refetch so WorkspaceSwitcher updates immediately
+      window.dispatchEvent(new CustomEvent('ci-data-updated'));
+    }
+    setSaving(false);
     setSavedOk(true);
     setTimeout(() => setSavedOk(false), 2000);
   }
@@ -174,21 +232,22 @@ function BrandProfileSection({ C, lang, isMobile }: { C: ReturnType<typeof useAp
 
       <button
         onClick={handleSave}
+        disabled={saving}
         style={{
           marginTop: 20,
-          background: savedOk ? C.success : C.ac,
+          background: saving ? C.t3 : (savedOk ? C.success : C.ac),
           border: 'none',
           borderRadius: 8,
           padding: '10px 24px',
           color: '#fff',
           fontSize: 14,
           fontWeight: 600,
-          cursor: 'pointer',
+          cursor: saving ? 'default' : 'pointer',
           minHeight: 44,
           width: isMobile ? '100%' : undefined,
         }}
       >
-        {savedOk ? t(T.ci.saved, lang as any) : t(T.ci.saveBrand, lang as any)}
+        {saving ? (lang === 'zh' ? '保存中…' : 'Saving…') : (savedOk ? t(T.ci.saved, lang as any) : t(T.ci.saveBrand, lang as any))}
       </button>
     </Section>
   );
@@ -201,7 +260,13 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
   competitors: CICompetitor[];
   onAdd: (c: CICompetitor) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<'name' | 'link' | 'ai'>('name');
+  // Type Name + Paste Link tabs are temporarily disabled — AI Suggestions
+  // is the canonical onboarding path until the backend's link parser can
+  // reliably extract names past XHS login walls (tracked: TODO.md F9 /
+  // ROADMAP TASK-46). The tab state + Type-Name and Paste-Link state below
+  // is left intact so we can flip SHOW_MANUAL_TABS back on without rework.
+  const SHOW_MANUAL_TABS = false;
+  const [activeTab, setActiveTab] = useState<'name' | 'link' | 'ai'>(SHOW_MANUAL_TABS ? 'name' : 'ai');
   const [error, setError] = useState('');
   const watchlistCount = competitors.filter(c => c.tier === 'watchlist').length;
 
@@ -280,6 +345,12 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
       platformIds = parsed!.platform_ids
         ?? (parsed!.platform && parsed!.identifier ? { [parsed!.platform]: parsed!.identifier } : {});
       setResolveSource('registry');
+    } else if (looksLikePlatformId(raw)) {
+      setNameAdding(false);
+      setError(lang === 'zh'
+        ? '看起来你输入的是平台 ID（如 XHS UID），不是品牌名称。请在「粘贴链接」标签页粘贴完整 URL，或直接输入品牌名。'
+        : 'That looks like a platform ID (e.g. an XHS UID), not a brand name. Try the "Paste Link" tab with a full URL, or type the brand name directly.');
+      return;
     } else if (Object.keys(platformIds).length === 0) {
       const resolved = await resolveBrand(name);
       if (resolved) {
@@ -320,13 +391,25 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
     setLinkError('');
     setLinkBrandInput('');
     const result = await parseLink(url);
-    setLinkParsing(false);
     if (!result || !result.parsed) {
+      setLinkParsing(false);
       setLinkError(result?.error ?? t(T.ci.unrecognizedLink, lang as any));
       return;
     }
     const platformIds: Record<string, string> = result.platform_ids ?? (result.platform && result.identifier ? { [result.platform]: result.identifier } : {});
-    const brandName = result.brand_name ?? '';
+    let brandName = (result.brand_name ?? '').trim();
+    // The backend can usually extract a brand name from product/item URLs
+    // but rarely from XHS profile URLs (they require a page scrape). When
+    // we got an identifier but no brand name, take a second swing via the
+    // brand registry — many merchants are already in our DB by their XHS
+    // UID. This is what stops "XHS: <uid>" from leaking into brand_name.
+    if (!brandName && result.identifier) {
+      const resolved = await resolveBrand(result.identifier);
+      if (resolved && resolved.brand_name && !looksLikePlatformId(resolved.brand_name)) {
+        brandName = resolved.brand_name;
+      }
+    }
+    setLinkParsing(false);
     setLinkResult({ platform: result.platform ?? '', brandName, platformIds });
     // If brand name couldn't be extracted, prompt user
     if (!brandName) setLinkBrandInput('');
@@ -334,8 +417,14 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
 
   function handleConfirmLink() {
     if (!linkResult) return;
-    const finalBrandName = linkResult.brandName || linkBrandInput.trim();
+    const finalBrandName = (linkResult.brandName || linkBrandInput.trim()).trim();
     if (!finalBrandName) return;
+    if (looksLikePlatformId(finalBrandName)) {
+      setLinkError(lang === 'zh'
+        ? '请输入真正的品牌名称（如 "Songmont"），不是平台 ID。我们已经记下了平台 ID，你只需要给品牌起个名字。'
+        : 'Please enter the actual brand name (e.g. "Songmont"), not a platform ID. We already saved the platform ID — you just need to give the brand a name.');
+      return;
+    }
     onAdd({
       id: crypto.randomUUID(),
       brand_name: finalBrandName,
@@ -347,6 +436,7 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
     setLinkInput('');
     setLinkResult(null);
     setLinkBrandInput('');
+    setLinkError('');
   }
 
   // ── AI tab state ────────────────────────────────────────────────
@@ -408,25 +498,29 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
 
   return (
     <div style={{ marginBottom: 20 }}>
-      {/* Tab bar */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: `1px solid ${C.bd}` }}>
-        {tabs.map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => { setActiveTab(tab.key); setError(''); }}
-            style={{
-              padding: '8px 16px', border: 'none',
-              borderBottom: activeTab === tab.key ? `2px solid ${C.ac}` : '2px solid transparent',
-              background: 'transparent',
-              color: activeTab === tab.key ? C.ac : C.t2,
-              fontWeight: activeTab === tab.key ? 600 : 400,
-              fontSize: 13, cursor: 'pointer',
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {/* Tab bar — hidden while only AI Suggestions is exposed. The tab
+          handlers and state above stay intact so flipping SHOW_MANUAL_TABS
+          back to true in source restores Type Name + Paste Link instantly. */}
+      {SHOW_MANUAL_TABS && (
+        <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: `1px solid ${C.bd}` }}>
+          {tabs.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => { setActiveTab(tab.key); setError(''); }}
+              style={{
+                padding: '8px 16px', border: 'none',
+                borderBottom: activeTab === tab.key ? `2px solid ${C.ac}` : '2px solid transparent',
+                background: 'transparent',
+                color: activeTab === tab.key ? C.ac : C.t2,
+                fontWeight: activeTab === tab.key ? 600 : 400,
+                fontSize: 13, cursor: 'pointer',
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── Tab: Name with autocomplete ────────────────────────── */}
       {activeTab === 'name' && (
@@ -815,8 +909,89 @@ function CompetitorList({ C, lang, competitors, onChange, isMobile }: {
   onChange: (updated: CICompetitor[]) => void;
   isMobile: boolean;
 }) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [editError, setEditError] = useState('');
+  const [resolving, setResolving] = useState(false);
+  const [resolveResult, setResolveResult] = useState<{ fixed: number; remaining: number } | null>(null);
+
   function remove(id: string) {
     onChange(competitors.filter(c => c.id !== id));
+  }
+
+  function startEdit(c: CICompetitor) {
+    setEditingId(c.id);
+    setEditValue(c.brand_name);
+    setEditError('');
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditValue('');
+    setEditError('');
+  }
+
+  function saveEdit(id: string) {
+    const next = editValue.trim();
+    if (!next) return;
+    if (looksLikePlatformId(next)) {
+      setEditError(lang === 'zh'
+        ? '请输入真正的品牌名称，不是平台 ID。'
+        : 'Please enter the actual brand name, not a platform ID.');
+      return;
+    }
+    onChange(competitors.map(c => c.id === id ? { ...c, brand_name: next } : c));
+    cancelEdit();
+  }
+
+  // Bulk-resolve every row whose brand_name looks like a platform id, by
+  // reconstructing a URL from the stored platform_ids and asking the backend
+  // parse-link to do its DB → registry → og:title chain. Each platform_id
+  // is tried in turn; the first real name wins. Cap concurrency to 4 so a
+  // user with 50 bad rows doesn't blast the server.
+  async function tryAutoResolve() {
+    setResolving(true);
+    setResolveResult(null);
+    const targets = competitors.filter(c => looksLikePlatformId(c.brand_name));
+    const updates = new Map<string, string>();
+
+    async function resolveOne(c: CICompetitor) {
+      const ids = Object.entries(c.platform_ids || {});
+      for (const [platform, identifier] of ids) {
+        const url = reconstructPlatformUrl(platform, identifier);
+        if (!url) continue;
+        try {
+          const r = await parseLink(url);
+          const candidate = r?.parsed ? r.brand_name?.trim() : '';
+          if (candidate && !looksLikePlatformId(candidate)) {
+            updates.set(c.id, candidate);
+            return;
+          }
+        } catch { /* try next platform_id */ }
+      }
+    }
+
+    // Run with bounded concurrency
+    const queue = [...targets];
+    const workers: Promise<void>[] = [];
+    const concurrency = Math.min(4, queue.length);
+    for (let i = 0; i < concurrency; i++) {
+      workers.push((async () => {
+        while (queue.length) {
+          const c = queue.shift();
+          if (c) await resolveOne(c);
+        }
+      })());
+    }
+    await Promise.all(workers);
+
+    if (updates.size > 0) {
+      onChange(competitors.map(c => updates.has(c.id) ? { ...c, brand_name: updates.get(c.id)! } : c));
+    }
+    setResolving(false);
+    setResolveResult({ fixed: updates.size, remaining: targets.length - updates.size });
+    // Auto-clear the result toast after a few seconds
+    setTimeout(() => setResolveResult(null), 6000);
   }
 
   if (competitors.length === 0) {
@@ -827,23 +1002,136 @@ function CompetitorList({ C, lang, competitors, onChange, isMobile }: {
     );
   }
 
+  // Surface a one-line nudge if any tracked row's brand_name looks like a
+  // platform ID — those rows won't match analysis_results lookups, so the
+  // analytics tab will be empty for them. The fix is to rename them inline.
+  const badRows = competitors.filter(c => looksLikePlatformId(c.brand_name));
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {competitors.map(c => (
+      {badRows.length > 0 && (
+        <div style={{
+          padding: '12px 14px', background: `${C.danger}10`,
+          border: `1px solid ${C.danger}44`, borderRadius: 8,
+          fontSize: 12, color: C.t2, lineHeight: 1.6,
+        }}>
+          <div>
+            <strong style={{ color: C.danger }}>
+              {lang === 'zh'
+                ? `${badRows.length} 个竞品看起来用了平台 ID 而不是品牌名。`
+                : `${badRows.length} competitor${badRows.length === 1 ? '' : 's'} appear to use a platform ID instead of a brand name.`}
+            </strong>{' '}
+            {lang === 'zh'
+              ? '没有真品牌名，分析无法匹配数据。点击下方按钮自动从平台抓取真名，剩余的可点「✎」手动改。'
+              : 'Without a real brand name, analytics can\'t match data. Try the auto-resolve below, or click ✎ on each row to rename manually.'}
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={tryAutoResolve}
+              disabled={resolving}
+              style={{
+                background: resolving ? C.t3 : C.ac, border: 'none', borderRadius: 6,
+                padding: '6px 14px', color: '#fff', fontSize: 12, fontWeight: 600,
+                cursor: resolving ? 'default' : 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              {resolving && (
+                <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" style={{ animation: 'spin 1s linear infinite' }}>
+                  <circle cx={12} cy={12} r={10} strokeDasharray="31.4" strokeDashoffset="10" />
+                </svg>
+              )}
+              {resolving
+                ? (lang === 'zh' ? '正在解析…' : 'Resolving…')
+                : (lang === 'zh' ? `✨ 自动解析 ${badRows.length} 个名称` : `✨ Auto-resolve ${badRows.length} name${badRows.length === 1 ? '' : 's'}`)}
+            </button>
+            {resolveResult && (
+              <span style={{
+                fontSize: 11, color: resolveResult.fixed > 0 ? C.success : C.t3,
+                fontWeight: 600,
+              }}>
+                {resolveResult.fixed > 0 && (lang === 'zh'
+                  ? `✓ 已修复 ${resolveResult.fixed} 个`
+                  : `✓ Fixed ${resolveResult.fixed}`)}
+                {resolveResult.fixed > 0 && resolveResult.remaining > 0 && ' · '}
+                {resolveResult.remaining > 0 && (lang === 'zh'
+                  ? `${resolveResult.remaining} 个无法解析（请手动重命名）`
+                  : `${resolveResult.remaining} couldn\'t be resolved (rename manually)`)}
+                {resolveResult.fixed === 0 && resolveResult.remaining === 0 && (lang === 'zh' ? '无可解析行' : 'Nothing to resolve')}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {competitors.map(c => {
+        const isEditing = editingId === c.id;
+        const isBad = !isEditing && looksLikePlatformId(c.brand_name);
+        return (
         <div key={c.id} style={{
           display: 'flex',
           alignItems: 'center',
           gap: 12,
           padding: '12px 16px',
           background: C.s2,
-          border: `1px solid ${C.bd}`,
+          border: `1px solid ${isBad ? `${C.danger}55` : C.bd}`,
           borderRadius: 8,
           fontSize: 13,
         }}>
           {/* Brand name + platform keyword labels */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ fontWeight: 600, fontSize: 14 }}>{c.brand_name}</span>
-            {Object.keys(c.platform_ids).length > 0 && (
+            {isEditing ? (
+              <div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    autoFocus
+                    value={editValue}
+                    onChange={e => { setEditValue(e.target.value); setEditError(''); }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') saveEdit(c.id);
+                      if (e.key === 'Escape') cancelEdit();
+                    }}
+                    style={{
+                      flex: 1, fontSize: 14, fontWeight: 600,
+                      background: C.inputBg, color: C.tx,
+                      border: `1px solid ${C.inputBd}`, borderRadius: 6,
+                      padding: '6px 10px', outline: 'none',
+                    }}
+                    placeholder={lang === 'zh' ? '品牌名称（如 Songmont）' : 'Brand name (e.g. Songmont)'}
+                  />
+                  <button
+                    onClick={() => saveEdit(c.id)}
+                    style={{
+                      background: C.ac, border: 'none', borderRadius: 6,
+                      padding: '6px 12px', color: '#fff', fontSize: 12,
+                      fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >
+                    {lang === 'zh' ? '保存' : 'Save'}
+                  </button>
+                  <button
+                    onClick={cancelEdit}
+                    style={{
+                      background: 'transparent', border: `1px solid ${C.bd}`, borderRadius: 6,
+                      padding: '6px 12px', color: C.t2, fontSize: 12, cursor: 'pointer',
+                    }}
+                  >
+                    {lang === 'zh' ? '取消' : 'Cancel'}
+                  </button>
+                </div>
+                {editError && (
+                  <div style={{ fontSize: 11, color: C.danger, marginTop: 4 }}>{editError}</div>
+                )}
+              </div>
+            ) : (
+              <span style={{
+                fontWeight: 600, fontSize: 14,
+                color: isBad ? C.danger : undefined,
+              }}>
+                {c.brand_name}
+              </span>
+            )}
+            {!isEditing && Object.keys(c.platform_ids).length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
                 {Object.entries(c.platform_ids).map(([plat, id]) => (
                   <span key={plat} style={{ fontSize: 11, color: C.t3 }}>
@@ -854,37 +1142,56 @@ function CompetitorList({ C, lang, competitors, onChange, isMobile }: {
             )}
           </div>
 
-          {/* "Tracking" status pill — replaces tier toggle (TASK-32) */}
-          <span style={{
-            fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20,
-            background: `${C.success}18`, color: C.success, border: `1px solid ${C.success}44`,
-            flexShrink: 0,
-          }}>
-            ✓ {t(T.ci.tracking, lang as any)}
-          </span>
+          {!isEditing && (
+            <>
+              {/* "Tracking" status pill — replaces tier toggle (TASK-32) */}
+              <span style={{
+                fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20,
+                background: `${C.success}18`, color: C.success, border: `1px solid ${C.success}44`,
+                flexShrink: 0,
+              }}>
+                ✓ {t(T.ci.tracking, lang as any)}
+              </span>
 
-          {/* Added date — hidden on mobile */}
-          {!isMobile && (
-            <span style={{ color: C.t3, fontSize: 11, whiteSpace: 'nowrap' }}>
-              {new Date(c.created_at).toLocaleDateString()}
-            </span>
+              {/* Added date — hidden on mobile */}
+              {!isMobile && (
+                <span style={{ color: C.t3, fontSize: 11, whiteSpace: 'nowrap' }}>
+                  {new Date(c.created_at).toLocaleDateString()}
+                </span>
+              )}
+
+              {/* Edit name */}
+              <button
+                onClick={() => startEdit(c)}
+                style={{
+                  background: 'none', border: 'none', color: isBad ? C.danger : C.t3,
+                  cursor: 'pointer', fontSize: 14, padding: '0 6px', lineHeight: 1,
+                  minWidth: isMobile ? 44 : undefined, minHeight: isMobile ? 44 : undefined,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+                title={lang === 'zh' ? '重命名品牌' : 'Rename brand'}
+              >
+                ✎
+              </button>
+
+              {/* Remove — 44px touch target on mobile */}
+              <button
+                onClick={() => remove(c.id)}
+                style={{
+                  background: 'none', border: 'none', color: C.t3, cursor: 'pointer',
+                  fontSize: 18, padding: '0 8px', lineHeight: 1,
+                  minWidth: isMobile ? 44 : undefined, minHeight: isMobile ? 44 : undefined,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+                title={t(T.ci.removeCompetitor, lang as any)}
+              >
+                ×
+              </button>
+            </>
           )}
-
-          {/* Remove — 44px touch target on mobile */}
-          <button
-            onClick={() => remove(c.id)}
-            style={{
-              background: 'none', border: 'none', color: C.t3, cursor: 'pointer',
-              fontSize: 18, padding: '0 8px', lineHeight: 1,
-              minWidth: isMobile ? 44 : undefined, minHeight: isMobile ? 44 : undefined,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-            title={t(T.ci.removeCompetitor, lang as any)}
-          >
-            ×
-          </button>
         </div>
-      ))}
+      );
+      })}
     </div>
   );
 }
@@ -1188,16 +1495,23 @@ function StartAnalysisCard({ C, lang, competitorCount, workspaceName, isMobile }
   );
 }
 
-// ── Reset Data Section ───────────────────────────────────────────
-function ResetDataSection({ C, lang, onReset }: {
+// ── Reset Data card ──────────────────────────────────────────────
+// Sits right under Brand Profile rather than at the bottom of the page.
+// Use case: user typed "Nike" + got AI competitor suggestions, then
+// realized they meant Adidas — they need to see the reset button without
+// scrolling past their suggestions.
+function ResetDataCard({ C, lang, onReset, isMobile }: {
   C: ReturnType<typeof useApp>['colors'];
   lang: string;
   onReset: () => void;
+  isMobile: boolean;
 }) {
   const [confirming, setConfirming] = useState(false);
 
   function handleReset() {
-    // Clear all CI localStorage keys
+    // Clear all CI localStorage keys (workspace, competitors, connections,
+    // analysis flags, welcome banner state, and the multi-workspace cache
+    // added in this PR — the active id and the known-workspaces list).
     localStorage.removeItem('rebase_ci_workspace');
     localStorage.removeItem('rebase_ci_competitors');
     localStorage.removeItem('rebase_ci_connections');
@@ -1205,21 +1519,36 @@ function ResetDataSection({ C, lang, onReset }: {
     localStorage.removeItem('rebase_ci_analysis_job_id');
     localStorage.removeItem('rebase_ci_welcome_dismissed');
     localStorage.removeItem('rebase_ci_last_visit');
-    // Notify parent + other listeners
+    localStorage.removeItem('rebase_ci_active_workspace_id');
+    localStorage.removeItem('rebase_ci_known_workspaces');
     onReset();
     window.dispatchEvent(new CustomEvent('ci-data-updated'));
     setConfirming(false);
-    // Redirect to fresh settings
     window.location.href = '/ci/settings';
   }
 
   return (
-    <Section title={lang === 'zh' ? '重置数据' : 'Reset Data'} C={C}>
-      <p style={{ fontSize: 13, color: C.t2, lineHeight: 1.7, marginTop: 0, marginBottom: 16 }}>
-        {lang === 'zh'
-          ? '清除所有本地保存的品牌资料、竞品列表和分析状态，重新开始设置。此操作不可撤销。'
-          : 'Clear all locally saved brand profile, competitor list, and analysis state. Start fresh. This cannot be undone.'}
-      </p>
+    <div style={{
+      background: C.s1,
+      border: `1px dashed ${C.danger}55`,
+      borderRadius: 12,
+      padding: isMobile ? 14 : 18,
+      marginBottom: 24,
+      display: 'flex',
+      flexDirection: isMobile ? 'column' : 'row',
+      gap: isMobile ? 12 : 18,
+      alignItems: isMobile ? 'stretch' : 'center',
+    }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.tx, marginBottom: 4 }}>
+          {lang === 'zh' ? '切换品牌或行业？' : 'Switching to a different brand or industry?'}
+        </div>
+        <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.6 }}>
+          {lang === 'zh'
+            ? '一键清除：品牌档案、所有追踪的竞品、AI 推荐缓存、分析状态。然后在上方重新填写新品牌信息即可。'
+            : 'One click clears: brand profile, all tracked competitors, AI suggestion cache, and analysis state. Then enter the new brand profile above to start fresh.'}
+        </div>
+      </div>
       {!confirming ? (
         <button
           onClick={() => setConfirming(true)}
@@ -1227,19 +1556,21 @@ function ResetDataSection({ C, lang, onReset }: {
             background: 'transparent',
             border: `1px solid ${C.danger}`,
             color: C.danger,
-            padding: '8px 20px',
+            padding: '9px 18px',
             borderRadius: 8,
             fontSize: 13,
             fontWeight: 600,
             cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
           }}
         >
-          {lang === 'zh' ? '重置所有CI数据' : 'Reset All CI Data'}
+          {lang === 'zh' ? '重置所有数据' : 'Reset all data'}
         </button>
       ) : (
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <span style={{ fontSize: 13, color: C.danger, fontWeight: 600 }}>
-            {lang === 'zh' ? '确定要重置吗？' : 'Are you sure?'}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+          <span style={{ fontSize: 12, color: C.danger, fontWeight: 600 }}>
+            {lang === 'zh' ? '确定？' : 'Sure?'}
           </span>
           <button
             onClick={handleReset}
@@ -1247,14 +1578,14 @@ function ResetDataSection({ C, lang, onReset }: {
               background: C.danger,
               border: 'none',
               color: '#fff',
-              padding: '8px 20px',
+              padding: '8px 16px',
               borderRadius: 8,
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: 600,
               cursor: 'pointer',
             }}
           >
-            {lang === 'zh' ? '确认重置' : 'Yes, Reset'}
+            {lang === 'zh' ? '确认重置' : 'Yes, reset'}
           </button>
           <button
             onClick={() => setConfirming(false)}
@@ -1262,9 +1593,9 @@ function ResetDataSection({ C, lang, onReset }: {
               background: 'transparent',
               border: `1px solid ${C.bd}`,
               color: C.t2,
-              padding: '8px 16px',
+              padding: '8px 14px',
               borderRadius: 8,
-              fontSize: 13,
+              fontSize: 12,
               cursor: 'pointer',
             }}
           >
@@ -1272,7 +1603,7 @@ function ResetDataSection({ C, lang, onReset }: {
           </button>
         </div>
       )}
-    </Section>
+    </div>
   );
 }
 
@@ -1324,6 +1655,12 @@ export default function CISettings() {
         {/* 1 — Brand Profile */}
         <BrandProfileSection C={C} lang={lang} isMobile={isMobile} />
 
+        {/* 1b — Reset Data (sits right under Brand Profile so it's reachable
+                  without scrolling past the AI suggestions panel) */}
+        <ResetDataCard C={C} lang={lang} isMobile={isMobile} onReset={() => {
+          setCompetitors([]);
+        }} />
+
         {/* 2 — My Competitors (renamed from "Manage Competitors") */}
         <Section title={t(T.ci.myCompetitors, lang as any)} C={C}>
           <AddCompetitorSection
@@ -1370,10 +1707,7 @@ export default function CISettings() {
         {/* Cookie connection UI removed for beta. See TASK-17 for backend. Bring back with browser extension in v2. */}
         {/* <ConnectionsSection C={C} lang={lang} isMobile={isMobile} /> */}
 
-        {/* 5 — Reset All Data */}
-        <ResetDataSection C={C} lang={lang} onReset={() => {
-          setCompetitors([]);
-        }} />
+        {/* Reset moved up — see ResetDataCard immediately under Brand Profile. */}
       </div>
     </div>
   );

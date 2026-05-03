@@ -320,6 +320,7 @@ Already built as Product Structure Agent. See Section 2C above.
 | TASK-08: WeChat Work weekly brief | Joanna | ✅ Done | — | `delivery.py` — markdown brief, webhook delivery, cron scheduling |
 | TASK-09: End-to-end orchestrator | Joanna | TODO | — | Single command: scrape → analyze → score → narrate → deliver |
 | TASK-10: Production hardening | Joanna | TODO | — | Error handling, retry logic, monitoring, Vercel cron |
+| TASK-46: Robust brand-name extraction from pasted links | Joanna | TODO | Post-burner | v1 ships in PR #29: URL parse → DB lookup → KNOWN_BRANDS registry → best-effort `og:title` HTML fetch with 4s timeout. v2 needs the burner-account-backed scraper to render XHS profile pages past their login wall and pull the nickname reliably. Until then, frontend prompts the user when extraction fails. |
 
 **Test coverage:** 258 tests across 7 test files, all passing.
 
