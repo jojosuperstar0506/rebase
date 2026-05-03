@@ -138,6 +138,15 @@ export interface Competitor {
   platform_ids: Record<string, string> | null;
   added_via: string;
   created_at: string;
+  /**
+   * #18: per-brand data freshness. Latest scrape timestamp from
+   * scraped_brand_profiles for this competitor (any platform). Null when
+   * no scrape data exists yet. Surfaced on the Brief workspace context
+   * block so users can see e.g. "Songmont scraped 12d ago, CASSILE 2d ago"
+   * — different freshness per brand vs the brief's own age.
+   */
+  last_scraped_at?: string | null;
+  last_scrape_platform?: string | null;
 }
 
 export async function getCompetitors(workspaceId?: string): Promise<{ data: Competitor[]; source: 'api' | 'local' }> {

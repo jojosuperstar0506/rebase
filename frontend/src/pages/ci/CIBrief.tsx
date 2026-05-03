@@ -433,11 +433,41 @@ export default function CIBrief() {
                 {workspace.brand_category ? ` (${workspace.brand_category})` : ''}{' '}
                 {lang === 'zh' ? '对比于' : 'vs'}
               </span>
-              {competitors.map(c => (
-                <span key={c.id || c.brand_name} style={{
-                  background: C.s2, padding: '2px 8px', borderRadius: 12, fontSize: 11, color: C.t2,
-                }}>{c.brand_name}</span>
-              ))}
+              {competitors.map(c => {
+                // #18: per-brand scrape recency. The Competitor type now
+                // carries last_scraped_at (LATERAL join in /api/ci/competitors).
+                // Stale beyond 7d gets a warning color so the user can see
+                // which brand's data is fresh vs aging.
+                const lastScraped = (c as { last_scraped_at?: string | null }).last_scraped_at;
+                const daysSince = lastScraped ? ageInDays(lastScraped) : null;
+                const isStale = daysSince !== null && daysSince > STALE_DAYS_THRESHOLD;
+                const isFresh = daysSince !== null && daysSince <= 2;
+                const chipBg = isStale ? `${C.danger || '#ef4444'}18`
+                              : isFresh ? `${C.success || '#22c55e'}18`
+                              : C.s2;
+                const chipFg = isStale ? (C.danger || '#ef4444')
+                              : isFresh ? (C.success || '#22c55e')
+                              : C.t2;
+                const recencyLabel = daysSince === null
+                  ? (lang === 'zh' ? '未抓取' : 'no data')
+                  : daysSince === 0
+                    ? (lang === 'zh' ? '今天' : 'today')
+                    : (lang === 'zh' ? `${daysSince}天前` : `${daysSince}d ago`);
+                return (
+                  <span key={c.id || c.brand_name} title={
+                    lastScraped
+                      ? `${c.brand_name} — ${lang === 'zh' ? '最近抓取于' : 'last scraped'} ${new Date(lastScraped).toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-US')}`
+                      : `${c.brand_name} — ${lang === 'zh' ? '尚未抓取' : 'not yet scraped'}`
+                  } style={{
+                    background: chipBg, padding: '2px 8px', borderRadius: 12,
+                    fontSize: 11, color: chipFg,
+                    display: 'inline-flex', gap: 5, alignItems: 'baseline',
+                  }}>
+                    <span>{c.brand_name}</span>
+                    <span style={{ fontSize: 10, opacity: 0.85 }}>· {recencyLabel}</span>
+                  </span>
+                );
+              })}
             </div>
           )}
           <button

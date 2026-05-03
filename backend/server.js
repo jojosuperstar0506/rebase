@@ -663,8 +663,25 @@ app.get('/api/ci/competitors', async (req, res) => {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
 
+    // #18: include last_scraped_at + last_scrape_platform per competitor.
+    // Surfaces per-brand data freshness on the Brief workspace context
+    // block (Songmont scraped 12d ago, CASSILE 2d ago, etc.). Lateral
+    // join keeps this O(N competitors) rather than scanning the whole
+    // scraped_brand_profiles table for every row.
     const { rows } = await pool.query(
-      'SELECT * FROM workspace_competitors WHERE workspace_id = $1 ORDER BY tier, brand_name',
+      `SELECT wc.*,
+              latest_scrape.scraped_at  AS last_scraped_at,
+              latest_scrape.platform    AS last_scrape_platform
+         FROM workspace_competitors wc
+    LEFT JOIN LATERAL (
+                SELECT sbp.scraped_at, sbp.platform
+                  FROM scraped_brand_profiles sbp
+                 WHERE sbp.brand_name = wc.brand_name
+                 ORDER BY sbp.scraped_at DESC
+                 LIMIT 1
+             ) latest_scrape ON TRUE
+        WHERE wc.workspace_id = $1
+        ORDER BY wc.tier, wc.brand_name`,
       [workspaceId]
     );
 
@@ -1250,18 +1267,33 @@ app.get('/api/ci/analytics', async (req, res) => {
       };
     });
 
-    // All metric scores (latest per competitor × metric).
+    // All metric scores (latest per competitor × metric). Now also returns
+    // raw_inputs so the UI can render a "Why this score?" expandable that
+    // shows the underlying numbers (growth rates, voice share, platform
+    // breakdown, etc.) — closes Joanna's gap analysis #16 (backend rich,
+    // frontend renders thin).
     const { rows: scoreRows } = await pool.query(
       `SELECT DISTINCT ON (competitor_name, metric_type)
-              competitor_name, metric_type, score
+              competitor_name, metric_type, score, raw_inputs
          FROM analysis_results
         WHERE workspace_id = $1
         ORDER BY competitor_name, metric_type, analyzed_at DESC`,
       [workspaceId]
     );
     const scoresByMetric = {};
+    const rawByMetric = {};
     for (const r of scoreRows) {
       (scoresByMetric[r.metric_type] ||= {})[r.competitor_name] = parseFloat(r.score);
+      // raw_inputs is JSONB — node-postgres returns it pre-parsed when the
+      // column type is jsonb, but defensively handle the string case for
+      // older rows or legacy serializers.
+      let raw = r.raw_inputs;
+      if (typeof raw === 'string') {
+        try { raw = JSON.parse(raw); } catch { raw = null; }
+      }
+      if (raw && typeof raw === 'object') {
+        (rawByMetric[r.metric_type] ||= {})[r.competitor_name] = raw;
+      }
     }
 
     // Project METRIC_METADATA × scoresByMetric into FullMetric[] shape.
@@ -1275,6 +1307,7 @@ app.get('/api/ci/analytics', async (req, res) => {
       domain:      meta.domain,
       description: meta.description,
       scores:      scoresByMetric[meta.metric_key] || {},
+      raw_inputs:  rawByMetric[meta.metric_key] || {}, // {brand_name: {...}}
       delta:       null, // V1: no per-week delta yet; honest null
     }));
 

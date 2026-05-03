@@ -300,6 +300,15 @@ export interface FullMetric {
   domain: MetricDomain;
   /** Per-brand score. Keyed by brand_name; 'own' is a reserved key for the user's brand. */
   scores: Record<string, number>;
+  /**
+   * Per-brand raw inputs that fed into the score (growth rates, voice
+   * share, platform breakdown, etc.). Powers the "Why this score?"
+   * expandable on each metric card. Shape varies per metric — frontend
+   * renders generically as key-value pairs. May be empty when the
+   * pipeline didn't store inputs (legacy rows) or when the API client
+   * is the mock layer.
+   */
+  raw_inputs?: Record<string, Record<string, unknown>>;
   /** Direction of change vs last week. Null for week 1. */
   delta: number | null;
   /** One-line description of what this metric measures. */
