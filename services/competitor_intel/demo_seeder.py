@@ -699,7 +699,11 @@ def seed_demo_workspace(workspace_id, dry_run=False, override=False):
                 print(f"[demo] DRY-RUN — no writes performed.")
                 return
 
-            # 1. Update workspace identity to TORY BURCH
+            # 1. Update workspace identity to TORY BURCH + flag as demo.
+            # is_demo=TRUE locks the Settings UI from accidental edits
+            # during client screen-recordings (frontend reads this and
+            # disables add/remove competitor buttons + shows a curated
+            # banner). Real customer workspaces never have this set.
             cur.execute(
                 """
                 UPDATE workspaces
@@ -707,6 +711,7 @@ def seed_demo_workspace(workspace_id, dry_run=False, override=False):
                        brand_category = %s,
                        brand_price_range = %s::jsonb,
                        brand_platforms = %s::jsonb,
+                       is_demo = TRUE,
                        updated_at = NOW()
                  WHERE id = %s
                 """,
@@ -718,7 +723,7 @@ def seed_demo_workspace(workspace_id, dry_run=False, override=False):
                     workspace_id,
                 ),
             )
-            print(f"[demo] ✓ workspace identity updated → {DEMO_OWN_BRAND}")
+            print(f"[demo] ✓ workspace identity updated → {DEMO_OWN_BRAND} (is_demo=TRUE)")
 
             # 2. Reset existing CI data for this workspace.
             for tbl in [

@@ -105,6 +105,13 @@ export interface Workspace {
   brand_platforms: Record<string, string> | null;
   watchlist_count?: number;
   total_competitors?: number;
+  /**
+   * True for curated demo workspaces populated by demo_seeder.py.
+   * Frontend gates Settings interactions (add/remove competitors) on
+   * this so screen-recording demos can't be broken by accidental clicks.
+   * Default false; backend migration 009 added the column.
+   */
+  is_demo?: boolean;
 }
 
 export async function getWorkspace(): Promise<{ data: Workspace | null; source: 'api' | 'local' }> {
