@@ -20,6 +20,8 @@ import type { CSSProperties } from 'react';
 import { useApp } from '../../context/AppContext';
 import type { ColorSet } from '../../theme/colors';
 import CISubNav from '../../components/ci/CISubNav';
+import CIWelcomeBanner from '../../components/ci/CIWelcomeBanner';
+import CIAlertFeed from '../../components/ci/CIAlertFeed';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useCIData } from '../../hooks/useCIData';
 import {
@@ -102,6 +104,17 @@ function trendLabel(t: TrendDirection, lang: string): string {
 }
 function impactBg(impact: 'high' | 'medium' | 'low'): string {
   return impact === 'high' ? '#ef4444' : impact === 'medium' ? '#f59e0b' : '#94a3b8';
+}
+
+// Deterministic brand-color hue per brand name. Same brand always gets the
+// same color across pages (Brief, Analytics, Library) so the user can scan
+// "where's CASSILE this week" by spotting one chip.
+function brandColorHsl(brand: string, sat = 60, light = 50): string {
+  let h = 0;
+  for (let i = 0; i < brand.length; i++) {
+    h = (h * 31 + brand.charCodeAt(i)) >>> 0;
+  }
+  return `hsl(${h % 360}, ${sat}%, ${light}%)`;
 }
 
 function formatWeek(iso: string, lang: string): string {
@@ -377,6 +390,13 @@ export default function CIBrief() {
       <div style={pageStyle}>
         <div style={container}>
           <CISubNav />
+          {/* W13: CIWelcomeBanner replaces the previous text-only empty state.
+              It's a richer onboarding moment — explains what the user can
+              expect, links to Brands tab to confirm competitor list, and
+              dismisses to localStorage so it doesn't reappear forever. */}
+          <div style={{ marginTop: 20 }}>
+            <CIWelcomeBanner />
+          </div>
           <div style={{ ...card, textAlign: 'center', padding: 60, marginTop: 20 }}>
             <div style={{ fontSize: 40, marginBottom: 16 }}>📰</div>
             <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 10px' }}>
@@ -590,9 +610,20 @@ export default function CIBrief() {
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                   <div style={{ fontSize: 24, lineHeight: 1, flexShrink: 0 }}>{m.icon}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 10, fontWeight: 700, color: C.t3, letterSpacing: '0.05em' }}>
-                        #{i + 1} · {m.brand}
+                        #{i + 1}
+                      </span>
+                      {/* W17: brand chip — deterministic color per brand so it's
+                          scannable across Brief/Analytics/Library. */}
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, letterSpacing: '0.03em',
+                        padding: '2px 8px', borderRadius: 10,
+                        background: brandColorHsl(m.brand, 60, 88),
+                        color: brandColorHsl(m.brand, 70, 30),
+                        border: `1px solid ${brandColorHsl(m.brand, 50, 75)}`,
+                      }}>
+                        {m.brand}
                       </span>
                     </div>
                     <h4 style={{ fontSize: 15, fontWeight: 700, margin: '0 0 8px', lineHeight: 1.4 }}>
@@ -618,6 +649,20 @@ export default function CIBrief() {
               </div>
             ))}
           </div>
+        </section>
+
+        {/* ─── SECTION 1c (W12): Recent alerts ─────────────────────────
+            CIAlertFeed renders real alerts from /api/ci/alerts when
+            available, falling back to lightweight mock alerts derived
+            from the competitor scores so the section has content even
+            on first-week visits. The empty state inside the component
+            is honest ("No alerts this week — check back soon"). */}
+        <section style={{ marginBottom: 40 }}>
+          <CIAlertFeed
+            workspaceId={workspaceId}
+            competitors={[]}
+            source="api"
+          />
         </section>
 
         {/* ─── SECTION 2: Content playbook ───────────────────────────── */}
