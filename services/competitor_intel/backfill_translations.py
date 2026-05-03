@@ -23,8 +23,35 @@ Usage:
 
 import argparse
 import json
+import os
 import sys
 import traceback
+from pathlib import Path
+
+
+# ─── Load backend/.env BEFORE pipeline imports ──────────────────────────
+# Pipeline modules (narrative_pipeline) check for DEEPSEEK_API_KEY at
+# module-load time and raise if missing. The cron's run_daily_pipeline.sh
+# sources backend/.env via a bash loop before invoking python; this
+# mirrors that so the script works when run by hand too.
+def _load_dotenv():
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    env_path = repo_root / "backend" / ".env"
+    if not env_path.exists():
+        print(f"[WARN] {env_path} not found — relying on existing os.environ")
+        return
+    for raw in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        k = k.strip()
+        v = v.strip().strip('"').strip("'")
+        os.environ.setdefault(k, v)
+
+
+_load_dotenv()
+
 
 from .db_bridge import get_conn
 from .brand_positioning_pipeline import _translate_brief
