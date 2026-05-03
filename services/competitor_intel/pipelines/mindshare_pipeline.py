@@ -26,7 +26,7 @@ import argparse
 import json
 import sys
 import traceback
-from ..db_bridge import get_conn
+from ..db_bridge import get_conn, VALID_PROFILE_FILTER
 
 METRIC_VERSION = "v1.2"
 
@@ -56,10 +56,10 @@ def run_for_workspace(workspace_id: str):
             for comp in competitors:
                 brand = comp["brand_name"]
                 cur.execute(
-                    """
+                    f"""
                     SELECT engagement_metrics, content_metrics, raw_dimensions
                     FROM scraped_brand_profiles
-                    WHERE brand_name = %s
+                    WHERE brand_name = %s AND {VALID_PROFILE_FILTER}
                     ORDER BY scraped_at DESC LIMIT 1
                     """,
                     (brand,),

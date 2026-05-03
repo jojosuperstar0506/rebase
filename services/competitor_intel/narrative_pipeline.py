@@ -19,7 +19,7 @@ import sys
 
 import httpx
 
-from .db_bridge import get_conn
+from .db_bridge import get_conn, VALID_PROFILE_FILTER
 
 
 # ---------------------------------------------------------------------------
@@ -260,13 +260,16 @@ def run_narrative_for_workspace(workspace_id: str):
                 print(f"[INFO] No competitors for workspace {workspace_id}")
                 return
 
-            # Get latest profiles for enrichment
+            # Get latest profiles for enrichment — VALID_PROFILE_FILTER skips
+            # auth-walled / silent-zero scrape rows that would feed the
+            # narrative LLM with false "this brand is dead" signals (W3 fix).
             competitors_data = []
             for comp in competitors:
                 cur.execute(
-                    """
+                    f"""
                     SELECT * FROM scraped_brand_profiles
-                    WHERE brand_name = %s ORDER BY scraped_at DESC LIMIT 1
+                    WHERE brand_name = %s AND {VALID_PROFILE_FILTER}
+                    ORDER BY scraped_at DESC LIMIT 1
                 """,
                     (comp["brand_name"],),
                 )
@@ -302,7 +305,15 @@ def run_narrative_for_workspace(workspace_id: str):
                         comp_data,
                     )
 
-                    # Store per-brand insight in analysis_results
+                    # Store per-brand insight in analysis_results.
+                    # NOTE (W2 audit, 2026-05-03): score=0 is INTENTIONAL —
+                    # brand_insight is a narrative metric, not a numeric one.
+                    # The real content lives in `ai_narrative`. Frontend
+                    # CIAnalytics renders it via the "AI brand insights"
+                    # panel (PR #29), NOT in the metric grid. If you see
+                    # this metric showing as "0/100" in the UI, that's a
+                    # frontend display bug — fix the renderer, don't change
+                    # the score value here.
                     cur.execute(
                         """
                         INSERT INTO analysis_results

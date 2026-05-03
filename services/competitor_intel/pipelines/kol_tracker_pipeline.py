@@ -1,6 +1,18 @@
 """
 KOL strategy pipeline (metric_type: "kol_strategy").
 
+⚠️ KNOWN DARK METRIC AS OF 2026-05-03 (W2 audit):
+This pipeline emits 0 across every brand because its inputs
+(`raw_dimensions.d4.note_authors`, `raw_dimensions.d4.kols`,
+`raw_dimensions.d3.top_notes`) are empty for every brand in the DB.
+
+Root cause is NOT in this pipeline. Same as design_profile: the XHS
+note-feed enrichment that would populate KOL data is scaffolded but
+not running — disabled to reduce nav budget after the 2026-04-22 ban.
+Real fix: enable note-feed enrichment after burner account (J2) ships.
+
+Frontend handles this honestly via "Coverage pending" badge (PR #29).
+
 Measures a brand's influencer/KOL ecosystem effectiveness using data
 already collected by the enhanced XHS scraper:
   - raw_dimensions.d4.note_authors: authors with >10K followers who posted

@@ -43,7 +43,7 @@ import sys
 import traceback
 from ..db_bridge import get_conn
 
-METRIC_VERSION = "v1.1"  # bumped: now respects raw_inputs.reason for n/a detection
+METRIC_VERSION = "v1.2"  # bumped: idempotent insert (W4) — same-day reruns no longer duplicate
 
 # Domain membership. Keys must match the metric_type strings written by
 # existing pipelines. `wtp` comes from scoring_pipeline, not from a
@@ -222,6 +222,26 @@ def run_for_workspace(workspace_id: str) -> int:
                 rollups = _aggregate(metric_data)
 
                 for domain_type, payload in rollups.items():
+                    # ─── Idempotent same-day insert (W4) ─────────────────
+                    # Without this, each "Run analysis" click adds a new
+                    # row, so multi-click days end up with N duplicates per
+                    # (workspace, brand, metric, version). Joanna's
+                    # 2026-05-02 cleanup deleted 334 such rows. Pattern:
+                    # DELETE today's rows for this exact key, then INSERT.
+                    # Yesterday's rows + earlier history stay intact, so
+                    # downstream WoW math still has prior weeks to reference.
+                    # No schema migration needed — works on the existing table.
+                    cur.execute(
+                        """
+                        DELETE FROM analysis_results
+                        WHERE workspace_id = %s
+                          AND competitor_name = %s
+                          AND metric_type = %s
+                          AND metric_version = %s
+                          AND analyzed_at::date = CURRENT_DATE
+                        """,
+                        (workspace_id, brand, domain_type, METRIC_VERSION),
+                    )
                     cur.execute(
                         """
                         INSERT INTO analysis_results

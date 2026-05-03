@@ -42,6 +42,7 @@ Usage:
 
 import argparse
 import json
+import re
 import sys
 import traceback
 from datetime import date, datetime, timedelta, timezone
@@ -50,7 +51,7 @@ from typing import Optional
 from .db_bridge import get_conn
 from .narrative_pipeline import LLM_CONFIG, _call_llm
 
-METRIC_VERSION = "v1.0"
+METRIC_VERSION = "v1.1"  # bumped: numeric-coherence coercer drops moves with hallucinated specifics
 
 DOMAIN_KEYS = ("consumer_domain", "product_domain", "marketing_domain")
 DOMAIN_LABELS_ZH = {
@@ -296,6 +297,94 @@ def _coerce_move(m: dict, idx: int, allowed_brands: set, own_brand: str) -> Opti
     }
 
 
+# ─── Numeric-coherence coercer ───────────────────────────────────────────────
+# DeepSeek occasionally fabricates specific numbers in move text — e.g.
+# "from 82 to 72" when 82 doesn't appear anywhere in the source data, or
+# "Songmont 心智 -13" when the actual delta is -25. The verdict + moves
+# array gets parsed first; THEN we audit each move's prose against the
+# set of numbers the LLM was actually given. Moves with unsupported
+# specifics are dropped — losing one move beats shipping a wrong number,
+# because customer trust dies on the first obvious factual error.
+#
+# Tolerance: ±1 covers LLM rounding artifacts (79.5 → 80 vs 79 in prose)
+# without masking 2-point fabrications (e.g. Joanna's "from 82 to 72" when
+# the real prev was 80). Wider tolerances let bad numbers slip through.
+#
+# _PROSE_WHITELIST is intentionally tiny — only really-round numbers used
+# for emphasis (50, 75, 100). Smaller round numbers (10, 20, 25) collide
+# with real delta values and would let hallucinated deltas escape.
+
+_NUMBER_PATTERN = re.compile(r'(?<![A-Za-z\d])([+\-]?\d{2,3})(?![A-Za-z\d])')
+
+# Drop a move if it has THIS MANY unsupported numbers. 1 is strict but
+# matches Joanna's example (single bad citation). Bump to 2 if the
+# coercer becomes too aggressive in production.
+_DROP_THRESHOLD_UNSUPPORTED = 1
+
+_PROSE_WHITELIST = frozenset({50, 75, 100})
+
+
+def _collect_supported_numbers(scores_now: dict, scores_prev: dict) -> set:
+    """
+    Build the set of integer values the LLM was actually shown in the prompt.
+    Includes: rounded current scores, rounded previous scores, rounded deltas
+    (signed and absolute). Anything else the LLM cites is suspicious.
+    """
+    supported: set = set()
+    for brand_scores in scores_now.values():
+        for v in brand_scores.values():
+            if v is not None:
+                supported.add(int(round(v)))
+    for brand_scores in scores_prev.values():
+        for v in brand_scores.values():
+            if v is not None:
+                supported.add(int(round(v)))
+    # Add deltas the LLM is shown in the competitor block.
+    for brand, now_scores in scores_now.items():
+        prev_scores = scores_prev.get(brand, {})
+        for k, now_v in now_scores.items():
+            if now_v is None:
+                continue
+            prev_v = prev_scores.get(k)
+            if prev_v is None:
+                continue
+            d = int(round(now_v - prev_v))
+            supported.add(d)
+            supported.add(abs(d))
+    # Whitelist common round numbers used in prose (50%, 100%, etc.)
+    supported.update(_PROSE_WHITELIST)
+    return supported
+
+
+def _audit_move_numbers(move: dict, supported: set, tolerance: int = 1) -> list:
+    """
+    Return the list of unsupported numeric strings cited in this move's prose.
+    A number is supported if it (or its absolute value) is within `tolerance`
+    of any value in `supported`. Whitelisted round numbers always pass.
+    """
+    text_parts = [
+        move.get("headline") or "",
+        move.get("detail") or "",
+        move.get("so_what") or "",
+        move.get("action") or "",
+    ]
+    text = " | ".join(text_parts)
+    unsupported = []
+    for raw in _NUMBER_PATTERN.findall(text):
+        try:
+            n = int(raw)
+        except ValueError:
+            continue
+        # Skip year-like / count-like 4+ digit values handled by regex bounds anyway.
+        # Check direct + tolerance + signed-abs-tolerance match.
+        if any(abs(n - s) <= tolerance for s in supported):
+            continue
+        if any(abs(abs(n) - s) <= tolerance for s in supported):
+            continue
+        unsupported.append(raw)
+    return unsupported
+
+
 def _parse_brief_json(raw: str, allowed_brands: set, own_brand: str) -> Optional[dict]:
     try:
         data = json.loads(_strip_markdown_fence(raw))
@@ -427,6 +516,25 @@ def run_for_workspace(workspace_id: str, target_week: Optional[date] = None) -> 
                 # Force trend=steady on baseline weeks so the UI doesn't show
                 # a green/red arrow for a delta we can't honestly support.
                 parsed["verdict"]["trend"] = "steady"
+
+            # ─── Numeric-coherence coercer (W1) ──────────────────────────
+            # Drop moves whose prose cites numbers not in the source data.
+            # Better to ship 1 move with verified numbers than 3 with one
+            # fabricated specific. Logged for monitoring + prompt iteration.
+            supported_numbers = _collect_supported_numbers(scores_now, scores_prev)
+            kept_moves = []
+            for m in parsed["moves"]:
+                unsupported = _audit_move_numbers(m, supported_numbers)
+                if len(unsupported) >= _DROP_THRESHOLD_UNSUPPORTED:
+                    print(f"  [DROP] move {m.get('id')!r} cites unsupported "
+                          f"number(s) {unsupported} — not in source scores")
+                    continue
+                kept_moves.append(m)
+            dropped = len(parsed["moves"]) - len(kept_moves)
+            if dropped:
+                print(f"  [COERCER] dropped {dropped}/{len(parsed['moves'])} moves "
+                      f"for numeric-coherence violations")
+            parsed["moves"] = kept_moves
 
             _upsert_brief(cur, workspace_id, week_of, parsed)
             conn.commit()
