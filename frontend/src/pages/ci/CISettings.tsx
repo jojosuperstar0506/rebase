@@ -36,6 +36,26 @@ function looksLikePlatformId(s: string): boolean {
   return false;
 }
 
+// Inverse of the parser in backend/server.js — given a stored platform_id
+// (which is what we end up with for badly-named legacy rows), rebuild a URL
+// that the backend's POST /api/ci/parse-link can chew on so its DB lookup +
+// registry + og:title chain has a chance of recovering the real name. Best
+// guess per platform; returns null if we can't form a reasonable URL.
+function reconstructPlatformUrl(platform: string, identifier: string): string | null {
+  if (!platform || !identifier) return null;
+  switch (platform) {
+    case 'xhs':    return `https://www.xiaohongshu.com/user/profile/${identifier}`;
+    case 'douyin': return `https://www.douyin.com/user/${identifier}`;
+    case 'taobao':
+      // Numeric → shop search; otherwise treat as subdomain
+      if (/^\d+$/.test(identifier)) return `https://shop.taobao.com/?id=${identifier}`;
+      return `https://${identifier}.taobao.com`;
+    case 'tmall':  return `https://${identifier}.tmall.com`;
+    case 'jd':     return `https://mall.jd.com/index-${identifier}.html`;
+    default: return null;
+  }
+}
+
 const PLATFORM_COLORS: Record<string, string> = {
   xhs: '#ff2442',
   taobao: '#ff6a00',
@@ -858,6 +878,8 @@ function CompetitorList({ C, lang, competitors, onChange, isMobile }: {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [editError, setEditError] = useState('');
+  const [resolving, setResolving] = useState(false);
+  const [resolveResult, setResolveResult] = useState<{ fixed: number; remaining: number } | null>(null);
 
   function remove(id: string) {
     onChange(competitors.filter(c => c.id !== id));
@@ -888,6 +910,56 @@ function CompetitorList({ C, lang, competitors, onChange, isMobile }: {
     cancelEdit();
   }
 
+  // Bulk-resolve every row whose brand_name looks like a platform id, by
+  // reconstructing a URL from the stored platform_ids and asking the backend
+  // parse-link to do its DB → registry → og:title chain. Each platform_id
+  // is tried in turn; the first real name wins. Cap concurrency to 4 so a
+  // user with 50 bad rows doesn't blast the server.
+  async function tryAutoResolve() {
+    setResolving(true);
+    setResolveResult(null);
+    const targets = competitors.filter(c => looksLikePlatformId(c.brand_name));
+    const updates = new Map<string, string>();
+
+    async function resolveOne(c: CICompetitor) {
+      const ids = Object.entries(c.platform_ids || {});
+      for (const [platform, identifier] of ids) {
+        const url = reconstructPlatformUrl(platform, identifier);
+        if (!url) continue;
+        try {
+          const r = await parseLink(url);
+          const candidate = r?.parsed ? r.brand_name?.trim() : '';
+          if (candidate && !looksLikePlatformId(candidate)) {
+            updates.set(c.id, candidate);
+            return;
+          }
+        } catch { /* try next platform_id */ }
+      }
+    }
+
+    // Run with bounded concurrency
+    const queue = [...targets];
+    const workers: Promise<void>[] = [];
+    const concurrency = Math.min(4, queue.length);
+    for (let i = 0; i < concurrency; i++) {
+      workers.push((async () => {
+        while (queue.length) {
+          const c = queue.shift();
+          if (c) await resolveOne(c);
+        }
+      })());
+    }
+    await Promise.all(workers);
+
+    if (updates.size > 0) {
+      onChange(competitors.map(c => updates.has(c.id) ? { ...c, brand_name: updates.get(c.id)! } : c));
+    }
+    setResolving(false);
+    setResolveResult({ fixed: updates.size, remaining: targets.length - updates.size });
+    // Auto-clear the result toast after a few seconds
+    setTimeout(() => setResolveResult(null), 6000);
+  }
+
   if (competitors.length === 0) {
     return (
       <p style={{ color: C.t3, fontSize: 14, margin: '12px 0 0' }}>
@@ -905,18 +977,56 @@ function CompetitorList({ C, lang, competitors, onChange, isMobile }: {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       {badRows.length > 0 && (
         <div style={{
-          padding: '10px 14px', background: `${C.danger}10`,
+          padding: '12px 14px', background: `${C.danger}10`,
           border: `1px solid ${C.danger}44`, borderRadius: 8,
           fontSize: 12, color: C.t2, lineHeight: 1.6,
         }}>
-          <strong style={{ color: C.danger }}>
+          <div>
+            <strong style={{ color: C.danger }}>
+              {lang === 'zh'
+                ? `${badRows.length} 个竞品看起来用了平台 ID 而不是品牌名。`
+                : `${badRows.length} competitor${badRows.length === 1 ? '' : 's'} appear to use a platform ID instead of a brand name.`}
+            </strong>{' '}
             {lang === 'zh'
-              ? `${badRows.length} 个竞品看起来用了平台 ID 而不是品牌名。`
-              : `${badRows.length} competitor${badRows.length === 1 ? '' : 's'} appear to use a platform ID instead of a brand name.`}
-          </strong>{' '}
-          {lang === 'zh'
-            ? '点击竞品行的「✎」按钮重命名 — 否则分析将无法匹配品牌数据。'
-            : 'Click the ✎ button on each row to rename — otherwise analytics can\'t match brand data.'}
+              ? '没有真品牌名，分析无法匹配数据。点击下方按钮自动从平台抓取真名，剩余的可点「✎」手动改。'
+              : 'Without a real brand name, analytics can\'t match data. Try the auto-resolve below, or click ✎ on each row to rename manually.'}
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={tryAutoResolve}
+              disabled={resolving}
+              style={{
+                background: resolving ? C.t3 : C.ac, border: 'none', borderRadius: 6,
+                padding: '6px 14px', color: '#fff', fontSize: 12, fontWeight: 600,
+                cursor: resolving ? 'default' : 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              {resolving && (
+                <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" style={{ animation: 'spin 1s linear infinite' }}>
+                  <circle cx={12} cy={12} r={10} strokeDasharray="31.4" strokeDashoffset="10" />
+                </svg>
+              )}
+              {resolving
+                ? (lang === 'zh' ? '正在解析…' : 'Resolving…')
+                : (lang === 'zh' ? `✨ 自动解析 ${badRows.length} 个名称` : `✨ Auto-resolve ${badRows.length} name${badRows.length === 1 ? '' : 's'}`)}
+            </button>
+            {resolveResult && (
+              <span style={{
+                fontSize: 11, color: resolveResult.fixed > 0 ? C.success : C.t3,
+                fontWeight: 600,
+              }}>
+                {resolveResult.fixed > 0 && (lang === 'zh'
+                  ? `✓ 已修复 ${resolveResult.fixed} 个`
+                  : `✓ Fixed ${resolveResult.fixed}`)}
+                {resolveResult.fixed > 0 && resolveResult.remaining > 0 && ' · '}
+                {resolveResult.remaining > 0 && (lang === 'zh'
+                  ? `${resolveResult.remaining} 个无法解析（请手动重命名）`
+                  : `${resolveResult.remaining} couldn\'t be resolved (rename manually)`)}
+                {resolveResult.fixed === 0 && resolveResult.remaining === 0 && (lang === 'zh' ? '无可解析行' : 'Nothing to resolve')}
+              </span>
+            )}
+          </div>
         </div>
       )}
 
