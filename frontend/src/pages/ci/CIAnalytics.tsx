@@ -280,7 +280,18 @@ export default function CIAnalytics() {
                 data={indices}
               />
             ))}
-            <div style={{ marginTop: 20 }}>
+
+            {/* Scatter plot — its own section header so customers don't miss
+                this 2-axis comparison view sitting underneath the pillars. */}
+            <div style={{ marginTop: 28 }}>
+              <SectionHeader
+                title={lang === 'zh' ? '比较视图 · 任选两项指数对比' : 'Comparison View · Pick any two indices'}
+                subtitle={lang === 'zh'
+                  ? '将任意两项指数作为 X 轴和 Y 轴，看自己与竞品在矩阵中的相对位置。'
+                  : 'Plot own brand vs competitors across any two of the 12 indices as X / Y axes.'}
+                count={null}
+                C={C}
+              />
               <IndexScatterPlot data={indices} />
             </div>
           </section>
