@@ -260,12 +260,13 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
   competitors: CICompetitor[];
   onAdd: (c: CICompetitor) => void;
 }) {
-  // Type Name + Paste Link tabs are temporarily disabled — AI Suggestions
-  // is the canonical onboarding path until the backend's link parser can
-  // reliably extract names past XHS login walls (tracked: TODO.md F9 /
-  // ROADMAP TASK-46). The tab state + Type-Name and Paste-Link state below
-  // is left intact so we can flip SHOW_MANUAL_TABS back on without rework.
-  const SHOW_MANUAL_TABS = false;
+  // All three tabs (Type Name / Paste Link / AI Suggestions) are exposed.
+  // The earlier setting hid Type Name + Paste Link in favour of AI-only
+  // onboarding, but that left users stranded when the AI tab gated on
+  // workspace.brand_name (which is stale across CI page renders — see fix
+  // in CISettings parent below). Restoring all three gives the user a
+  // working manual fallback even when AI is loading or empty.
+  const SHOW_MANUAL_TABS = true;
   const [activeTab, setActiveTab] = useState<'name' | 'link' | 'ai'>(SHOW_MANUAL_TABS ? 'name' : 'ai');
   const [error, setError] = useState('');
   const watchlistCount = competitors.filter(c => c.tier === 'watchlist').length;
@@ -1617,6 +1618,23 @@ export default function CISettings() {
   // Brief skeleton on first mount so the page feels consistent with other CI pages
   const [ready, setReady] = useState(false);
   useEffect(() => { const timer = setTimeout(() => setReady(true), 200); return () => clearTimeout(timer); }, []);
+
+  // Force a re-render whenever workspace/competitor storage changes so child
+  // components that read getCIWorkspace() / getCICompetitors() synchronously
+  // (notably AddCompetitorSection, which gates the AI tab on workspace.brand_name)
+  // pick up fresh values after the user saves brand profile or adds a competitor.
+  // Without this, BrandProfileSection's notifyCIUpdate() event was firing but
+  // CISettings + its children never rebound — so AI suggestions stayed stuck on
+  // "set up brand profile above" even after a successful save.
+  const [, forceRefresh] = useState(0);
+  useEffect(() => {
+    const handler = () => {
+      forceRefresh(n => n + 1);
+      setCompetitors(getCICompetitors());
+    };
+    window.addEventListener('ci-data-updated', handler);
+    return () => window.removeEventListener('ci-data-updated', handler);
+  }, []);
 
   if (!ready) return <CISettingsSkeleton />;
 
