@@ -2,15 +2,18 @@
 
 > Single source of truth for product progress. Pull this up every session.
 
-**Last updated:** 2026-05-02
+**Last updated:** 2026-05-04
 
 > **In-flight reference docs (read first if you're catching up):**
-> - 🔒 **`SPEC-COMPOSITE-INDICES-V1.md`** — **THE source of truth for the 3-pillar / 12-index framework** (locked 2026-05-03, owner: William)
-> - `WILL-TO-JOANNA-2026-04-30.md` — William's Day 1 + Day 2 + lifecycle handoff
+> - 📋 **`WILLIAM-TO-JOANNA-2026-05-04.md`** — **William's most recent handoff: V1 trust polish + V1.5 UI shipped to main; pushback on composite indices V1.5; 3 options for next sequence**
+> - 🔒 **`SPEC-COMPOSITE-INDICES-V1.md`** — 3-pillar / 12-index spec; **§10 answers locked 2026-05-04**; implementation deferred pending snapshot table + customer signal
+> - `HANDOFF-FROM-PREV-SESSION-2026-05-04.md` — Will's pickup doc for next session
+> - `OPEN-TODOS-FOR-JOANNA-2026-05-03.md` — Will's coverage-audit matrix
+> - `WILL-TO-JOANNA-2026-04-30.md` — Will's Day 1 + Day 2 + lifecycle handoff (prior)
 > - `WILLIAM-HANDOFF-2026-04-23.md` — Joanna's scraper hardening handoff to William
-> - `DATA-FLOW-AND-METRICS-ANALYSIS-2026-05-02.md` — Full pipeline trace + 3 critical data-quality fixes
-> - `FRONTEND-BACKEND-GAP-ANALYSIS-2026-05-02.md` — Endpoint inventory + workplan update + decisions for next sync
-> - `METRIC-LOGIC-INVESTIGATION-2026-05-02.md` — root-cause investigation (partly superseded by indices spec)
+> - `DATA-FLOW-AND-METRICS-ANALYSIS-2026-05-02.md` — pipeline trace + 3 data-quality issues (all resolved by Will's W1-W4)
+> - `FRONTEND-BACKEND-GAP-ANALYSIS-2026-05-02.md` — endpoint inventory + 22-item workplan (mostly resolved)
+> - `METRIC-LOGIC-INVESTIGATION-2026-05-02.md` — dark-metric root causes (partly superseded by indices spec)
 > - `SPEC-COMPARISON-SETS-V2.md` — Comparison sets + auto-segmentation spec (V2 work, owner: William)
 
 ---
@@ -57,7 +60,7 @@ Converts prospects to believers               Proves intelligence layer works on
 
 ---
 
-## Where We Are Now (as of 2026-05-02)
+## Where We Are Now (as of 2026-05-04)
 
 | Stream | Owner | Status | Layer | Notes |
 |--------|-------|--------|-------|-------|
@@ -67,16 +70,22 @@ Converts prospects to believers               Proves intelligence layer works on
 | Product Structure Agent (ERP intelligence demo) | Joanna | ✅ v0.1 Done | 2 | 3-file ERP export analysis, Streamlit UI |
 | 3-screen visualization dashboard | Joanna | ✅ Done | 2 | Department map, before/after toggle, ROI summary — on Vercel |
 | **OMI Competitive Intelligence v2** | **Joanna** | **✅ Done** | **3** | **Full pipeline: scrape → temporal → scoring → narrative → dashboard → WeChat delivery** |
-| **CI vFinal — Brief / Analytics / Library** | **William** | **✅ Live (PR #26 merged 2026-04-30)** | **—** | **Day 1 + Day 2 + lifecycle: 7 LLM pipelines, 4 backend endpoints, 3 CI pages render real DeepSeek output. End-to-end loop in 12s on Songmont workspace** |
-| **Scraper hardening + central rules YAML + endpoint gate** | **Joanna** | **✅ Live (PR #25 merged 2026-04-30)** | **—** | **XHS scraper: account picker via verified ranking, 万-aware count parser, auth-wall detection. `scraping_rules.yml` + loader. `/api/ci/scrape` gated by SCRAPER_ENABLED** |
-| Frontend polish (PR #27) | Joanna | 🟡 Open — awaiting merge | — | Real `runAnalysis` polling on Refresh, relative-time freshness, stale-data banner, workspace context block, AI-deltas disclaimer |
-| Data-quality cleanup (DB) | Joanna | ✅ Done 2026-05-02 | — | Deleted 5 buggy zero-follower scrape rows + 334 duplicate analysis_results (-42%) |
+| **CI vFinal — Brief / Analytics / Library** | **William** | **✅ Live** | **—** | **PR #26: Day 1 + Day 2 + lifecycle. 7 LLM pipelines, 4 backend endpoints, 3 CI pages render real DeepSeek output** |
+| **Scraper hardening + central rules YAML + endpoint gate** | **Joanna** | **✅ Live** | **—** | **PR #25: XHS scraper hardened, `scraping_rules.yml`, `/api/ci/scrape` gated** |
+| Frontend polish (PR #27) | Joanna | ✅ Live | — | runAnalysis polling, relative-time freshness, stale banner, workspace context, AI-deltas disclaimer |
+| UI bugfixes (PR #29) | Parallel Claude | ✅ Live | — | Workspace switcher UI, brand-link parser, brand_insight panel, Coverage-pending pills, refetch loop fix |
+| Data-quality cleanup (DB) | Joanna | ✅ Done | — | Deleted 5 buggy zero-follower scrape rows + 334 duplicate analysis_results (-42%) |
+| **V1 Trust Polish** (PRs #30, #31) | **William** | **✅ Live** | — | **W1-W8 complete: numeric coercer (v1.1), zero-follower SQL guard, UPSERT in domain_aggregation (v1.2), admin pending-scrapes tool, GET /workspaces, POST/PATCH split, English i18n audit (2 real bugs fixed)** |
+| **V1.5 UI Polish** (PRs #32, #33, #34) | **William** | **✅ Live** | — | **CIAlertFeed mounted, CIWelcomeBanner empty state, raw_inputs "Why this score?" disclosure, brand chip + cross-link to Analytics, per-brand scrape recency, ⓘ pill on priority cards, own-brand placeholder, auto-email invite codes, workspace switcher hydration, narrative `--brands-only` flag, WTP `cap_hit` flag** |
+| Composite Indices V1.5 spec | Joanna → William | 📋 Spec locked (§10 answers locked 2026-05-04); **implementation paused** | — | Pending: (1) snapshot table foundation, (2) 3-5 SMB customer signal. See WILLIAM-TO-JOANNA-2026-05-04 §4. |
+| **Snapshot history table** | William | 📋 Recommended next | — | `analysis_history` table → unblocks real WoW deltas + 8-week sparklines. Foundation for indices, Trend Capture, sustained signal display. ETA TBD. |
 | FRD (functional requirements) | Joanna | In progress | All | Defining overall product features |
-| AI Intake Agent (Dify build) | William | TODO | 2 | Next: bring prompt architecture to life in Dify |
-| XHS Virtual Employee (Joanna VE) | Joanna | TODO | 3 | Next: one-button XHS content creator |
+| AI Intake Agent (Dify build) | William | TODO | 2 | Bring prompt architecture to life in Dify |
+| XHS Virtual Employee (Joanna VE) | Joanna | TODO | 3 | One-button XHS content creator |
 | ERP connector research | William | TODO | 2-3 | Kingdee/QuickBooks API assessment |
-| Comparison Sets + Auto-Segmentation | William | 📋 Spec ready (`SPEC-COMPARISON-SETS-V2.md`) | 3 | V2 work, ~6-day sprint. Allows comparing OMI vs international/value/国潮 segments separately |
-| B0 — burner XHS account for fresh scraping | Joanna | 🔴 Blocked / pending | — | Personal XHS account banned 2026-04-22 by anti-bot. Need fresh SIM + 2-3 day pre-warm before any further scraping |
+| Comparison Sets + Auto-Segmentation | William | 📋 Spec ready (`SPEC-COMPARISON-SETS-V2.md`) | 3 | Sequence after snapshot + customer signal |
+| B0 — burner XHS account | Joanna | 🔴 Blocked / pending | — | Personal XHS account banned 2026-04-22; need fresh SIM + manual pre-warm. **Blocks dark metrics, merchant scrapers, fresh-data refresh** |
+| J5 — 3-5 SMB customer outreach | Joanna | 🔴 Pending | — | Drives the indices scope decision per Will's pushback |
 
 ### 🔴 Only One Blocker Remaining
 
@@ -90,6 +99,31 @@ The platform works out of the box with built-in defaults — no Vercel env vars 
 - `RESEND_API_KEY` + `NOTIFICATION_EMAIL` — to receive onboarding application emails in your inbox
 - `ACCESS_CODE` — change from the default `rebase2026` to a custom invite code
 - `VITE_ADMIN_PASSWORD` — change from default `rebase-admin-2026` before sharing with more admins
+
+---
+
+## 🚀 CI vFinal — Current Focus Snapshot
+
+**Product maturity (no timelines, just stages):**
+
+| Stage | Status | What it covers |
+|---|---|---|
+| **V1 Launchable** | ✅ Live on `main` | Brief/Analytics/Library on real DeepSeek data; Songmont as canonical demo |
+| **V1 Trust Polish** | ✅ Live on `main` | Numeric coercer, zero-follower guard, UPSERT, admin pending-scrapes, workspace endpoints, English i18n |
+| **V1.5 UI Polish** | ✅ Live on `main` (~85%) | Alert feed mounted, welcome banner, raw_inputs disclosure, brand chips + cross-links, per-brand recency, ⓘ pills, auto-email invites, switcher hydration |
+| **V1.5 Composite Indices** | ⏸ Paused | Spec locked; impl deferred until snapshot table + customer signal |
+| **Snapshot History (next big lift)** | 📋 Will's recommended next | `analysis_history` table → real WoW deltas + sparklines. Foundation for indices. |
+| **V2 Comparison Sets** | 📋 Spec ready | After snapshot + customer signal |
+| **V2 Merchant scrapers** | 🔴 Blocked on B0 burner | 抖店 / 品牌号 / 千牛 |
+| **V3 Customer installer** | 🔴 Queued | One-button Mac/Windows installer for self-serve onboarding |
+
+### Sequence locked 2026-05-04 (per Will's pushback)
+
+1. **Will: ship `analysis_history` snapshot table** (Will's #21 — foundation for everything else)
+2. **Joanna: J1 burner XHS account** (procurement + manual pre-warm — unblocks fresh data, dark metrics, merchant scrapers)
+3. **Joanna: J5 customer outreach** (3-5 SMB conversations to drive composite-indices scope decision)
+4. **In parallel:** Joanna verifies Will's V1.5 work on Vercel preview (§5 checklist in `WILLIAM-TO-JOANNA-2026-05-04.md`)
+5. **After snapshot + signal:** re-decide composite-indices scope. Spec is implementation-ready as written, with §10 answers locked. Trim Trend Capture for V2; consider trimming to high-confidence subset based on customer feedback.
 
 ---
 
@@ -495,6 +529,13 @@ Already built as Product Structure Agent. See Section 2C above.
 | 2026-04-01 | Auth model: shared `ACCESS_CODE` + JWT (30-day) | William | MVP decision — single master code for all approved users. Rotate by changing Vercel env var. Per-user codes deferred to when ECS has persistent DB. |
 | 2026-04-01 | Vercel serverless functions as API proxy layer | William | `frontend/api/` handles onboarding, auth, admin — proxies to ECS when configured, falls back to email notifications otherwise. Zero-config fallback means platform works before ECS routes are built. |
 | 2026-04-01 | All pages now use `AppContext` `C.*` tokens | William | Eliminated all hardcoded dark colors. Light/dark mode works across every page including XhsWarroom and MarketIntelligence which previously had hardcoded `#0c0c14` etc. |
+| 2026-04-22 | Joanna's personal XHS account banned by anti-bot | Joanna | 7K-follower account blocked. Triggered scraper hardening + scraping_rules.yml. **Future scraping requires burner account (B0).** |
+| 2026-04-30 | CI vFinal — Brief / Analytics / Library go live on real data | William | PRs #25 + #26: 7 LLM pipelines + 4 backend endpoints + 3 CI pages render real DeepSeek output. End-to-end loop on Songmont workspace. |
+| 2026-05-02 | DB cleanup: 5 buggy zero-follower scrape rows + 334 duplicate analysis_results | Joanna | Buggy rows poisoning voice_volume scores → brief was telling Songmont they're losing when they're not. |
+| 2026-05-02 | Composite Indices framework spec locked | Joanna | 3 pillars × 12 indices. PR #28 merged. §10 questions left open for William. |
+| 2026-05-04 | V1 Trust Polish + V1.5 UI Polish shipped to main | William | 5 sequential PRs (#30-34). Numeric coercer, zero-follower guard, UPSERT, admin tool, workspace endpoints, i18n audit, plus 6 of 6 V1.5 UI items + 7 quick wins. ~70% of Joanna's HANDOFF-WILLIAM-2026-05-03 in production. |
+| 2026-05-04 | V1.5 Composite Indices implementation paused (Option B) | Both | William's pushback: V2-sized work labeled V1.5; needs snapshot table foundation + customer signal first. Joanna locked Option B (foundation-first). Spec stays locked; impl resumes after snapshot + 3-5 SMB conversations. |
+| 2026-05-04 | Composite Indices spec §10 answers locked | Joanna | Q1 cost ✅, Q2 normalize NPS to 0-100, Q3 first-week defaults ✅, Q4 Trend Capture deferred to V2, Q5 any output-affecting change bumps version. See SPEC §10 Decisions Log. |
 | 2026-04-22 | Joanna's personal XHS account banned by anti-bot after ~20h of testing | Joanna | Triggered 4-phase scraper hardening plan + scraping_rules.yml central config. **Future scraping requires burner account**. See `WILLIAM-HANDOFF-2026-04-23.md`. |
 | 2026-04-30 | Will's 2-day plan complete — Brief / Analytics / Library go live on real data | William | 7 LLM pipelines, 4 backend endpoints, USE_MOCKS=false. Songmont workspace verified end-to-end (PR #26). |
 | 2026-04-30 | OMI/Songmont identity collision fixed in prod | William | Songmont was both workspace brand and "competitor of self". Fix applied via direct SQL. Diagnostic SQL provided for sweeping other workspaces (no other collisions found 2026-05-02). |
