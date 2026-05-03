@@ -40,14 +40,25 @@ def _load_dotenv():
     if not env_path.exists():
         print(f"[WARN] {env_path} not found — relying on existing os.environ")
         return
+    loaded = []
     for raw in env_path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         k, v = line.split("=", 1)
         k = k.strip()
-        v = v.strip().strip('"').strip("'")
-        os.environ.setdefault(k, v)
+        # Strip a single layer of matching outer quotes only — don't strip
+        # mid-value quotes that might be part of a password.
+        v = v.strip()
+        if len(v) >= 2 and v[0] == v[-1] and v[0] in ('"', "'"):
+            v = v[1:-1]
+        # OVERWRITE existing env vars — stale shell values from a previous
+        # partial source attempt must not win over the file's current contents.
+        os.environ[k] = v
+        loaded.append(k)
+    if loaded:
+        print(f"[ENV] Loaded {len(loaded)} keys from {env_path.name}: "
+              f"{', '.join(sorted(loaded))}")
 
 
 _load_dotenv()
