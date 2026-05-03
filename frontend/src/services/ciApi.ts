@@ -391,6 +391,16 @@ export interface ParsedLink {
   identifier?: string;
   brand_name?: string;
   platform_ids?: Record<string, string>;
+  /**
+   * Where the resolved brand_name came from:
+   *   'url_keyword'   — extracted directly from a search/keyword URL
+   *   'url_subdomain' — extracted from a Tmall/Taobao subdomain
+   *   'database'      — found in workspace_competitors via platform_id reverse lookup
+   *   'registry'      — matched a known brand in KNOWN_BRANDS
+   *   'page_title'    — pulled from og:title / <title> by fetching the page
+   *   null            — couldn't resolve; frontend prompts the user
+   */
+  resolved_via?: 'url_keyword' | 'url_subdomain' | 'database' | 'registry' | 'page_title' | null;
   error?: string;
 }
 
