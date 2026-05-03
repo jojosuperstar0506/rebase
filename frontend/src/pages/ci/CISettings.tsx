@@ -1651,11 +1651,16 @@ export default function CISettings() {
     // up this new competitor. Without this, settings adds only landed in
     // localStorage and the user saw "tracking only the onboarding-form
     // competitor" forever — workflow gap reported during testing.
-    const ws = getCIWorkspace();
-    if (ws?.id && ws.id !== 'local') {
+    //
+    // Note: workspace id only lives on the API-side Workspace type, not on
+    // the CIWorkspace localStorage shape. So we fetch via getWorkspace()
+    // which returns { data: Workspace | null } with id.
+    const wsResp = await getWorkspace();
+    const wsId = wsResp.data?.id;
+    if (wsId && wsId !== 'local') {
       try {
         const apiResult = await addCompetitor({
-          workspace_id: ws.id,
+          workspace_id: wsId,
           brand_name: c.brand_name,
           tier: c.tier || 'watchlist',
           platform_ids: c.platform_ids || {},
@@ -1686,8 +1691,9 @@ export default function CISettings() {
     setCompetitors(updated);
     saveCICompetitors(updated);
 
-    const ws = getCIWorkspace();
-    if (!ws?.id || ws.id === 'local') return;
+    const wsResp = await getWorkspace();
+    const wsId = wsResp.data?.id;
+    if (!wsId || wsId === 'local') return;
 
     const prevIds = new Set(prev.map(c => c.id));
     const updatedIds = new Set(updated.map(c => c.id));
@@ -1697,7 +1703,7 @@ export default function CISettings() {
       // Skip purely-local rows (never made it to backend)
       if (!c.id || c.id.toString().startsWith('local-')) continue;
       try {
-        await removeCompetitor(c.id, ws.id);
+        await removeCompetitor(c.id, wsId);
       } catch (err) {
         console.warn('[CI] backend remove failed for', c.brand_name, err);
       }
@@ -1708,7 +1714,7 @@ export default function CISettings() {
     for (const c of added) {
       try {
         await addCompetitor({
-          workspace_id: ws.id,
+          workspace_id: wsId,
           brand_name: c.brand_name,
           tier: c.tier || 'watchlist',
           platform_ids: c.platform_ids || {},
