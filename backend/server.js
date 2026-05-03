@@ -928,6 +928,7 @@ app.get('/api/ci/dashboard', async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+    const lang = req.query.lang === 'en' ? 'en' : 'zh';
 
     // Get competitors
     const { rows: competitors } = await pool.query(
@@ -1073,6 +1074,7 @@ app.get('/api/ci/intelligence', async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+    const lang = req.query.lang === 'en' ? 'en' : 'zh';
 
     // Get ALL latest results per competitor × metric_type
     const { rows } = await pool.query(
@@ -1139,7 +1141,7 @@ app.get('/api/ci/intelligence', async (req, res) => {
         status,
         status_reason,
         raw_inputs: rawInputs,
-        ai_narrative: resolveLang(row.ai_narrative, req.query.lang === 'en' ? 'en' : 'zh'),
+        ai_narrative: resolveLang(row.ai_narrative, lang),
         analyzed_at: row.analyzed_at,
       };
     }
@@ -2539,11 +2541,16 @@ app.get('/api/ci/deep-dive/result', async (req, res) => {
       ORDER BY analyzed_at DESC LIMIT 1
     `, [workspace_id, brand_name]);
 
-    // Deduplicate scores by metric type (latest only)
+    const lang = req.query.lang === 'en' ? 'en' : 'zh';
+
+    // Deduplicate scores by metric type (latest only) — resolve bilingual ai_narrative
     const latestScores = {};
     for (const s of scores) {
       if (!latestScores[s.metric_type]) {
-        latestScores[s.metric_type] = s;
+        latestScores[s.metric_type] = {
+          ...s,
+          ai_narrative: resolveLang(s.ai_narrative, lang),
+        };
       }
     }
 
@@ -2552,7 +2559,7 @@ app.get('/api/ci/deep-dive/result', async (req, res) => {
       profile: profiles[0] || null,
       products,
       scores: latestScores,
-      insight: resolveLang(insights[0]?.ai_narrative || null, req.query.lang === 'en' ? 'en' : 'zh'),
+      insight: resolveLang(insights[0]?.ai_narrative || null, lang),
       raw_dimensions: profiles[0]?.raw_dimensions || null,
       last_deep_dive: profiles[0]?.scraped_at || null,
     });
