@@ -21,6 +21,21 @@ const CATEGORIES = ['女包', '男包', '箱包配件', '鞋类', '服饰', '其
 const PLATFORM_OPTIONS = ['淘宝/天猫', '京东', '小红书', '抖音'];
 const MAX_WATCHLIST = 10;
 
+// Reject inputs that aren't a real brand name. We saw production rows with
+// brand_name = "XHS: 5d1c0475000000001203c34b" — the user typed/accepted the
+// platform identifier as a name, and the scraper then can't find the brand
+// because brand-keyed analysis lookups never match. Catches: "XHS: <id>"
+// style prefixed strings, raw 16+ char hex IDs (XHS UIDs), and 14+ digit
+// numeric IDs (Douyin sec_uid / Taobao shop ids).
+function looksLikePlatformId(s: string): boolean {
+  const t = s.trim();
+  if (!t) return false;
+  if (/^(xhs|douyin|taobao|tmall|jd|京东|淘宝|抖音|小红书)\s*[:：]\s*\S+/i.test(t)) return true;
+  if (/^[a-f0-9]{16,}$/i.test(t)) return true;
+  if (/^\d{14,}$/.test(t)) return true;
+  return false;
+}
+
 const PLATFORM_COLORS: Record<string, string> = {
   xhs: '#ff2442',
   taobao: '#ff6a00',
@@ -280,6 +295,12 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
       platformIds = parsed!.platform_ids
         ?? (parsed!.platform && parsed!.identifier ? { [parsed!.platform]: parsed!.identifier } : {});
       setResolveSource('registry');
+    } else if (looksLikePlatformId(raw)) {
+      setNameAdding(false);
+      setError(lang === 'zh'
+        ? '看起来你输入的是平台 ID（如 XHS UID），不是品牌名称。请在「粘贴链接」标签页粘贴完整 URL，或直接输入品牌名。'
+        : 'That looks like a platform ID (e.g. an XHS UID), not a brand name. Try the "Paste Link" tab with a full URL, or type the brand name directly.');
+      return;
     } else if (Object.keys(platformIds).length === 0) {
       const resolved = await resolveBrand(name);
       if (resolved) {
@@ -320,13 +341,25 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
     setLinkError('');
     setLinkBrandInput('');
     const result = await parseLink(url);
-    setLinkParsing(false);
     if (!result || !result.parsed) {
+      setLinkParsing(false);
       setLinkError(result?.error ?? t(T.ci.unrecognizedLink, lang as any));
       return;
     }
     const platformIds: Record<string, string> = result.platform_ids ?? (result.platform && result.identifier ? { [result.platform]: result.identifier } : {});
-    const brandName = result.brand_name ?? '';
+    let brandName = (result.brand_name ?? '').trim();
+    // The backend can usually extract a brand name from product/item URLs
+    // but rarely from XHS profile URLs (they require a page scrape). When
+    // we got an identifier but no brand name, take a second swing via the
+    // brand registry — many merchants are already in our DB by their XHS
+    // UID. This is what stops "XHS: <uid>" from leaking into brand_name.
+    if (!brandName && result.identifier) {
+      const resolved = await resolveBrand(result.identifier);
+      if (resolved && resolved.brand_name && !looksLikePlatformId(resolved.brand_name)) {
+        brandName = resolved.brand_name;
+      }
+    }
+    setLinkParsing(false);
     setLinkResult({ platform: result.platform ?? '', brandName, platformIds });
     // If brand name couldn't be extracted, prompt user
     if (!brandName) setLinkBrandInput('');
@@ -334,8 +367,14 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
 
   function handleConfirmLink() {
     if (!linkResult) return;
-    const finalBrandName = linkResult.brandName || linkBrandInput.trim();
+    const finalBrandName = (linkResult.brandName || linkBrandInput.trim()).trim();
     if (!finalBrandName) return;
+    if (looksLikePlatformId(finalBrandName)) {
+      setLinkError(lang === 'zh'
+        ? '请输入真正的品牌名称（如 "Songmont"），不是平台 ID。我们已经记下了平台 ID，你只需要给品牌起个名字。'
+        : 'Please enter the actual brand name (e.g. "Songmont"), not a platform ID. We already saved the platform ID — you just need to give the brand a name.');
+      return;
+    }
     onAdd({
       id: crypto.randomUUID(),
       brand_name: finalBrandName,
@@ -347,6 +386,7 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
     setLinkInput('');
     setLinkResult(null);
     setLinkBrandInput('');
+    setLinkError('');
   }
 
   // ── AI tab state ────────────────────────────────────────────────
@@ -815,8 +855,37 @@ function CompetitorList({ C, lang, competitors, onChange, isMobile }: {
   onChange: (updated: CICompetitor[]) => void;
   isMobile: boolean;
 }) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [editError, setEditError] = useState('');
+
   function remove(id: string) {
     onChange(competitors.filter(c => c.id !== id));
+  }
+
+  function startEdit(c: CICompetitor) {
+    setEditingId(c.id);
+    setEditValue(c.brand_name);
+    setEditError('');
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditValue('');
+    setEditError('');
+  }
+
+  function saveEdit(id: string) {
+    const next = editValue.trim();
+    if (!next) return;
+    if (looksLikePlatformId(next)) {
+      setEditError(lang === 'zh'
+        ? '请输入真正的品牌名称，不是平台 ID。'
+        : 'Please enter the actual brand name, not a platform ID.');
+      return;
+    }
+    onChange(competitors.map(c => c.id === id ? { ...c, brand_name: next } : c));
+    cancelEdit();
   }
 
   if (competitors.length === 0) {
@@ -827,23 +896,98 @@ function CompetitorList({ C, lang, competitors, onChange, isMobile }: {
     );
   }
 
+  // Surface a one-line nudge if any tracked row's brand_name looks like a
+  // platform ID — those rows won't match analysis_results lookups, so the
+  // analytics tab will be empty for them. The fix is to rename them inline.
+  const badRows = competitors.filter(c => looksLikePlatformId(c.brand_name));
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {competitors.map(c => (
+      {badRows.length > 0 && (
+        <div style={{
+          padding: '10px 14px', background: `${C.danger}10`,
+          border: `1px solid ${C.danger}44`, borderRadius: 8,
+          fontSize: 12, color: C.t2, lineHeight: 1.6,
+        }}>
+          <strong style={{ color: C.danger }}>
+            {lang === 'zh'
+              ? `${badRows.length} 个竞品看起来用了平台 ID 而不是品牌名。`
+              : `${badRows.length} competitor${badRows.length === 1 ? '' : 's'} appear to use a platform ID instead of a brand name.`}
+          </strong>{' '}
+          {lang === 'zh'
+            ? '点击竞品行的「✎」按钮重命名 — 否则分析将无法匹配品牌数据。'
+            : 'Click the ✎ button on each row to rename — otherwise analytics can\'t match brand data.'}
+        </div>
+      )}
+
+      {competitors.map(c => {
+        const isEditing = editingId === c.id;
+        const isBad = !isEditing && looksLikePlatformId(c.brand_name);
+        return (
         <div key={c.id} style={{
           display: 'flex',
           alignItems: 'center',
           gap: 12,
           padding: '12px 16px',
           background: C.s2,
-          border: `1px solid ${C.bd}`,
+          border: `1px solid ${isBad ? `${C.danger}55` : C.bd}`,
           borderRadius: 8,
           fontSize: 13,
         }}>
           {/* Brand name + platform keyword labels */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ fontWeight: 600, fontSize: 14 }}>{c.brand_name}</span>
-            {Object.keys(c.platform_ids).length > 0 && (
+            {isEditing ? (
+              <div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    autoFocus
+                    value={editValue}
+                    onChange={e => { setEditValue(e.target.value); setEditError(''); }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') saveEdit(c.id);
+                      if (e.key === 'Escape') cancelEdit();
+                    }}
+                    style={{
+                      flex: 1, fontSize: 14, fontWeight: 600,
+                      background: C.inputBg, color: C.tx,
+                      border: `1px solid ${C.inputBd}`, borderRadius: 6,
+                      padding: '6px 10px', outline: 'none',
+                    }}
+                    placeholder={lang === 'zh' ? '品牌名称（如 Songmont）' : 'Brand name (e.g. Songmont)'}
+                  />
+                  <button
+                    onClick={() => saveEdit(c.id)}
+                    style={{
+                      background: C.ac, border: 'none', borderRadius: 6,
+                      padding: '6px 12px', color: '#fff', fontSize: 12,
+                      fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >
+                    {lang === 'zh' ? '保存' : 'Save'}
+                  </button>
+                  <button
+                    onClick={cancelEdit}
+                    style={{
+                      background: 'transparent', border: `1px solid ${C.bd}`, borderRadius: 6,
+                      padding: '6px 12px', color: C.t2, fontSize: 12, cursor: 'pointer',
+                    }}
+                  >
+                    {lang === 'zh' ? '取消' : 'Cancel'}
+                  </button>
+                </div>
+                {editError && (
+                  <div style={{ fontSize: 11, color: C.danger, marginTop: 4 }}>{editError}</div>
+                )}
+              </div>
+            ) : (
+              <span style={{
+                fontWeight: 600, fontSize: 14,
+                color: isBad ? C.danger : undefined,
+              }}>
+                {c.brand_name}
+              </span>
+            )}
+            {!isEditing && Object.keys(c.platform_ids).length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
                 {Object.entries(c.platform_ids).map(([plat, id]) => (
                   <span key={plat} style={{ fontSize: 11, color: C.t3 }}>
@@ -854,37 +998,56 @@ function CompetitorList({ C, lang, competitors, onChange, isMobile }: {
             )}
           </div>
 
-          {/* "Tracking" status pill — replaces tier toggle (TASK-32) */}
-          <span style={{
-            fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20,
-            background: `${C.success}18`, color: C.success, border: `1px solid ${C.success}44`,
-            flexShrink: 0,
-          }}>
-            ✓ {t(T.ci.tracking, lang as any)}
-          </span>
+          {!isEditing && (
+            <>
+              {/* "Tracking" status pill — replaces tier toggle (TASK-32) */}
+              <span style={{
+                fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20,
+                background: `${C.success}18`, color: C.success, border: `1px solid ${C.success}44`,
+                flexShrink: 0,
+              }}>
+                ✓ {t(T.ci.tracking, lang as any)}
+              </span>
 
-          {/* Added date — hidden on mobile */}
-          {!isMobile && (
-            <span style={{ color: C.t3, fontSize: 11, whiteSpace: 'nowrap' }}>
-              {new Date(c.created_at).toLocaleDateString()}
-            </span>
+              {/* Added date — hidden on mobile */}
+              {!isMobile && (
+                <span style={{ color: C.t3, fontSize: 11, whiteSpace: 'nowrap' }}>
+                  {new Date(c.created_at).toLocaleDateString()}
+                </span>
+              )}
+
+              {/* Edit name */}
+              <button
+                onClick={() => startEdit(c)}
+                style={{
+                  background: 'none', border: 'none', color: isBad ? C.danger : C.t3,
+                  cursor: 'pointer', fontSize: 14, padding: '0 6px', lineHeight: 1,
+                  minWidth: isMobile ? 44 : undefined, minHeight: isMobile ? 44 : undefined,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+                title={lang === 'zh' ? '重命名品牌' : 'Rename brand'}
+              >
+                ✎
+              </button>
+
+              {/* Remove — 44px touch target on mobile */}
+              <button
+                onClick={() => remove(c.id)}
+                style={{
+                  background: 'none', border: 'none', color: C.t3, cursor: 'pointer',
+                  fontSize: 18, padding: '0 8px', lineHeight: 1,
+                  minWidth: isMobile ? 44 : undefined, minHeight: isMobile ? 44 : undefined,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+                title={t(T.ci.removeCompetitor, lang as any)}
+              >
+                ×
+              </button>
+            </>
           )}
-
-          {/* Remove — 44px touch target on mobile */}
-          <button
-            onClick={() => remove(c.id)}
-            style={{
-              background: 'none', border: 'none', color: C.t3, cursor: 'pointer',
-              fontSize: 18, padding: '0 8px', lineHeight: 1,
-              minWidth: isMobile ? 44 : undefined, minHeight: isMobile ? 44 : undefined,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-            title={t(T.ci.removeCompetitor, lang as any)}
-          >
-            ×
-          </button>
         </div>
-      ))}
+      );
+      })}
     </div>
   );
 }
