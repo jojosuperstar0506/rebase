@@ -111,12 +111,16 @@ function formatWeek(iso: string, lang: string): string {
   });
 }
 
-// Copy a Douyin script to clipboard in a format the user can paste directly
-function formatScriptForCopy(c: ContentDraft): string {
+// Copy a Douyin script to clipboard in a format the user can paste directly.
+// W8: respect current `lang` so English-locale users get English section headers.
+function formatScriptForCopy(c: ContentDraft, lang: 'zh' | 'en' = 'zh'): string {
   const parts: string[] = [];
-  if (c.hook_3s) parts.push(`【开场3秒】\n${c.hook_3s}`);
-  if (c.main_15s) parts.push(`【主体15秒】\n${c.main_15s}`);
-  if (c.cta_3s) parts.push(`【结尾3秒】\n${c.cta_3s}`);
+  const labels = lang === 'en'
+    ? { hook: 'Hook (3s)', main: 'Main (15s)', cta: 'CTA (3s)' }
+    : { hook: '开场3秒',     main: '主体15秒',     cta: '结尾3秒' };
+  if (c.hook_3s)  parts.push(`【${labels.hook}】\n${c.hook_3s}`);
+  if (c.main_15s) parts.push(`【${labels.main}】\n${c.main_15s}`);
+  if (c.cta_3s)   parts.push(`【${labels.cta}】\n${c.cta_3s}`);
   if (c.hashtags.length) parts.push(`\n${c.hashtags.join(' ')}`);
   return parts.join('\n\n');
 }
@@ -282,7 +286,7 @@ export default function CIBrief() {
 
   async function handleCopy(c: ContentDraft) {
     try {
-      await navigator.clipboard.writeText(formatScriptForCopy(c));
+      await navigator.clipboard.writeText(formatScriptForCopy(c, lang));
       setCopiedId(c.id);
       setTimeout(() => setCopiedId(null), 1800);
     } catch {

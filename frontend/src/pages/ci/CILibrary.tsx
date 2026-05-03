@@ -496,10 +496,14 @@ function BriefFullView({ brief, C, lang }: {
 function ContentFullView({ content, C, lang }: {
   content: ContentDraft; C: ColorSet; lang: string;
 }) {
+  // W8: copy headers respect current lang for English-locale users
+  const labels = lang === 'en'
+    ? { hook: 'Hook (3s)', main: 'Main (15s)', cta: 'CTA (3s)' }
+    : { hook: '开场3秒',     main: '主体15秒',     cta: '结尾3秒' };
   const parts: string[] = [];
-  if (content.hook_3s)  parts.push(`【开场3秒】\n${content.hook_3s}`);
-  if (content.main_15s) parts.push(`【主体15秒】\n${content.main_15s}`);
-  if (content.cta_3s)   parts.push(`【结尾3秒】\n${content.cta_3s}`);
+  if (content.hook_3s)  parts.push(`【${labels.hook}】\n${content.hook_3s}`);
+  if (content.main_15s) parts.push(`【${labels.main}】\n${content.main_15s}`);
+  if (content.cta_3s)   parts.push(`【${labels.cta}】\n${content.cta_3s}`);
   if (content.hashtags.length) parts.push(content.hashtags.join(' '));
   const copyable = parts.join('\n\n');
 

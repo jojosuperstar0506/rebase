@@ -50,7 +50,7 @@ function requireSecret(req, res, next) {
 // ── Middleware ──────────────────────────────────────────────────────────────
 app.use(cors({
   origin: process.env.FRONTEND_URL || '*',
-  methods: ['GET', 'POST', 'DELETE'],
+  methods: ['GET', 'POST', 'PATCH', 'DELETE'],
 }));
 app.use(express.json());
 
@@ -462,6 +462,46 @@ function loadAllApplicants() {
     .filter(Boolean);
 }
 
+// GET /api/admin/pending-scrapes — workspaces where no competitor has been
+// scraped yet (W5). Powers the admin tool that surfaces newly-onboarded
+// customers needing their first scrape. Until Phase D customer installer
+// ships, scraping is a manual step on Joanna's/Will's residential-IP Mac;
+// this endpoint replaces "remember which customer needs scraping" memory
+// with a queryable list.
+//
+// Filter: competitor_count > 0 AND scraped_count = 0. Workspaces where
+// AT LEAST ONE competitor has scrape data are excluded (those are
+// "partially populated" not "pending first scrape").
+app.get('/api/admin/pending-scrapes', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `WITH ws_status AS (
+         SELECT w.id,
+                w.brand_name,
+                w.brand_category,
+                w.user_id,
+                w.created_at,
+                COUNT(DISTINCT wc.brand_name) AS competitor_count,
+                COUNT(DISTINCT sbp.brand_name) AS scraped_count,
+                ARRAY_AGG(DISTINCT wc.brand_name) FILTER (WHERE wc.brand_name IS NOT NULL) AS competitors
+           FROM workspaces w
+           LEFT JOIN workspace_competitors wc ON wc.workspace_id = w.id
+           LEFT JOIN scraped_brand_profiles sbp ON sbp.brand_name = wc.brand_name
+          GROUP BY w.id, w.brand_name, w.brand_category, w.user_id, w.created_at
+       )
+       SELECT id, brand_name, brand_category, user_id, created_at,
+              competitor_count, scraped_count, competitors
+         FROM ws_status
+        WHERE competitor_count > 0 AND scraped_count = 0
+        ORDER BY created_at DESC`
+    );
+    res.json({ pending: rows, count: rows.length });
+  } catch (err) {
+    console.error('[CI] GET pending-scrapes error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch pending scrapes' });
+  }
+});
+
 // GET /api/admin/applicants — list all applicants (pending + approved)
 app.get("/api/admin/applicants", (req, res) => {
   const applicants = loadAllApplicants();
@@ -570,6 +610,32 @@ const DOMAIN_LABELS = {
   insight: '品牌洞察',
 };
 
+// GET /api/ci/workspaces — list every workspace owned by the current user (W6).
+// Powers PR #29's WorkspaceSwitcher dropdown. Filtered by `user_id` from
+// the x-user-id header (set by the frontend's Vercel proxy from JWT.sub).
+// Returns lightweight rows ordered newest-first; the switcher just needs
+// id + brand_name + brand_category to render.
+app.get('/api/ci/workspaces', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    if (!userId) return res.status(401).json({ error: 'Missing user ID' });
+
+    const { rows } = await pool.query(
+      `SELECT id, brand_name, brand_category, brand_price_range,
+              created_at, updated_at
+         FROM workspaces
+        WHERE user_id = $1
+        ORDER BY created_at DESC`,
+      [userId]
+    );
+
+    res.json(rows);
+  } catch (err) {
+    console.error('[CI] GET workspaces error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch workspaces' });
+  }
+});
+
 // GET /api/ci/workspace — get current user's workspace
 app.get('/api/ci/workspace', async (req, res) => {
   try {
@@ -615,45 +681,83 @@ app.get('/api/ci/workspace/me', async (req, res) => {
   }
 });
 
-// POST /api/ci/workspace — create workspace (from onboarding)
+// POST /api/ci/workspace — INSERT a new workspace (W7).
+//
+// Previously upserted (UPDATE if user already had a workspace). That made
+// it impossible to create a 2nd workspace per user — the switcher's
+// "+ New Workspace" button would silently overwrite the existing one.
+//
+// New shape: ALWAYS insert. Use PATCH /api/ci/workspace/:id (below) to
+// update an existing workspace by uuid.
 app.post('/api/ci/workspace', async (req, res) => {
   try {
     const { brand_name, brand_category, brand_price_range, brand_platforms } = req.body;
-    // user_id can come from body (direct API) or x-user-id header (via Vercel proxy)
     const user_id = req.body.user_id || req.headers['x-user-id'];
 
     if (!user_id || !brand_name || !brand_category) {
       return res.status(400).json({ error: 'Missing required fields: user_id, brand_name, brand_category' });
     }
 
-    // Upsert: check if workspace exists for this user, update if so, create if not
-    const existing = await pool.query(
-      'SELECT * FROM workspaces WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
-      [user_id]
+    const result = await pool.query(
+      `INSERT INTO workspaces (user_id, brand_name, brand_category, brand_price_range, brand_platforms)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [user_id, brand_name, brand_category, brand_price_range, brand_platforms]
     );
 
-    let result;
-    if (existing.rows.length > 0) {
-      // Update existing workspace
-      result = await pool.query(
-        `UPDATE workspaces SET brand_name = $1, brand_category = $2, brand_price_range = $3, brand_platforms = $4
-         WHERE id = $5 RETURNING *`,
-        [brand_name, brand_category, brand_price_range, brand_platforms, existing.rows[0].id]
-      );
-    } else {
-      // Create new workspace
-      result = await pool.query(
-        `INSERT INTO workspaces (user_id, brand_name, brand_category, brand_price_range, brand_platforms)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING *`,
-        [user_id, brand_name, brand_category, brand_price_range, brand_platforms]
-      );
-    }
-
-    res.status(existing.rows.length > 0 ? 200 : 201).json(result.rows[0]);
+    res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error('[CI] POST workspace error:', err.message);
     res.status(500).json({ error: 'Failed to create workspace' });
+  }
+});
+
+// PATCH /api/ci/workspace/:id — update an existing workspace's editable fields (W7).
+//
+// Replaces the implicit-update behavior of the old upserting POST. Caller
+// must supply the workspace UUID; only `user_id`-owned rows can be modified.
+// Body fields are individually optional — only the ones provided are updated.
+app.patch('/api/ci/workspace/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const userId = req.body.user_id || req.headers['x-user-id'];
+    if (!id) return res.status(400).json({ error: 'Missing workspace id' });
+    if (!userId) return res.status(401).json({ error: 'Missing user ID' });
+
+    // Confirm the workspace belongs to this user before letting them edit.
+    const owned = await pool.query(
+      'SELECT id FROM workspaces WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    );
+    if (owned.rows.length === 0) {
+      return res.status(404).json({ error: 'Workspace not found or not owned by this user' });
+    }
+
+    // Build dynamic SET clause from whichever editable fields are present.
+    const editable = ['brand_name', 'brand_category', 'brand_price_range', 'brand_platforms'];
+    const sets = [];
+    const vals = [];
+    for (const field of editable) {
+      if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+        vals.push(req.body[field]);
+        sets.push(`${field} = $${vals.length}`);
+      }
+    }
+    if (sets.length === 0) {
+      return res.status(400).json({ error: 'No editable fields provided' });
+    }
+    sets.push('updated_at = NOW()');
+    vals.push(id);
+
+    const result = await pool.query(
+      `UPDATE workspaces SET ${sets.join(', ')}
+        WHERE id = $${vals.length} RETURNING *`,
+      vals
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('[CI] PATCH workspace error:', err.message);
+    res.status(500).json({ error: 'Failed to update workspace' });
   }
 });
 

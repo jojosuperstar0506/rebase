@@ -112,11 +112,19 @@ export async function getWorkspace(): Promise<{ data: Workspace | null; source: 
 }
 
 export async function saveWorkspace(workspace: Partial<Workspace>): Promise<Workspace | null> {
-  // Try API
-  const apiData = await tryApi<Workspace>('/workspace', {
-    method: 'POST',
-    body: JSON.stringify(workspace),
-  });
+  // W7: backend split POST (insert) and PATCH /:id (update). Pick the right
+  // verb based on whether the caller passed an existing workspace.id —
+  // PATCH if so, POST otherwise. The previous upsert behavior silently
+  // overwrote an existing workspace whenever the caller passed new data,
+  // making multi-workspace impossible.
+  const hasId = workspace.id && workspace.id !== 'local';
+  const apiData = await tryApi<Workspace>(
+    hasId ? `/workspace/${encodeURIComponent(workspace.id!)}` : '/workspace',
+    {
+      method: hasId ? 'PATCH' : 'POST',
+      body: JSON.stringify(workspace),
+    }
+  );
   if (apiData) return apiData;
   // Fall back: save locally (map Workspace fields to CIWorkspace fields)
   saveCIWorkspace({
@@ -126,6 +134,15 @@ export async function saveWorkspace(workspace: Partial<Workspace>): Promise<Work
     platforms: [],
   });
   return { id: 'local', user_id: 'local', ...workspace } as Workspace;
+}
+
+/**
+ * GET /api/ci/workspaces — list every workspace owned by the current user.
+ * Used by the workspace switcher dropdown (PR #29).
+ */
+export async function listWorkspaces(): Promise<Workspace[]> {
+  const data = await tryApi<Workspace[]>('/workspaces');
+  return Array.isArray(data) ? data : [];
 }
 
 // ─── Competitors ──────────────────────────────────────────────────
