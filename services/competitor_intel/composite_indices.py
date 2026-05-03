@@ -1078,6 +1078,18 @@ def compute_all_for_workspace(workspace_id):
 
             n_written = 0
             for brand, brand_data in data.items():
+                # Per-competitor diagnostics — surfaces what data was
+                # available at compute time so we can read cron logs and
+                # tell whether a brand had real inputs or computed from
+                # zeros. Without this, "[brand] 12 indices written"
+                # looked the same for a richly-scored brand and a
+                # brand-new addition with no scrape data yet.
+                metrics = brand_data.get("metrics") or {}
+                profile = brand_data.get("profile")
+                products = brand_data.get("products") or []
+                proxy_count = 0
+                non_zero_count = 0
+
                 for index_name, compute_fn in INDEX_COMPUTE.items():
                     try:
                         result = compute_fn(brand_data)
@@ -1086,6 +1098,11 @@ def compute_all_for_workspace(workspace_id):
                         traceback.print_exc()
                         continue
 
+                    if result.get("is_proxy"):
+                        proxy_count += 1
+                    score = result["score"]
+                    if score is not None and abs(float(score)) > 0.01:
+                        non_zero_count += 1
                     version = INDEX_VERSION + ("-proxy" if result.get("is_proxy") else "")
 
                     # Delta from yesterday's same index
@@ -1116,7 +1133,12 @@ def compute_all_for_workspace(workspace_id):
                     )
                     n_written += 1
 
-                print(f"  [{brand}] 12 indices written")
+                print(
+                    f"  [{brand}] metrics={len(metrics)}/16 "
+                    f"profile={'Y' if profile else 'N'} "
+                    f"products={len(products)} "
+                    f"→ 12 indices written ({non_zero_count} non-zero, {proxy_count} proxy)"
+                )
 
             conn.commit()
             print(f"[DONE] {n_written} composite_indices rows written for workspace {workspace_id}")

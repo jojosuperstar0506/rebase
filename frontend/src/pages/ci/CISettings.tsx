@@ -13,7 +13,8 @@ import {
 } from '../../utils/ciStorage';
 import {
   resolveBrand, parseLink, suggestCompetitors, searchBrands,
-  requestDeepDive, getWorkspace, runAnalysis, saveWorkspace, addCompetitor, removeCompetitor,
+  requestDeepDive, getWorkspace, runAnalysis, saveWorkspace,
+  addCompetitor, removeCompetitor, getCompetitors,
   type BrandResolution, type CompetitorSuggestion,
 } from '../../services/ciApi';
 
@@ -1451,6 +1452,47 @@ function StartAnalysisCard({ C, lang, competitorCount, workspaceName, isMobile }
       } else {
         stepThatFailed = 'fetch';
         stepDetail = 'No workspace on server and brand profile is incomplete locally';
+      }
+    }
+
+    // Step 1.5: reconcile localStorage competitors against the backend list.
+    //
+    // The eager-sync inside AddCompetitorSection may have failed silently
+    // earlier (e.g. transient proxy timeout, JWT user_id mismatch with the
+    // workspace's row, or just an old session before the fix shipped).
+    // If localStorage has more competitors than backend, the orchestrator
+    // would only score whatever's in workspace_competitors — leaving the
+    // user's Analytics scatter showing one brand instead of all six.
+    //
+    // We only run this when we have a real wsId (otherwise the create-step
+    // above already did a full fresh sync). It's a small read + targeted
+    // POSTs of the diff, so latency is one extra GET + N parallel writes.
+    if (wsId && wsId !== 'local') {
+      try {
+        const apiComps = await getCompetitors(wsId);
+        const apiNames = new Set(apiComps.data.map(c => c.brand_name));
+        const localComps = getCICompetitors();
+        const missing = localComps.filter(c => !apiNames.has(c.brand_name));
+        if (missing.length > 0) {
+          console.log(`[CI] Reconciling ${missing.length} competitor(s) missing from backend:`,
+            missing.map(c => c.brand_name).join(', '));
+          // Fire in parallel — order doesn't matter and the upsert on
+          // (workspace_id, brand_name) makes them idempotent.
+          await Promise.all(missing.map(c =>
+            addCompetitor({
+              workspace_id: wsId!,
+              brand_name: c.brand_name,
+              tier: c.tier,
+              platform_ids: c.platform_ids || {},
+              added_via: c.added_via || 'manual',
+            }).catch(err => {
+              console.warn(`[CI] reconcile failed for ${c.brand_name}:`, (err as Error).message);
+            })
+          ));
+        }
+      } catch (err) {
+        console.warn('[CI] competitor reconcile read failed:', (err as Error).message);
+        // Non-fatal — proceed to runAnalysis with whatever's in backend.
       }
     }
 

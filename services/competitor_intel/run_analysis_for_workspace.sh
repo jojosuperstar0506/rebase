@@ -18,11 +18,19 @@
 #   1. scoring_pipeline                        (uses --job-id for per-brand UI progress)
 #   2. 9 metric pipelines                      (sequential, each is fast)
 #   3. domain_aggregation_pipeline             (depends on #1 + #2)
-#   4. brand_positioning_pipeline              (depends on #3 — writes weekly_briefs)
-#   5. gtm_content_pipeline                    (depends on #4 — reads brief moves)
-#   6. product_opportunity_pipeline            (depends on #4)
-#   7. white_space_pipeline                    (depends on #3 + #4)
-#   8. composite_indices                       (depends on #1-#3 — 12 user-facing indices)
+#   4. composite_indices                       (depends on #1-#3 only — runs BEFORE LLM stages)
+#   5. brand_positioning_pipeline              (depends on #3 — writes weekly_briefs; LLM)
+#   6. gtm_content_pipeline                    (depends on #5 — reads brief moves; LLM)
+#   7. product_opportunity_pipeline            (depends on #5; LLM)
+#   8. white_space_pipeline                    (depends on #3 + #5; LLM)
+#
+# composite_indices was previously last. It only depends on Stage 3's
+# output (analysis_results + domain rollups) and is pure arithmetic — no
+# LLM. Moving it to Stage 4 means the user-facing Analytics scatter +
+# pillars stay fresh even when one of the LLM-dependent stages flakes
+# (timeout, rate-limit, partial JSON). Failed LLM stages still abort the
+# orchestrator (run_step exits non-zero) but Stage 4 has already
+# committed the indices update for today.
 #
 # Job tracking:
 #   scoring_pipeline updates ci_analysis_jobs as it goes and marks
@@ -121,37 +129,40 @@ run_step "3/7 domain_aggregation" "$PYTHON" \
   -m services.competitor_intel.pipelines.domain_aggregation_pipeline \
   --workspace-id "$WORKSPACE_ID"
 
-# ─── Stage 4: brief (verdict + moves) ────────────────────────────────────────
+# ─── Stage 4: composite indices (3 pillars × 12 indices) ────────────────────
+# Pure composition layer — reads analysis_results + scraped_products +
+# scraped_brand_profiles and writes one row per (competitor × index) to
+# composite_indices. Runs BEFORE the LLM-dependent stages so a transient
+# DeepSeek timeout in Stage 5/6/7/8 doesn't leave the user-facing scatter
+# plot stale. Idempotent same-day reruns.
+run_step "4/8 composite_indices" "$PYTHON" \
+  -m services.competitor_intel.composite_indices \
+  --workspace-id "$WORKSPACE_ID"
+
+# ─── Stage 5: brief (verdict + moves) ────────────────────────────────────────
 # Reads domain rollups, writes weekly_briefs. UPSERT — daily reruns refresh
-# the verdict, never duplicate.
-run_step "4/8 brand_positioning" "$PYTHON" \
+# the verdict, never duplicate. LLM call.
+run_step "5/8 brand_positioning" "$PYTHON" \
   -m services.competitor_intel.brand_positioning_pipeline \
   --workspace-id "$WORKSPACE_ID"
 
-# ─── Stage 5: Douyin content drafts ──────────────────────────────────────────
+# ─── Stage 6: Douyin content drafts ──────────────────────────────────────────
 # Skip-if-exists at (workspace_id, week_of) — preserves the user's
-# mark_posted / dismiss decisions across reruns.
-run_step "5/8 gtm_content" "$PYTHON" \
+# mark_posted / dismiss decisions across reruns. LLM call.
+run_step "6/8 gtm_content" "$PYTHON" \
   -m services.competitor_intel.gtm_content_pipeline \
   --workspace-id "$WORKSPACE_ID"
 
-# ─── Stage 6: product opportunity ────────────────────────────────────────────
-# Skip-if-exists same as Stage 5 — preserves accept/dismiss state.
-run_step "6/8 product_opportunity" "$PYTHON" \
+# ─── Stage 7: product opportunity ────────────────────────────────────────────
+# Skip-if-exists same as Stage 6 — preserves accept/dismiss state. LLM call.
+run_step "7/8 product_opportunity" "$PYTHON" \
   -m services.competitor_intel.product_opportunity_pipeline \
   --workspace-id "$WORKSPACE_ID"
 
-# ─── Stage 7: white space ────────────────────────────────────────────────────
-run_step "7/8 white_space" "$PYTHON" \
+# ─── Stage 8: white space ────────────────────────────────────────────────────
+# LLM call.
+run_step "8/8 white_space" "$PYTHON" \
   -m services.competitor_intel.white_space_pipeline \
-  --workspace-id "$WORKSPACE_ID"
-
-# ─── Stage 8: composite indices (3 pillars × 12 indices) ─────────────────────
-# Reads the latest analysis_results + scraped_products + scraped_brand_profiles
-# and writes 12 user-facing composite scores per competitor to composite_indices.
-# Pure composition layer — runs last because every other stage feeds it.
-run_step "8/8 composite_indices" "$PYTHON" \
-  -m services.competitor_intel.composite_indices \
   --workspace-id "$WORKSPACE_ID"
 
 # ─── Done ────────────────────────────────────────────────────────────────────
