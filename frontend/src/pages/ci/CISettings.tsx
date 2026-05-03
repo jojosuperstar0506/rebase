@@ -13,7 +13,7 @@ import {
 } from '../../utils/ciStorage';
 import {
   resolveBrand, parseLink, suggestCompetitors, searchBrands,
-  requestDeepDive, getWorkspace, runAnalysis, saveWorkspace, addCompetitor,
+  requestDeepDive, getWorkspace, runAnalysis, saveWorkspace, addCompetitor, removeCompetitor,
   type BrandResolution, type CompetitorSuggestion,
 } from '../../services/ciApi';
 
@@ -1638,18 +1638,86 @@ export default function CISettings() {
 
   if (!ready) return <CISettingsSkeleton />;
 
-  function handleAddCompetitor(c: CICompetitor) {
+  async function handleAddCompetitor(c: CICompetitor) {
+    // Optimistic UI: write local state + storage immediately so the card
+    // shows up without waiting for the round-trip.
     const updated = [...competitors, c];
     setCompetitors(updated);
     saveCICompetitors(updated);
-    // Show "Now tracking" toast for 2s
     setRecentlyAdded(c.brand_name);
     setTimeout(() => setRecentlyAdded(null), 2000);
+
+    // CRITICAL: also POST to backend so the cron / Brief generator picks
+    // up this new competitor. Without this, settings adds only landed in
+    // localStorage and the user saw "tracking only the onboarding-form
+    // competitor" forever — workflow gap reported during testing.
+    const ws = getCIWorkspace();
+    if (ws?.id && ws.id !== 'local') {
+      try {
+        const apiResult = await addCompetitor({
+          workspace_id: ws.id,
+          brand_name: c.brand_name,
+          tier: c.tier || 'watchlist',
+          platform_ids: c.platform_ids || {},
+          added_via: c.added_via || 'manual',
+        });
+        // Backend assigns its own UUID — replace the client-generated one
+        // so subsequent rename/remove use the canonical id.
+        if (apiResult?.id && !apiResult.id.toString().startsWith('local-')) {
+          const final = updated.map(x =>
+            x.brand_name === c.brand_name ? { ...x, id: apiResult.id } : x
+          );
+          setCompetitors(final);
+          saveCICompetitors(final);
+        }
+      } catch (err) {
+        console.warn('[CI] backend sync failed for', c.brand_name, err);
+      }
+    }
   }
 
-  function handleCompetitorsChange(updated: CICompetitor[]) {
+  async function handleCompetitorsChange(updated: CICompetitor[]) {
+    // Detect removals by diffing the previous list against the new one.
+    // Renames also fall through here as (remove + add) since CompetitorList
+    // emits a fully-new array; backend POST upserts on (workspace_id,
+    // brand_name) so name changes effectively re-add. We only sync the
+    // delta to the backend to avoid spamming POST for every render.
+    const prev = competitors;
     setCompetitors(updated);
     saveCICompetitors(updated);
+
+    const ws = getCIWorkspace();
+    if (!ws?.id || ws.id === 'local') return;
+
+    const prevIds = new Set(prev.map(c => c.id));
+    const updatedIds = new Set(updated.map(c => c.id));
+    const removed = prev.filter(c => !updatedIds.has(c.id));
+
+    for (const c of removed) {
+      // Skip purely-local rows (never made it to backend)
+      if (!c.id || c.id.toString().startsWith('local-')) continue;
+      try {
+        await removeCompetitor(c.id, ws.id);
+      } catch (err) {
+        console.warn('[CI] backend remove failed for', c.brand_name, err);
+      }
+    }
+
+    // Detect newly-added rows (e.g., from rename creating a new entry)
+    const added = updated.filter(c => !prevIds.has(c.id));
+    for (const c of added) {
+      try {
+        await addCompetitor({
+          workspace_id: ws.id,
+          brand_name: c.brand_name,
+          tier: c.tier || 'watchlist',
+          platform_ids: c.platform_ids || {},
+          added_via: c.added_via || 'manual',
+        });
+      } catch (err) {
+        console.warn('[CI] backend add failed for', c.brand_name, err);
+      }
+    }
   }
 
   const workspace = getCIWorkspace();
