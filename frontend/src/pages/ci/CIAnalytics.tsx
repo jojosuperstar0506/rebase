@@ -33,6 +33,9 @@ import {
   type MetricDomain,
 } from '../../services/ciMocks';
 import { getBrandInsights } from '../../services/ciApi';
+import { getIndices, type IndicesResponse, type PillarName } from '../../services/ciIndices';
+import PillarSection from '../../components/ci/PillarSection';
+import IndexScatterPlot from '../../components/ci/IndexScatterPlot';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -72,6 +75,7 @@ export default function CIAnalytics() {
 
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [insights, setInsights] = useState<Record<string, string>>({});
+  const [indices, setIndices] = useState<IndicesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [showAllMetrics, setShowAllMetrics] = useState(false);
@@ -116,8 +120,15 @@ export default function CIAnalytics() {
     // alongside as a separate panel.
     if (workspaceId && workspaceId !== 'mock') {
       getBrandInsights(workspaceId, lang).then(setInsights).catch(() => setInsights({}));
+      // Composite indices (3 pillars × 12 indices) — additive layer; fetched
+      // alongside legacy analytics so the page degrades gracefully if the
+      // /api/ci/indices endpoint is missing on an older backend. lang is
+      // passed so the backend resolveLang() returns single-language strings
+      // (PR #31 bilingual pattern).
+      getIndices(workspaceId, lang).then(setIndices).catch(() => setIndices(null));
     } else {
       setInsights({});
+      setIndices(null);
     }
   }, [workspaceId, lang]);
 
@@ -244,6 +255,35 @@ export default function CIAnalytics() {
               {lang === 'zh' ? '清除' : 'Clear'}
             </button>
           </div>
+        )}
+
+        {/* ─── §0. Composite indices (3 pillars × 12 indices) ──────────────
+             Renders ABOVE the legacy priority/whitespace/all-metrics blocks.
+             Falls through silently when /api/ci/indices returns null (e.g.
+             older backend or empty workspace) — the rest of the page still
+             works as it did pre-V1.5. */}
+        {indices && Object.keys(indices.indices_by_competitor).length > 0 && (
+          <section style={{ marginBottom: 28 }}>
+            <SectionHeader
+              title={lang === 'zh' ? '12 项专属指数 · 3 大支柱' : '12 Composite Indices · 3 Pillars'}
+              subtitle={lang === 'zh'
+                ? '基于底层信号合成的用户面层指数。点击任一卡片查看权重与计算输入。'
+                : 'User-facing indices composed from raw signals. Click any card to see weights + inputs.'}
+              count={null}
+              C={C}
+            />
+            {(['brand_equity', 'marketing_engine', 'commerce_engine'] as PillarName[]).map(pillar => (
+              <PillarSection
+                key={pillar}
+                pillarName={pillar}
+                pillarConfig={indices.hierarchy.pillars[pillar]}
+                data={indices}
+              />
+            ))}
+            <div style={{ marginTop: 20 }}>
+              <IndexScatterPlot data={indices} />
+            </div>
+          </section>
         )}
 
         {/* ─── §A. Priority metrics this week ──────────────────────────── */}
@@ -447,7 +487,7 @@ export default function CIAnalytics() {
 // ─── Sub-components ──────────────────────────────────────────────────────
 
 function SectionHeader({ title, subtitle, count, C }: {
-  title: string; subtitle: string; count: number; C: ColorSet;
+  title: string; subtitle: string; count: number | null; C: ColorSet;
 }) {
   return (
     <div style={{ marginBottom: 14 }}>
@@ -455,12 +495,14 @@ function SectionHeader({ title, subtitle, count, C }: {
         <h2 style={{ fontSize: 13, fontWeight: 700, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', margin: 0 }}>
           {title}
         </h2>
-        <span style={{
-          fontSize: 11, color: C.t3,
-          background: C.s2, padding: '2px 8px', borderRadius: 4, fontWeight: 600,
-        }}>
-          {count}
-        </span>
+        {count !== null && (
+          <span style={{
+            fontSize: 11, color: C.t3,
+            background: C.s2, padding: '2px 8px', borderRadius: 4, fontWeight: 600,
+          }}>
+            {count}
+          </span>
+        )}
       </div>
       <div style={{ fontSize: 12, color: C.t3, marginTop: 4, lineHeight: 1.5 }}>
         {subtitle}

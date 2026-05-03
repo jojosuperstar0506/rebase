@@ -147,6 +147,17 @@ else
   report_failure "white_space" "white_space_pipeline returned non-zero"
 fi
 
+# Step 2h: Composite indices (3 pillars × 12 indices) — pure composition layer
+# over analysis_results. Writes to composite_indices. Same-day reruns are
+# idempotent (delete-then-insert on today's rows).
+log "Step 2h: Computing composite indices..."
+if $PYTHON -m services.competitor_intel.composite_indices --all >> "$LOG_FILE" 2>&1; then
+  log "Step 2h: Composite indices complete"
+else
+  log "Step 2h: Composite indices failed (continuing)"
+  report_failure "composite_indices" "composite_indices returned non-zero"
+fi
+
 # Step 3: Generate narratives — DISABLED 2026-05-03.
 #
 # narrative_pipeline writes per-brand brand_insight rows + a workspace-level

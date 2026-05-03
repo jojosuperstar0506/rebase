@@ -1779,6 +1779,181 @@ app.get('/api/ci/analytics', async (req, res) => {
   }
 });
 
+// ─── Composite indices (12 indices × 3 pillars) ─────────────────────────
+//
+// Static reference for the 12 indices. The Python compute layer is the
+// source of truth for scores; this is just the labels + pillar mapping
+// the frontend uses to render. Mirrors services/competitor_intel/
+// index_hierarchy.py — keep in sync if you add or rename an index.
+const COMPOSITE_INDEX_LABELS = {
+  brand_heat:             { zh: '品牌热度',         en: 'Brand Heat',             pillar: 'brand_equity' },
+  brand_nps:              { zh: '品牌净推荐值',     en: 'Brand NPS',              pillar: 'brand_equity' },
+  pricing_power_index:    { zh: '溢价能力指数',     en: 'Pricing Power Index',    pillar: 'brand_equity' },
+  loyalty_index:          { zh: '品牌忠诚度',       en: 'Loyalty Index',          pillar: 'brand_equity' },
+  content_velocity_index: { zh: '内容动能指数',     en: 'Content Velocity Index', pillar: 'marketing_engine' },
+  influencer_footprint:   { zh: 'KOL 足迹',         en: 'Influencer Footprint',   pillar: 'marketing_engine' },
+  search_dominance:       { zh: '搜索话语权',       en: 'Search Dominance',       pillar: 'marketing_engine' },
+  hero_product_index:     { zh: '爆品指数',         en: 'Hero Product Index',     pillar: 'commerce_engine' },
+  launch_cadence:         { zh: '上新节奏',         en: 'Launch Cadence',         pillar: 'commerce_engine' },
+  trend_capture_index:    { zh: '趋势捕捉',         en: 'Trend Capture',          pillar: 'commerce_engine' },
+  innovation_score:       { zh: '创新评分',         en: 'Innovation Score',       pillar: 'commerce_engine' },
+  promotional_discipline: { zh: '促销纪律',         en: 'Promotional Discipline', pillar: 'commerce_engine' },
+};
+
+const PILLAR_LABELS = {
+  brand_equity:     { zh: '品牌资产', en: 'Brand Equity' },
+  marketing_engine: { zh: '营销引擎', en: 'Marketing Engine' },
+  commerce_engine:  { zh: '商业引擎', en: 'Commerce Engine' },
+};
+
+// Per-category hero/supporting layout. Mirrors index_hierarchy.py defaults.
+// For categories without an explicit override the _default applies.
+const CATEGORY_HIERARCHY = {
+  _default: {
+    brand_equity:     { hero: 'brand_heat',             supporting: ['brand_nps', 'pricing_power_index', 'loyalty_index'] },
+    marketing_engine: { hero: 'content_velocity_index', supporting: ['influencer_footprint', 'search_dominance'] },
+    commerce_engine:  { hero: 'hero_product_index',     supporting: ['launch_cadence', 'trend_capture_index', 'innovation_score', 'promotional_discipline'] },
+  },
+  '美妆个护': {
+    brand_equity:     { hero: 'brand_nps',              supporting: ['brand_heat', 'pricing_power_index', 'loyalty_index'] },
+    marketing_engine: { hero: 'content_velocity_index', supporting: ['influencer_footprint', 'search_dominance'] },
+    commerce_engine:  { hero: 'hero_product_index',     supporting: ['innovation_score', 'trend_capture_index', 'launch_cadence', 'promotional_discipline'] },
+  },
+  '食品饮料': {
+    brand_equity:     { hero: 'loyalty_index',          supporting: ['brand_heat', 'brand_nps', 'pricing_power_index'] },
+    marketing_engine: { hero: 'content_velocity_index', supporting: ['influencer_footprint', 'search_dominance'] },
+    commerce_engine:  { hero: 'hero_product_index',     supporting: ['launch_cadence', 'trend_capture_index', 'innovation_score', 'promotional_discipline'] },
+  },
+  '家居生活': {
+    brand_equity:     { hero: 'pricing_power_index',    supporting: ['brand_nps', 'brand_heat', 'loyalty_index'] },
+    marketing_engine: { hero: 'content_velocity_index', supporting: ['influencer_footprint', 'search_dominance'] },
+    commerce_engine:  { hero: 'hero_product_index',     supporting: ['launch_cadence', 'trend_capture_index', 'innovation_score', 'promotional_discipline'] },
+  },
+  '鞋类': {
+    brand_equity:     { hero: 'brand_heat',             supporting: ['brand_nps', 'pricing_power_index', 'loyalty_index'] },
+    marketing_engine: { hero: 'content_velocity_index', supporting: ['influencer_footprint', 'search_dominance'] },
+    commerce_engine:  { hero: 'hero_product_index',     supporting: ['trend_capture_index', 'launch_cadence', 'innovation_score', 'promotional_discipline'] },
+  },
+};
+
+function resolveHierarchy(brandCategory) {
+  return CATEGORY_HIERARCHY[brandCategory] || CATEGORY_HIERARCHY._default;
+}
+
+// GET /api/ci/indices — 3 pillars × 12 composite indices, per-competitor.
+//
+// Honors ?lang=zh|en (default zh) and resolves all bilingual {zh, en} fields
+// server-side using resolveLang() — same pattern as /api/ci/brief introduced
+// in PR #31. Frontend just renders strings; no client-side language ternary.
+//
+// Returns the latest computed score per (workspace, competitor, index_name)
+// from the composite_indices table. Hierarchy (which indices are hero vs
+// supporting per pillar) is resolved from workspace.brand_category.
+//
+// Empty rows for an index_name across all competitors signal "not yet
+// computed" — the frontend renders "Coverage pending" rather than zeros.
+app.get('/api/ci/indices', async (req, res) => {
+  try {
+    const workspaceId = req.query.workspace_id;
+    if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+    if (!isValidUuid(workspaceId)) {
+      return res.status(404).json({ error: 'Workspace not initialized', workspace_id: workspaceId });
+    }
+    const lang = req.query.lang === 'en' ? 'en' : 'zh';
+
+    const { rows: wsRows } = await pool.query(
+      'SELECT brand_name, brand_category FROM workspaces WHERE id = $1',
+      [workspaceId]
+    );
+    if (wsRows.length === 0) return res.status(404).json({ error: 'Workspace not found' });
+    const workspaceBrandName = wsRows[0].brand_name || '';
+    const brandCategory = wsRows[0].brand_category || null;
+
+    // Latest composite_indices row per (competitor, index_name).
+    // Distinct on the (competitor, index) pair so historical reruns don't
+    // double-count. computed_at DESC picks the freshest snapshot.
+    const { rows: indexRows } = await pool.query(
+      `SELECT DISTINCT ON (competitor_name, index_name)
+              competitor_name, index_name, index_version, pillar,
+              score, inputs, weights, explain_text,
+              direction, delta, computed_at
+         FROM composite_indices
+        WHERE workspace_id = $1
+        ORDER BY competitor_name, index_name, computed_at DESC`,
+      [workspaceId]
+    );
+
+    // Pivot into { [brand]: { [index]: payload } }
+    const indicesByCompetitor = {};
+    let latestComputedAt = null;
+    for (const r of indexRows) {
+      indicesByCompetitor[r.competitor_name] ||= {};
+      const score = r.score === null ? null : parseFloat(r.score);
+      const delta = r.delta === null ? null : parseFloat(r.delta);
+
+      // Defensively parse JSONB fields — node-postgres returns objects for
+      // jsonb columns but stringified for legacy rows.
+      let inputs = r.inputs;
+      let weights = r.weights;
+      let explain = r.explain_text;
+      if (typeof inputs === 'string')  { try { inputs = JSON.parse(inputs); } catch { inputs = {}; } }
+      if (typeof weights === 'string') { try { weights = JSON.parse(weights); } catch { weights = {}; } }
+      if (typeof explain === 'string') { try { explain = JSON.parse(explain); } catch { explain = {}; } }
+
+      // explain_text is stored as {zh: string[], en: string[]} — resolveLang
+      // works on the outer bilingual object and returns the right array.
+      // Empty array fallback when neither language has content.
+      const resolvedExplain = resolveLang(explain || { zh: [], en: [] }, lang);
+      const explainArr = Array.isArray(resolvedExplain) ? resolvedExplain : [];
+
+      indicesByCompetitor[r.competitor_name][r.index_name] = {
+        score,
+        version: r.index_version,
+        pillar: r.pillar,
+        direction: r.direction,
+        delta,
+        inputs: inputs || {},
+        weights: weights || {},
+        explain_text: explainArr,
+        is_proxy: typeof r.index_version === 'string' && r.index_version.endsWith('-proxy'),
+        computed_at: r.computed_at,
+      };
+      if (!latestComputedAt || r.computed_at > latestComputedAt) {
+        latestComputedAt = r.computed_at;
+      }
+    }
+
+    const hierarchy = resolveHierarchy(brandCategory);
+
+    // Resolve labels server-side. PILLAR_LABELS / COMPOSITE_INDEX_LABELS are
+    // constant maps of name → {zh, en} — flatten each value to a string.
+    const resolvedPillarLabels = {};
+    for (const [k, v] of Object.entries(PILLAR_LABELS)) {
+      resolvedPillarLabels[k] = resolveLang(v, lang);
+    }
+    const resolvedIndexLabels = {};
+    for (const [k, v] of Object.entries(COMPOSITE_INDEX_LABELS)) {
+      // COMPOSITE_INDEX_LABELS values include zh/en/pillar — resolveLang
+      // picks the right language string, but we still want pillar metadata.
+      resolvedIndexLabels[k] = { label: resolveLang(v, lang), pillar: v.pillar };
+    }
+
+    return res.json({
+      workspace_brand_name: workspaceBrandName,
+      brand_category: brandCategory,
+      lang,
+      hierarchy: { pillars: hierarchy },
+      pillar_labels: resolvedPillarLabels,    // { brand_equity: "Brand Equity", ... }
+      index_labels: resolvedIndexLabels,      // { brand_heat: { label: "Brand Heat", pillar: "..." }, ... }
+      indices_by_competitor: indicesByCompetitor,
+      computed_at: latestComputedAt,
+    });
+  } catch (err) {
+    console.error('[CI] GET indices error:', err.message);
+    return res.status(500).json({ error: 'Failed to fetch composite indices' });
+  }
+});
+
 // GET /api/ci/library — last N weeks of briefs as LibraryEntry[]
 //
 // Joins weekly_briefs with content_recommendations + product_opportunities
