@@ -1222,7 +1222,11 @@ function resolveObj(obj, lang, fields) {
 // "pipeline-time translation" (new cron data) and the existing
 // pre-bilingual rows that haven't been regenerated yet.
 
-const CJK_PATTERN = /[一-鿿]/;
+// Build the regex from explicit code-point integers so the bytes are
+// ASCII-only in the source file (encoding-safe across deploy chain).
+const CJK_PATTERN = new RegExp(
+  '[' + String.fromCodePoint(0x4e00) + '-' + String.fromCodePoint(0x9fff) + ']'
+);
 function hasChinese(s) {
   return typeof s === 'string' && CJK_PATTERN.test(s);
 }
@@ -1474,6 +1478,7 @@ app.get('/api/ci/brief', async (req, res) => {
     // (because the row was generated before the bilingual pipeline ran),
     // translate the Chinese-only fields via DeepSeek now and write the
     // {zh, en} structure back to the DB so subsequent reads are instant.
+    console.log(`[CI brief] workspace=${workspaceId.slice(0,8)} lang=${lang} verdict.headline_sample=${JSON.stringify(String(resolvedVerdict.headline || '').slice(0, 40))}`);
     if (lang === 'en') {
       const toTranslate = new Set();
       const collect = (obj, fields) => {
@@ -1491,6 +1496,7 @@ app.get('/api/ci/brief', async (req, res) => {
         }
       }
 
+      console.log(`[CI brief] hasChinese-detected fields: ${toTranslate.size}`);
       if (toTranslate.size > 0) {
         const texts = [...toTranslate];
         console.log(`[CI] Runtime-translating ${texts.length} Chinese fields for workspace ${workspaceId}`);
