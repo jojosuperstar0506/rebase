@@ -1750,22 +1750,6 @@ export default function CISettings() {
   const [ready, setReady] = useState(false);
   useEffect(() => { const timer = setTimeout(() => setReady(true), 200); return () => clearTimeout(timer); }, []);
 
-  // Demo workspace gate. is_demo only lives on the API-side Workspace
-  // (not in localStorage), so we fetch it once on mount. When TRUE, the
-  // page locks down to read-only mode: brand profile becomes display-only,
-  // reset card is hidden, add-competitor UI is hidden, and the competitor
-  // list rename/remove buttons are hidden via CompetitorList readOnly.
-  // Real customer workspaces never have is_demo set → flow unchanged.
-  const [isDemoWorkspace, setIsDemoWorkspace] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    getWorkspace().then(res => {
-      if (cancelled) return;
-      setIsDemoWorkspace(res.data?.is_demo === true);
-    }).catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
-
   // Force a re-render whenever workspace/competitor storage changes so child
   // components that read getCIWorkspace() / getCICompetitors() synchronously
   // (notably AddCompetitorSection, which gates the AI tab on workspace.brand_name)
@@ -1891,46 +1875,14 @@ export default function CISettings() {
           </p>
         </div>
 
-        {/* Demo workspace banner — shown when this workspace is flagged
-            is_demo on the API. Locks the configuration UI so live demos
-            can't be broken by accidental clicks. */}
-        {isDemoWorkspace && (
-          <div style={{
-            padding: '14px 18px',
-            marginBottom: 24,
-            background: `linear-gradient(135deg, ${C.ac}14 0%, ${C.ac2 || C.ac}10 100%)`,
-            border: `1px solid ${C.ac}44`,
-            borderRadius: 12,
-            display: 'flex',
-            gap: 12,
-            alignItems: 'flex-start',
-          }}>
-            <span style={{ fontSize: 22, flexShrink: 0 }}>🎬</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, color: C.tx, fontSize: 14, marginBottom: 4 }}>
-                {lang === 'zh' ? '演示工作区 (Demo Dataset)' : 'Demo workspace (curated dataset)'}
-              </div>
-              <div style={{ color: C.t2, fontSize: 13, lineHeight: 1.55 }}>
-                {lang === 'zh'
-                  ? '这是一个为客户演示而准备的精选数据集（轻奢女包品类）。配置已锁定以防止演示中意外修改。如需为真实品牌定制，请联系客户成功团队。'
-                  : "Curated dataset prepared for client demos (premium handbag category). Configuration is locked to prevent accidental edits during demos. To customize for a real brand, contact your account manager."}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* 1 — Brand Profile */}
         <BrandProfileSection C={C} lang={lang} isMobile={isMobile} />
 
         {/* 1b — Reset Data (sits right under Brand Profile so it's reachable
-                  without scrolling past the AI suggestions panel).
-                  HIDDEN on demo workspaces — operators shouldn't be able
-                  to nuke the curated dataset mid-screen-recording. */}
-        {!isDemoWorkspace && (
-          <ResetDataCard C={C} lang={lang} isMobile={isMobile} onReset={() => {
-            setCompetitors([]);
-          }} />
-        )}
+                  without scrolling past the AI suggestions panel). */}
+        <ResetDataCard C={C} lang={lang} isMobile={isMobile} onReset={() => {
+          setCompetitors([]);
+        }} />
 
         {/* 2 — My Competitors (renamed from "Manage Competitors") */}
         <Section title={t(T.ci.myCompetitors, lang as any)} C={C}>
@@ -1943,7 +1895,7 @@ export default function CISettings() {
               add UI inline (the prominent setup flow). */}
           {competitors.length > 0 ? (
             <>
-              {/* Configured banner — distinct copy for demo vs real workspaces */}
+              {/* Configured banner */}
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 10,
                 padding: '12px 16px', marginBottom: 16,
@@ -1954,17 +1906,7 @@ export default function CISettings() {
               }}>
                 <span style={{ fontSize: 16, color: C.success }}>✓</span>
                 <span style={{ flex: 1 }}>
-                  {isDemoWorkspace ? (
-                    lang === 'zh' ? (
-                      <>
-                        演示数据集已配置 <strong>{competitors.length}</strong> 个竞品（只读）。
-                      </>
-                    ) : (
-                      <>
-                        Demo dataset has <strong>{competitors.length}</strong> competitors configured (read-only).
-                      </>
-                    )
-                  ) : lang === 'zh' ? (
+                  {lang === 'zh' ? (
                     <>
                       已配置 <strong>{competitors.length}</strong> 个竞品。如需重新设置，请使用上方的{' '}
                       <strong>重置所有数据</strong>。
@@ -1979,7 +1921,7 @@ export default function CISettings() {
               </div>
 
               {/* "Now tracking" toast (only on add) */}
-              {recentlyAdded && !isDemoWorkspace && (
+              {recentlyAdded && (
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 8,
                   padding: '8px 14px', background: `${C.success}15`,
@@ -1997,11 +1939,9 @@ export default function CISettings() {
                 competitors={competitors}
                 onChange={handleCompetitorsChange}
                 isMobile={isMobile}
-                readOnly={isDemoWorkspace}
               />
 
-              {/* Add-more disclosure — collapsed by default; HIDDEN on demo */}
-              {!isDemoWorkspace && (
+              {/* Add-more disclosure — collapsed by default */}
               <details style={{ marginTop: 16 }}>
                 <summary style={{
                   cursor: 'pointer', userSelect: 'none',
@@ -2022,7 +1962,6 @@ export default function CISettings() {
                   />
                 </div>
               </details>
-              )}
             </>
           ) : (
             <>
