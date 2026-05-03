@@ -850,6 +850,7 @@ app.get('/api/ci/competitors', async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+    if (!isValidUuid(workspaceId)) return res.json([]);
 
     // #18: include last_scraped_at + last_scrape_platform per competitor.
     // Surfaces per-brand data freshness on the Brief workspace context
@@ -928,6 +929,7 @@ app.get('/api/ci/dashboard', async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+    if (!isValidUuid(workspaceId)) return res.status(404).json({ error: 'Workspace not initialized', workspace_id: workspaceId });
     const lang = req.query.lang === 'en' ? 'en' : 'zh';
 
     // Get competitors
@@ -1074,6 +1076,7 @@ app.get('/api/ci/intelligence', async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+    if (!isValidUuid(workspaceId)) return res.status(404).json({ error: 'Workspace not initialized', workspace_id: workspaceId });
     const lang = req.query.lang === 'en' ? 'en' : 'zh';
 
     // Get ALL latest results per competitor × metric_type
@@ -1271,6 +1274,52 @@ ${numbered}`;
   }
 }
 
+// Generic translator: takes an array of {get, set} swap-pairs, batch-translates
+// every Chinese string they reference in ONE LLM call, then writes back.
+// Returns the zh→en map so callers can also write translations to the DB.
+async function ensureEnglish(swappers) {
+  const collected = new Set();
+  for (const sw of swappers) {
+    const v = sw.get();
+    if (hasChinese(v)) collected.add(v);
+  }
+  if (collected.size === 0) return null;
+  const texts = [...collected];
+  const translated = await translateBatch(texts);
+  const map = Object.fromEntries(texts.map((zh, i) => [zh, translated[i]]));
+  for (const sw of swappers) {
+    const v = sw.get();
+    if (typeof v === 'string' && map[v]) sw.set(map[v]);
+  }
+  return map;
+}
+
+// Build swap-pairs for a list of (object, fieldName) tuples.
+function fieldSwappers(obj, fields) {
+  if (!obj || typeof obj !== 'object') return [];
+  return fields.map(f => ({
+    get: () => obj[f],
+    set: v => { obj[f] = v; },
+  }));
+}
+
+// Build swap-pairs for an array's string elements.
+function arraySwappers(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.map((_, i) => ({
+    get: () => arr[i],
+    set: v => { arr[i] = v; },
+  }));
+}
+
+// Postgres UUID rejector: stops 'mock' / 'local' / other placeholders sent
+// by the frontend before workspace state hydrates. Returns true if the
+// string looks like a UUID, false otherwise.
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isValidUuid(s) {
+  return typeof s === 'string' && UUID_PATTERN.test(s);
+}
+
 // GET /api/ci/brief — current Brief (verdict + moves + drafts + opportunity)
 //
 // Reads weekly_briefs.verdict + .moves (written by brand_positioning_pipeline)
@@ -1291,6 +1340,9 @@ app.get('/api/ci/brief', async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+    if (!isValidUuid(workspaceId)) {
+      return res.status(404).json({ error: 'No brief — workspace not initialized', workspace_id: workspaceId });
+    }
     const lang = req.query.lang === 'en' ? 'en' : 'zh';
     const requestedWeek = req.query.week_of || null;
 
@@ -1594,6 +1646,7 @@ app.get('/api/ci/analytics', async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+    if (!isValidUuid(workspaceId)) return res.status(404).json({ error: 'Workspace not initialized', workspace_id: workspaceId });
     const lang = req.query.lang === 'en' ? 'en' : 'zh';
 
     const { rows: wsRows } = await pool.query(
@@ -1728,6 +1781,7 @@ app.get('/api/ci/library', async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+    if (!isValidUuid(workspaceId)) return res.json([]);
     const lang = req.query.lang === 'en' ? 'en' : 'zh';
     const limit = Math.min(parseInt(req.query.limit, 10) || 12, 52);
 
@@ -1852,6 +1906,9 @@ app.get('/api/ci/domain-scores', async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+    if (!isValidUuid(workspaceId)) {
+      return res.json({ consumer: { own: 0, competitors: {} }, product: { own: 0, competitors: {} }, marketing: { own: 0, competitors: {} } });
+    }
 
     const { rows: wsRows } = await pool.query(
       'SELECT brand_name FROM workspaces WHERE id = $1', [workspaceId]
