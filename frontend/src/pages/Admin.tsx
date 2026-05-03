@@ -107,6 +107,21 @@ export default function Admin() {
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<"all" | "pending" | "approved">("all");
 
+  // W5: workspaces newly created (via onboarding) that haven't been scraped yet.
+  // Until Phase D customer installer ships, these need a manual scrape on
+  // Joanna's/Will's residential-IP Mac.
+  type PendingScrape = {
+    id: string;
+    brand_name: string;
+    brand_category: string | null;
+    user_id: string;
+    created_at: string;
+    competitor_count: number;
+    scraped_count: number;
+    competitors: string[] | null;
+  };
+  const [pendingScrapes, setPendingScrapes] = useState<PendingScrape[]>([]);
+
   const fetchApplicants = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -121,9 +136,23 @@ export default function Admin() {
     setLoading(false);
   }, []);
 
+  const fetchPendingScrapes = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/pending-scrapes");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (Array.isArray(data?.pending)) setPendingScrapes(data.pending);
+    } catch {
+      // Soft-fail: pending scrapes are nice-to-have, not core to the page
+    }
+  }, []);
+
   useEffect(() => {
-    if (authed) fetchApplicants();
-  }, [authed, fetchApplicants]);
+    if (authed) {
+      fetchApplicants();
+      fetchPendingScrapes();
+    }
+  }, [authed, fetchApplicants, fetchPendingScrapes]);
 
   function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -197,10 +226,62 @@ export default function Admin() {
               {pending.length} pending · {approved.length} approved
             </div>
           </div>
-          <button onClick={fetchApplicants} style={{ padding: "8px 16px", background: C.s2, border: `1px solid ${C.bd}`, borderRadius: 6, color: C.t2, fontSize: 13, cursor: "pointer" }}>
+          <button onClick={() => { fetchApplicants(); fetchPendingScrapes(); }} style={{ padding: "8px 16px", background: C.s2, border: `1px solid ${C.bd}`, borderRadius: 6, color: C.t2, fontSize: 13, cursor: "pointer" }}>
             ↻ Refresh
           </button>
         </div>
+
+        {/* W5: Pending scrapes — workspaces created by onboarding but no
+            scrape data yet. Each one needs a manual scrape on a residential
+            IP machine until Phase D customer installer ships. */}
+        {pendingScrapes.length > 0 && (
+          <div style={{ background: C.s1, border: `1px solid ${C.warning ?? C.bd}`, borderRadius: 8, padding: 16, marginBottom: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: C.tx }}>
+                ⏳ {pendingScrapes.length} workspace{pendingScrapes.length === 1 ? "" : "s"} pending first scrape
+              </div>
+              <div style={{ fontSize: 12, color: C.t3 }}>
+                Run scrape locally for each, then refresh
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {pendingScrapes.map((ws) => (
+                <div key={ws.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "8px 12px", background: C.s2, borderRadius: 6 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.tx }}>
+                      {ws.brand_name}{" "}
+                      <span style={{ color: C.t3, fontWeight: 400 }}>
+                        ({ws.brand_category || "—"})
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: C.t3, marginTop: 2, fontFamily: "monospace" }}>
+                      id={ws.id.slice(0, 8)} · user={ws.user_id} · {ws.competitor_count} competitor{ws.competitor_count === 1 ? "" : "s"}
+                    </div>
+                    {ws.competitors && ws.competitors.length > 0 && (
+                      <div style={{ fontSize: 11, color: C.t2, marginTop: 4 }}>
+                        Competitors: {ws.competitors.join(", ")}
+                      </div>
+                    )}
+                  </div>
+                  <code
+                    onClick={(e) => {
+                      const text = `python -m services.competitor_intel.scrape_runner --workspace-id ${ws.id} --tier watchlist --mode browser`;
+                      navigator.clipboard?.writeText(text);
+                      const el = e.currentTarget;
+                      const orig = el.textContent;
+                      el.textContent = "copied ✓";
+                      setTimeout(() => { el.textContent = orig; }, 1200);
+                    }}
+                    title="Click to copy the scrape command"
+                    style={{ fontSize: 10, color: C.ac, background: C.bg, padding: "4px 8px", borderRadius: 4, cursor: "pointer", whiteSpace: "nowrap", marginLeft: 12 }}
+                  >
+                    copy scrape cmd
+                  </code>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Filter tabs */}
         <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>

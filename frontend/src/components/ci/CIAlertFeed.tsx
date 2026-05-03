@@ -16,11 +16,15 @@ interface BrandScore {
   wtp_score?: number;
 }
 
-function generateMockAlerts(competitors: BrandScore[]): CIAlert[] {
+function generateMockAlerts(competitors: BrandScore[], lang: 'zh' | 'en' = 'zh'): CIAlert[] {
   if (!competitors || competitors.length === 0) return [];
 
   const alerts: CIAlert[] = [];
   const now = new Date();
+
+  // W8: mock alert messages respect lang. Once real alerts come from
+  // /api/ci/alerts the backend produces messages and these are unused.
+  const t = (zh: string, en: string) => (lang === 'en' ? en : zh);
 
   const sorted = [...competitors].sort((a, b) => b.threat_index - a.threat_index);
 
@@ -34,7 +38,10 @@ function generateMockAlerts(competitors: BrandScore[]): CIAlert[] {
       current_value: sorted[0].threat_index,
       change_amount: 12,
       severity: 'warning',
-      message: `${sorted[0].brand_name}的威胁指数上升了12分 (${sorted[0].threat_index - 12} → ${sorted[0].threat_index})`,
+      message: t(
+        `${sorted[0].brand_name}的威胁指数上升了12分 (${sorted[0].threat_index - 12} → ${sorted[0].threat_index})`,
+        `${sorted[0].brand_name}'s threat index rose 12 points (${sorted[0].threat_index - 12} → ${sorted[0].threat_index})`
+      ),
       is_read: false,
       created_at: new Date(now.getTime() - 2 * 3600000).toISOString(),
     });
@@ -51,7 +58,10 @@ function generateMockAlerts(competitors: BrandScore[]): CIAlert[] {
       current_value: highMomentum.momentum_score,
       change_amount: 15,
       severity: 'critical',
-      message: `${highMomentum.brand_name}的增长势能大幅上升了15分`,
+      message: t(
+        `${highMomentum.brand_name}的增长势能大幅上升了15分`,
+        `${highMomentum.brand_name}'s momentum jumped 15 points`
+      ),
       is_read: false,
       created_at: new Date(now.getTime() - 5 * 3600000).toISOString(),
     });
@@ -71,7 +81,10 @@ function generateMockAlerts(competitors: BrandScore[]): CIAlert[] {
         current_value: wtp,
         change_amount: -8,
         severity: 'info',
-        message: `${withWtp.brand_name}的支付意愿下降了8分`,
+        message: t(
+          `${withWtp.brand_name}的支付意愿下降了8分`,
+          `${withWtp.brand_name}'s willingness-to-pay dropped 8 points`
+        ),
         is_read: true,
         created_at: new Date(now.getTime() - 26 * 3600000).toISOString(),
       });
@@ -194,14 +207,14 @@ export default function CIAlertFeed({ workspaceId, competitors, source }: CIAler
       }
       // API not available or no alerts — use mock data
       if (!cancelled) {
-        setAlerts(generateMockAlerts(competitors));
+        setAlerts(generateMockAlerts(competitors, lang as 'zh' | 'en'));
         setLoading(false);
       }
     }
 
     load();
     return () => { cancelled = true; };
-  }, [workspaceId, competitors]);
+  }, [workspaceId, competitors, lang]);
 
   // Mark a single alert as read (local state + API best-effort)
   function markOneRead(alertId: string) {
