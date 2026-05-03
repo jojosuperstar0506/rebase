@@ -22,6 +22,7 @@
 #   5. gtm_content_pipeline                    (depends on #4 — reads brief moves)
 #   6. product_opportunity_pipeline            (depends on #4)
 #   7. white_space_pipeline                    (depends on #3 + #4)
+#   8. composite_indices                       (depends on #1-#3 — 12 user-facing indices)
 #
 # Job tracking:
 #   scoring_pipeline updates ci_analysis_jobs as it goes and marks
@@ -123,26 +124,34 @@ run_step "3/7 domain_aggregation" "$PYTHON" \
 # ─── Stage 4: brief (verdict + moves) ────────────────────────────────────────
 # Reads domain rollups, writes weekly_briefs. UPSERT — daily reruns refresh
 # the verdict, never duplicate.
-run_step "4/7 brand_positioning" "$PYTHON" \
+run_step "4/8 brand_positioning" "$PYTHON" \
   -m services.competitor_intel.brand_positioning_pipeline \
   --workspace-id "$WORKSPACE_ID"
 
 # ─── Stage 5: Douyin content drafts ──────────────────────────────────────────
 # Skip-if-exists at (workspace_id, week_of) — preserves the user's
 # mark_posted / dismiss decisions across reruns.
-run_step "5/7 gtm_content" "$PYTHON" \
+run_step "5/8 gtm_content" "$PYTHON" \
   -m services.competitor_intel.gtm_content_pipeline \
   --workspace-id "$WORKSPACE_ID"
 
 # ─── Stage 6: product opportunity ────────────────────────────────────────────
 # Skip-if-exists same as Stage 5 — preserves accept/dismiss state.
-run_step "6/7 product_opportunity" "$PYTHON" \
+run_step "6/8 product_opportunity" "$PYTHON" \
   -m services.competitor_intel.product_opportunity_pipeline \
   --workspace-id "$WORKSPACE_ID"
 
 # ─── Stage 7: white space ────────────────────────────────────────────────────
-run_step "7/7 white_space" "$PYTHON" \
+run_step "7/8 white_space" "$PYTHON" \
   -m services.competitor_intel.white_space_pipeline \
+  --workspace-id "$WORKSPACE_ID"
+
+# ─── Stage 8: composite indices (3 pillars × 12 indices) ─────────────────────
+# Reads the latest analysis_results + scraped_products + scraped_brand_profiles
+# and writes 12 user-facing composite scores per competitor to composite_indices.
+# Pure composition layer — runs last because every other stage feeds it.
+run_step "8/8 composite_indices" "$PYTHON" \
+  -m services.competitor_intel.composite_indices \
   --workspace-id "$WORKSPACE_ID"
 
 # ─── Done ────────────────────────────────────────────────────────────────────
