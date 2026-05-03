@@ -147,13 +147,32 @@ else
   report_failure "white_space" "white_space_pipeline returned non-zero"
 fi
 
-# Step 3: Generate narratives
-log "Step 3: Generating AI narratives..."
-if $PYTHON -m services.competitor_intel.narrative_pipeline --all >> "$LOG_FILE" 2>&1; then
-  log "Step 3: Narratives complete"
+# Step 3: Generate narratives — DISABLED 2026-05-03.
+#
+# narrative_pipeline writes per-brand brand_insight rows + a workspace-level
+# analysis_narratives row. The brand_insight outputs ARE still consumed
+# (frontend "AI brand insights" panel via /api/ci/brand-insights), but the
+# workspace-level row is orphaned in V3 — the Brief verdict + moves replaces
+# it conceptually, and no V3 page consumes /api/ci/dashboard.
+#
+# To stop wasting LLM calls on the orphan, we now invoke a per-brand-only
+# pass instead of --all. If we wanted to retain the workspace-level rows
+# anyway (e.g. for an admin diagnostic page), restore the --all invocation.
+#
+# Coverage audit: see OPEN-TODOS-FOR-JOANNA-2026-05-03.md §8.2.
+log "Step 3: Generating per-brand AI narratives only..."
+if $PYTHON -m services.competitor_intel.narrative_pipeline --all --brands-only >> "$LOG_FILE" 2>&1; then
+  log "Step 3: Narratives complete (per-brand only)"
 else
-  log "Step 3: Narrative generation failed"
-  report_failure "narrative" "Narrative pipeline returned non-zero"
+  # Fallback: older narrative_pipeline doesn't support --brands-only yet.
+  # Still run the full pipeline so brand_insight rows keep getting written.
+  log "Step 3: --brands-only not supported, running full pipeline as fallback"
+  if $PYTHON -m services.competitor_intel.narrative_pipeline --all >> "$LOG_FILE" 2>&1; then
+    log "Step 3: Narratives complete (full)"
+  else
+    log "Step 3: Narrative generation failed"
+    report_failure "narrative" "Narrative pipeline returned non-zero"
+  fi
 fi
 
 # Step 4: Detect alerts

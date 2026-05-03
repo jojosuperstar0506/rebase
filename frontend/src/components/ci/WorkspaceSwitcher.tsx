@@ -3,27 +3,28 @@ import type { CSSProperties } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useCIData } from '../../hooks/useCIData';
 import {
-  getKnownWorkspaces, setActiveWorkspaceId, removeKnownWorkspace,
+  getKnownWorkspaces, setActiveWorkspaceId, removeKnownWorkspace, addKnownWorkspace,
   type KnownWorkspace,
 } from '../../utils/ciStorage';
+import { listWorkspaces } from '../../services/ciApi';
 
 /**
  * Workspace switcher pill — sits at the top of CISubNav so the user always
  * knows which workspace they're looking at and can switch between any they've
- * visited. The dropdown lists all locally-cached workspaces.
+ * visited. The dropdown lists all workspaces owned by the current user
+ * (from GET /api/ci/workspaces) merged with any locally-cached ones.
  *
- * Backend gap: today /api/ci/workspace/me returns LIMIT 1 (just the latest
- * for the user) and POST /api/ci/workspace upserts by user_id (so it can't
- * create a 2nd workspace). The switcher is wired and pivots downstream
- * fetches correctly via ?workspace_id=, but the "+ New Workspace" and
- * "list other workspaces from server" features need GET /api/ci/workspaces
- * + a non-upserting POST to be useful for users beyond the default workspace.
+ * 2026-05-03 update: backend GET /api/ci/workspaces (W6) and split POST
+ * (insert) / PATCH (update) (W7) shipped, so the switcher now hydrates
+ * its list from the server on mount instead of relying solely on
+ * localStorage. The local cache stays as a fast-path / fallback.
  */
 export default function WorkspaceSwitcher() {
   const { colors: C, lang } = useApp();
   const { workspace, loading } = useCIData();
   const [open, setOpen] = useState(false);
   const [known, setKnown] = useState<KnownWorkspace[]>(getKnownWorkspaces());
+  const [listError, setListError] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -34,6 +35,34 @@ export default function WorkspaceSwitcher() {
       window.removeEventListener('ci-data-updated', refresh);
       window.removeEventListener('storage', refresh);
     };
+  }, []);
+
+  // Hydrate the dropdown from the server on mount — populates workspaces
+  // that haven't been visited locally yet (e.g. a user with multiple
+  // workspaces logging in on a fresh device). Soft-fail: if the API is
+  // unreachable we keep the local cache and surface a small note.
+  useEffect(() => {
+    let cancelled = false;
+    listWorkspaces().then(serverList => {
+      if (cancelled) return;
+      if (!serverList || serverList.length === 0) {
+        setListError(true);
+        return;
+      }
+      // Merge server-known into local cache (addKnownWorkspace is idempotent).
+      for (const w of serverList) {
+        addKnownWorkspace({
+          id: w.id,
+          brand_name: w.brand_name,
+          brand_category: w.brand_category,
+        });
+      }
+      setKnown(getKnownWorkspaces());
+      setListError(false);
+    }).catch(() => {
+      if (!cancelled) setListError(true);
+    });
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -163,14 +192,25 @@ export default function WorkspaceSwitcher() {
             })}
           </div>
 
+          {listError && (
+            <div style={{
+              borderTop: `1px solid ${C.bd}`,
+              padding: '8px 10px',
+              fontSize: 11, color: C.t3, lineHeight: 1.5,
+            }}>
+              {lang === 'zh'
+                ? '⚠️ 无法从服务器获取工作区列表，显示的是本地缓存。'
+                : '⚠️ Could not load workspaces from server — showing locally cached list.'}
+            </div>
+          )}
           <div style={{
             borderTop: `1px solid ${C.bd}`,
             padding: '8px 10px',
             fontSize: 11, color: C.t3, lineHeight: 1.5,
           }}>
             {lang === 'zh'
-              ? '新建工作区与从服务器获取完整工作区列表正在开发中。'
-              : 'Create / list workspaces from server is coming soon.'}
+              ? '在「设置」中可创建/编辑工作区。'
+              : 'Create / edit workspaces in Settings.'}
           </div>
         </div>
       )}

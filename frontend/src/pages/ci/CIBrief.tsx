@@ -16,6 +16,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { CSSProperties } from 'react';
 import { useApp } from '../../context/AppContext';
 import type { ColorSet } from '../../theme/colors';
@@ -128,6 +129,7 @@ export default function CIBrief() {
   const bp = useBreakpoint();
   const isMobile = bp === 'mobile';
   const { workspace, competitors } = useCIData();
+  const navigate = useNavigate();
 
   const [brief, setBrief] = useState<WeeklyBrief | null>(null);
   const [domains, setDomains] = useState<DomainScores | null>(null);
@@ -588,8 +590,29 @@ export default function CIBrief() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 10, fontWeight: 700, color: C.t3, letterSpacing: '0.05em' }}>
-                        #{i + 1} · {m.brand}
+                        #{i + 1}
                       </span>
+                      {/* Cross-link to Analytics — clicking the brand opens
+                          /ci/analytics with focus_brand query param so the
+                          user can verify the move's claims against the raw
+                          score data without losing context. Closes coverage
+                          audit §8.3 #2. */}
+                      <button
+                        onClick={() => navigate(`/ci/analytics?focus_brand=${encodeURIComponent(m.brand)}`)}
+                        title={lang === 'zh'
+                          ? `点击查看 ${m.brand} 的指标得分详情`
+                          : `Click to see ${m.brand}'s metric scores on Analytics`}
+                        style={{
+                          fontSize: 10, fontWeight: 700, letterSpacing: '0.05em',
+                          color: C.ac,
+                          background: `${C.ac}15`,
+                          border: `1px solid ${C.ac}40`,
+                          padding: '2px 8px', borderRadius: 10,
+                          cursor: 'pointer', lineHeight: 1.2,
+                        }}
+                      >
+                        {m.brand} →
+                      </button>
                     </div>
                     <h4 style={{ fontSize: 15, fontWeight: 700, margin: '0 0 8px', lineHeight: 1.4 }}>
                       {m.headline}
