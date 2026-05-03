@@ -224,8 +224,16 @@ Respond in this exact JSON format, no markdown, no explanation outside the JSON:
 # Pipeline orchestration
 # ---------------------------------------------------------------------------
 
-def run_narrative_for_workspace(workspace_id: str):
-    """Generate all narratives for a workspace."""
+def run_narrative_for_workspace(workspace_id: str, brands_only: bool = False):
+    """Generate narratives for a workspace.
+
+    `brands_only=True` skips the workspace-level cross-brand synthesis
+    (analysis_narratives table) — that data is no longer consumed by the
+    V3 frontend (the Brief verdict + moves replaced it). Per-brand
+    insights still write to analysis_results.ai_narrative which IS
+    consumed by /ci/analytics' AI brand insights panel. Saves one LLM
+    call per workspace per cron run.
+    """
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -327,28 +335,32 @@ def run_narrative_for_workspace(workspace_id: str):
                 except Exception as e:
                     print(f"  [ERROR] Brand insight for {comp_data['brand_name']}: {e}")
 
-            # Step 2: Cross-brand synthesis
-            try:
-                result = generate_workspace_narrative(dict(workspace), competitors_data)
+            # Step 2: Cross-brand synthesis — skipped when brands_only=True
+            # because the resulting analysis_narratives row is orphaned in V3.
+            if not brands_only:
+                try:
+                    result = generate_workspace_narrative(dict(workspace), competitors_data)
 
-                # Store in analysis_narratives
-                cur.execute(
-                    """
-                    INSERT INTO analysis_narratives
-                        (workspace_id, narrative, action_items)
-                    VALUES (%s, %s, %s::jsonb)
-                """,
-                    (
-                        workspace_id,
-                        result["narrative"],
-                        json.dumps(result["action_items"], ensure_ascii=False),
-                    ),
-                )
+                    # Store in analysis_narratives
+                    cur.execute(
+                        """
+                        INSERT INTO analysis_narratives
+                            (workspace_id, narrative, action_items)
+                        VALUES (%s, %s, %s::jsonb)
+                    """,
+                        (
+                            workspace_id,
+                            result["narrative"],
+                            json.dumps(result["action_items"], ensure_ascii=False),
+                        ),
+                    )
 
-                print(f"  [Synthesis] Narrative: {result['narrative'][:80]}...")
-                print(f"  [Synthesis] {len(result['action_items'])} action items generated")
-            except Exception as e:
-                print(f"  [ERROR] Synthesis narrative: {e}")
+                    print(f"  [Synthesis] Narrative: {result['narrative'][:80]}...")
+                    print(f"  [Synthesis] {len(result['action_items'])} action items generated")
+                except Exception as e:
+                    print(f"  [ERROR] Synthesis narrative: {e}")
+            else:
+                print("  [SKIP] Workspace-level synthesis skipped (brands_only=True)")
 
             conn.commit()
             print(f"[DONE] Narratives saved for workspace {workspace_id}")
@@ -356,7 +368,7 @@ def run_narrative_for_workspace(workspace_id: str):
         conn.close()
 
 
-def run_all_workspaces():
+def run_all_workspaces(brands_only: bool = False):
     """Generate narratives for all workspaces."""
     conn = get_conn()
     try:
@@ -364,7 +376,7 @@ def run_all_workspaces():
             cur.execute("SELECT DISTINCT id FROM workspaces")
             workspaces = cur.fetchall()
         for ws in workspaces:
-            run_narrative_for_workspace(ws["id"])
+            run_narrative_for_workspace(ws["id"], brands_only=brands_only)
     finally:
         conn.close()
 
@@ -373,12 +385,18 @@ def main():
     parser = argparse.ArgumentParser(description="Generate CI narratives via LLM")
     parser.add_argument("--workspace-id", help="Generate for a specific workspace")
     parser.add_argument("--all", action="store_true", help="Generate for all workspaces")
+    parser.add_argument(
+        "--brands-only", action="store_true",
+        help="Skip the workspace-level cross-brand synthesis (analysis_narratives). "
+             "Per-brand brand_insight rows still get written. Use this in cron to "
+             "avoid wasting LLM calls on orphaned data.",
+    )
     args = parser.parse_args()
 
     if args.workspace_id:
-        run_narrative_for_workspace(args.workspace_id)
+        run_narrative_for_workspace(args.workspace_id, brands_only=args.brands_only)
     elif args.all:
-        run_all_workspaces()
+        run_all_workspaces(brands_only=args.brands_only)
     else:
         print("Specify --workspace-id UUID or --all")
         sys.exit(1)

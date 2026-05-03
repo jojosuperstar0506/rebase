@@ -583,8 +583,92 @@ app.post("/api/admin/approve", (req, res) => {
   fs.writeFileSync(path.join(dir, matchFile), JSON.stringify(applicant, null, 2));
 
   console.log(`[Admin] Approved ${applicant.name} → invite code: ${inviteCode}`);
+
+  // Auto-email the invite code to the applicant if RESEND_API_KEY is set
+  // and they provided an email. Non-fatal — admin response still returns
+  // the code regardless so it can be shared manually if email fails.
+  notifyApplicantApproved(applicant).catch(e =>
+    console.error("[Admin] Approval email failed (non-fatal):", e.message)
+  );
+
   res.json({ success: true, inviteCode, user: applicant.name, company: applicant.company, email: applicant.email || "" });
 });
+
+// Send the inviteCode to the applicant's email after admin approval. Skips
+// silently when RESEND_API_KEY is not configured or the applicant gave no
+// email — both are valid V1 states (admin can copy-paste from the panel).
+async function notifyApplicantApproved(applicant) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return;
+  if (!applicant.email || !applicant.email.includes('@')) {
+    console.log("[Admin] No applicant email — skipping approval email");
+    return;
+  }
+
+  const https = require("https");
+  const fromAddr = process.env.RESEND_FROM_EMAIL || "Rebase <onboarding@resend.dev>";
+  const subject = `Welcome to Rebase, ${applicant.name} — your invite code is ready`;
+  const html = `
+    <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#222">
+      <h2 style="color:#0f766e;margin:0 0 8px">You're in.</h2>
+      <p style="font-size:14px;line-height:1.6;color:#444;margin:0 0 16px">
+        Hi ${applicant.name}, your Rebase application has been approved.
+        Use the invite code below to sign in for the first time.
+      </p>
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;text-align:center;margin:16px 0">
+        <div style="font-size:11px;font-weight:700;color:#16a34a;letter-spacing:2px;margin-bottom:8px">
+          INVITE CODE
+        </div>
+        <div style="font-family:monospace;font-size:22px;font-weight:700;color:#16a34a;letter-spacing:3px">
+          ${applicant.inviteCode}
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#444;margin:16px 0 8px">
+        Visit <a href="https://rebase-lac.vercel.app/login" style="color:#0f766e">rebase-lac.vercel.app/login</a>
+        and enter the code to access your dashboard.
+      </p>
+      <p style="font-size:12px;color:#888;margin-top:24px;border-top:1px solid #eee;padding-top:16px">
+        Questions? Just reply to this email — we'll personally onboard you.<br>
+        — Will & Joanna
+      </p>
+    </div>
+  `;
+
+  const body = JSON.stringify({
+    from: fromAddr,
+    to: [applicant.email],
+    subject,
+    html,
+  });
+
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: "api.resend.com",
+      port: 443,
+      path: "/emails",
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body),
+      },
+    }, (res) => {
+      let data = "";
+      res.on("data", chunk => { data += chunk; });
+      res.on("end", () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          console.log(`[Admin] Approval email sent to ${applicant.email}`);
+          resolve(data);
+        } else {
+          reject(new Error(`Resend ${res.statusCode}: ${data.slice(0, 200)}`));
+        }
+      });
+    });
+    req.on("error", reject);
+    req.write(body);
+    req.end();
+  });
+}
 
 // ── CI vFinal API endpoints ──────────────────────────────────────────────────
 

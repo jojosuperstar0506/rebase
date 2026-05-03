@@ -16,6 +16,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { CSSProperties } from 'react';
 import { useApp } from '../../context/AppContext';
 import type { ColorSet } from '../../theme/colors';
@@ -145,6 +146,7 @@ export default function CIBrief() {
   const bp = useBreakpoint();
   const isMobile = bp === 'mobile';
   const { workspace, competitors } = useCIData();
+  const navigate = useNavigate();
 
   const [brief, setBrief] = useState<WeeklyBrief | null>(null);
   const [domains, setDomains] = useState<DomainScores | null>(null);
@@ -644,17 +646,28 @@ export default function CIBrief() {
                       <span style={{ fontSize: 10, fontWeight: 700, color: C.t3, letterSpacing: '0.05em' }}>
                         #{i + 1}
                       </span>
-                      {/* W17: brand chip — deterministic color per brand so it's
-                          scannable across Brief/Analytics/Library. */}
-                      <span style={{
-                        fontSize: 10, fontWeight: 700, letterSpacing: '0.03em',
-                        padding: '2px 8px', borderRadius: 10,
-                        background: brandColorHsl(m.brand, 60, 88),
-                        color: brandColorHsl(m.brand, 70, 30),
-                        border: `1px solid ${brandColorHsl(m.brand, 50, 75)}`,
-                      }}>
-                        {m.brand}
-                      </span>
+                      {/* Brand chip — combines #17 (deterministic color per
+                          brand so it's scannable across Brief/Analytics/Library)
+                          + cross-link to Analytics drill (#7 from quick-wins).
+                          Click navigates to /ci/analytics?focus_brand=<name>
+                          so the user can verify the move's claims against
+                          raw score data without losing context. */}
+                      <button
+                        onClick={() => navigate(`/ci/analytics?focus_brand=${encodeURIComponent(m.brand)}`)}
+                        title={lang === 'zh'
+                          ? `点击查看 ${m.brand} 的指标得分详情`
+                          : `Click to see ${m.brand}'s metric scores on Analytics`}
+                        style={{
+                          fontSize: 10, fontWeight: 700, letterSpacing: '0.03em',
+                          padding: '2px 8px', borderRadius: 10,
+                          background: brandColorHsl(m.brand, 60, 88),
+                          color: brandColorHsl(m.brand, 70, 30),
+                          border: `1px solid ${brandColorHsl(m.brand, 50, 75)}`,
+                          cursor: 'pointer', lineHeight: 1.2,
+                        }}
+                      >
+                        {m.brand} →
+                      </button>
                     </div>
                     <h4 style={{ fontSize: 15, fontWeight: 700, margin: '0 0 8px', lineHeight: 1.4 }}>
                       {m.headline}

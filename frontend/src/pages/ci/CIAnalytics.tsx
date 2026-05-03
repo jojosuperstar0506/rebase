@@ -18,7 +18,8 @@
  * brief_generator + white_space pipelines ship.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import type { CSSProperties } from 'react';
 import { useApp } from '../../context/AppContext';
 import type { ColorSet } from '../../theme/colors';
@@ -62,12 +63,28 @@ export default function CIAnalytics() {
   const bp = useBreakpoint();
   const isMobile = bp === 'mobile';
   const { workspace } = useCIData();
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Cross-link from Brief moves: ?focus_brand=Songmont highlights + scrolls
+  // to the matching AI insight card. Cleared once consumed so the URL
+  // doesn't keep nagging the user with a stale highlight.
+  const focusBrand = searchParams.get('focus_brand') || null;
+  const insightCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [insights, setInsights] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [showAllMetrics, setShowAllMetrics] = useState(false);
+
+  // After data + insights load, scroll the focused brand's card into view.
+  useEffect(() => {
+    if (!focusBrand) return;
+    if (loading) return;
+    const el = insightCardRefs.current[focusBrand];
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [focusBrand, loading, insights]);
 
   // Drill-down state — a single slot for whatever the user clicked
   type DrillTarget =
@@ -186,6 +203,44 @@ export default function CIAnalytics() {
           </p>
         </header>
 
+        {/* Cross-link banner — visible when arriving from a Brief move's
+            brand chip click. Shows which brand we're focused on + a way
+            to clear and see the full page. */}
+        {focusBrand && (
+          <div style={{
+            background: `${C.ac}10`,
+            border: `1px solid ${C.ac}40`,
+            borderRadius: 8,
+            padding: '10px 14px',
+            marginBottom: 20,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+          }}>
+            <div style={{ fontSize: 13, color: C.tx }}>
+              {lang === 'zh' ? '正在聚焦于：' : 'Focusing on: '}
+              <strong style={{ color: C.ac }}>{focusBrand}</strong>
+              <span style={{ marginLeft: 8, fontSize: 12, color: C.t2 }}>
+                {lang === 'zh' ? '（已自动滚动至该品牌的 AI 洞察卡片）' : '(scrolled to its AI insight card)'}
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                searchParams.delete('focus_brand');
+                setSearchParams(searchParams, { replace: true });
+              }}
+              style={{
+                fontSize: 11, color: C.t2, background: 'transparent',
+                border: `1px solid ${C.bd}`, borderRadius: 6,
+                padding: '4px 10px', cursor: 'pointer',
+              }}
+            >
+              {lang === 'zh' ? '清除' : 'Clear'}
+            </button>
+          </div>
+        )}
+
         {/* ─── §A. Priority metrics this week ──────────────────────────── */}
         <section style={{ marginBottom: 36 }}>
           <SectionHeader
@@ -210,15 +265,18 @@ export default function CIAnalytics() {
           </div>
         </section>
 
-        {/* ─── §A.5 Brand insights (DeepSeek narratives per competitor) ── */}
-        {Object.keys(insights).length > 0 && (
+        {/* ─── §A.5 Brand insights (DeepSeek narratives per competitor) ──
+            Always render the section when there's a workspace brand_name
+            (we'll show an own-brand placeholder card even if no competitor
+            insights exist yet — better than a missing section). */}
+        {(Object.keys(insights).length > 0 || data.workspace_brand_name) && (
           <section style={{ marginBottom: 36 }}>
             <SectionHeader
               title={lang === 'zh' ? 'AI 品牌洞察' : 'AI brand insights'}
               subtitle={lang === 'zh'
                 ? '每个被追踪品牌的一段 AI 综合诊断，基于本周所有指标得分自动生成。'
                 : 'A short AI diagnosis per tracked brand, synthesized from this week’s metric scores.'}
-              count={Object.keys(insights).length}
+              count={Object.keys(insights).length + (data.workspace_brand_name && !insights[data.workspace_brand_name] ? 1 : 0)}
               C={C}
             />
             <div style={{
@@ -226,6 +284,25 @@ export default function CIAnalytics() {
               gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))',
               gap: 12,
             }}>
+              {/* Own-brand card — pinned first when own-brand isn't in
+                  insights (which is the common case after the OMI/Songmont
+                  identity fix removed own brand from workspace_competitors).
+                  Explains why and points the user to where their own analysis
+                  lives. Closes coverage audit §8.3 #3. */}
+              {data.workspace_brand_name && !insights[data.workspace_brand_name] && (
+                <BrandInsightCard
+                  key="__own__"
+                  brand={data.workspace_brand_name}
+                  isOwn
+                  narrative={lang === 'zh'
+                    ? '你的品牌还未生成 AI 综合诊断。AI 诊断目前仅对追踪的竞品自动生成；你的品牌的策略综合在「简报」页的 verdict 卡片中（每周更新）。'
+                    : 'No AI brand-insight yet for your own brand — AI insights are auto-generated for tracked competitors only. Your brand\'s strategic synthesis lives on the Brief page\'s verdict card (refreshed weekly).'}
+                  C={C}
+                  lang={lang}
+                  highlight={focusBrand === data.workspace_brand_name}
+                  cardRef={el => { insightCardRefs.current[data.workspace_brand_name] = el; }}
+                />
+              )}
               {Object.entries(insights).map(([brand, narrative]) => (
                 <BrandInsightCard
                   key={brand}
@@ -234,6 +311,8 @@ export default function CIAnalytics() {
                   narrative={narrative}
                   C={C}
                   lang={lang}
+                  highlight={focusBrand === brand}
+                  cardRef={el => { insightCardRefs.current[brand] = el; }}
                 />
               ))}
             </div>
@@ -385,16 +464,25 @@ function SectionHeader({ title, subtitle, count, C }: {
   );
 }
 
-function BrandInsightCard({ brand, isOwn, narrative, C, lang }: {
+function BrandInsightCard({ brand, isOwn, narrative, C, lang, highlight, cardRef }: {
   brand: string; isOwn: boolean; narrative: string; C: ColorSet; lang: string;
+  highlight?: boolean;
+  cardRef?: (el: HTMLDivElement | null) => void;
 }) {
   return (
-    <div style={{
-      background: C.s1,
-      border: `1px solid ${isOwn ? `${C.ac}55` : C.bd}`,
-      borderLeft: `4px solid ${isOwn ? C.ac : C.t3}`,
-      borderRadius: 12,
-      padding: 14,
+    <div
+      ref={cardRef}
+      style={{
+        background: C.s1,
+        // When highlight=true (cross-linked from Brief), pulse a 2px outline
+        // so the user spots which card the click landed on.
+        border: `1px solid ${highlight ? C.ac : isOwn ? `${C.ac}55` : C.bd}`,
+        outline: highlight ? `2px solid ${C.ac}55` : 'none',
+        outlineOffset: 1,
+        borderLeft: `4px solid ${isOwn ? C.ac : C.t3}`,
+        borderRadius: 12,
+        padding: 14,
+        transition: 'outline 0.3s, border-color 0.3s',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
         {isOwn && <span style={{ fontSize: 12 }}>🏷️</span>}
@@ -460,8 +548,23 @@ function PriorityMetricCard({ metric, rank, onClick, C, lang }: {
         {metric.priority_rationale}
       </div>
 
-      <div style={{ marginTop: 10, fontSize: 11, color: C.ac, fontWeight: 600 }}>
-        {lang === 'zh' ? '点击查看历史走势 →' : 'Click to see trend →'}
+      <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <span style={{ fontSize: 11, color: C.ac, fontWeight: 600 }}>
+          {lang === 'zh' ? '点击查看历史走势 →' : 'Click to see trend →'}
+        </span>
+        <span
+          title={lang === 'zh'
+            ? '点击展开后可查看支撑该指标分数的真实数据（生长率、声量份额、平台分布等）'
+            : 'Click through to see the underlying inputs that produced each brand\'s score'}
+          style={{
+            fontSize: 10, fontWeight: 600, color: C.t3,
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '2px 8px', background: C.s2, borderRadius: 10,
+            border: `1px solid ${C.bd}`,
+          }}
+        >
+          ⓘ {lang === 'zh' ? '为什么是这个分数' : 'Why this score?'}
+        </span>
       </div>
     </div>
   );

@@ -409,6 +409,11 @@ def compute_wtp(profile: dict, products: list, workspace: Optional[dict] = None,
     else:
         raw = 20 + max(0, price_premium * 10)
 
+    # Cap-aware scoring: if multiple brands hit raw≥100, the resolution is
+    # lost (everyone shows 100, can't tell who's actually most premium).
+    # `cap_hit` flag lets the API surface "tied at top" instead of identical
+    # 100s — see metric-logic-investigation §5 item 7.
+    cap_hit = raw >= 100
     score = max(0, min(100, round(raw)))
 
     return {
@@ -416,6 +421,8 @@ def compute_wtp(profile: dict, products: list, workspace: Optional[dict] = None,
         "version": METRIC_VERSION,
         "price_premium": round(price_premium * 100, 1),
         "sales_outperformance": round(sales_outperformance * 100, 1),
+        "cap_hit": cap_hit,                        # True when raw score saturated to 100
+        "raw_score_uncapped": round(raw, 1),       # full unclamped raw value for tiebreaking
         "baseline_source": baseline["source"],     # 'category' | 'keyword_match' | 'workspace_median' | 'generic_fallback'
         "baseline_category": baseline["label"],    # human-readable e.g. "运动鞋服"
         "inputs": {
