@@ -53,8 +53,16 @@ from typing import Optional
 
 from .db_bridge import get_conn
 from .narrative_pipeline import LLM_CONFIG, _call_llm
+from .brand_positioning_pipeline import _strip_markdown_fence as _strip_fence_bp
 
 METRIC_VERSION = "v1.0"
+
+
+def _zh_text(val) -> str:
+    """Extract a plain Chinese string from either a raw string or a {zh, en} dict."""
+    if isinstance(val, dict):
+        return val.get("zh") or val.get("en") or ""
+    return str(val) if val else ""
 PLATFORM = "douyin"  # XHS support is a Day-2-followup; one platform at a time
 TARGET_DRAFT_COUNT = 2
 
@@ -140,9 +148,9 @@ def _format_moves_for_prompt(moves: list) -> str:
         mid = m.get("id") or "?"
         brand = m.get("brand") or "?"
         impact = m.get("impact") or "medium"
-        headline = m.get("headline") or ""
-        detail = m.get("detail") or ""
-        so_what = m.get("so_what") or ""
+        headline = _zh_text(m.get("headline"))
+        detail = _zh_text(m.get("detail"))
+        so_what = _zh_text(m.get("so_what"))
         lines.append(
             f"- [{mid}] ({impact} impact) {brand}：{headline}\n"
             f"    数据：{detail}\n"
@@ -155,8 +163,8 @@ def _build_prompt(workspace: dict, brief: dict) -> str:
     brand = workspace.get("brand_name") or "(unnamed brand)"
     category = workspace.get("brand_category") or "未指定品类"
     verdict = brief["verdict"] or {}
-    headline = verdict.get("headline") or ""
-    sentence = verdict.get("sentence") or ""
+    headline = _zh_text(verdict.get("headline"))
+    sentence = _zh_text(verdict.get("sentence"))
     moves_block = _format_moves_for_prompt(brief["moves"])
 
     return f"""你是一位专门为中国 {category} 类目品牌做抖音短视频脚本的资深内容策划。
@@ -295,6 +303,54 @@ def _parse_drafts_json(raw: str, allowed_move_ids: set) -> list:
     return out
 
 
+# ─── Draft translation ───────────────────────────────────────────────────
+
+_DRAFT_TEXT_FIELDS = ("title", "hook_3s", "main_15s", "cta_3s", "reasoning", "why_now")
+
+
+def _translate_drafts(drafts: list) -> list:
+    """Add English translations to all text fields in each draft."""
+    texts = []
+    for d in drafts:
+        for f in _DRAFT_TEXT_FIELDS:
+            t = _zh_text(d.get(f))
+            if t and t not in texts:
+                texts.append(t)
+    if not texts:
+        return drafts
+
+    prompt = (
+        "Translate each numbered Chinese sentence below into fluent English.\n"
+        "Return ONLY a JSON array of strings in the same order, no markdown fences.\n\n"
+        + "\n".join(f"{i+1}. {t}" for i, t in enumerate(texts))
+    )
+    try:
+        raw = _call_llm(prompt, LLM_CONFIG["brand_model"], max_tokens=2000)
+        raw = _strip_fence_bp(raw)
+        translations = json.loads(raw)
+        if not isinstance(translations, list) or len(translations) != len(texts):
+            raise ValueError("translation count mismatch")
+    except Exception as e:
+        print(f"  [WARN] Draft translation failed: {e}")
+        return drafts
+
+    zh_to_en = dict(zip(texts, translations))
+    for d in drafts:
+        for f in _DRAFT_TEXT_FIELDS:
+            zh = _zh_text(d.get(f))
+            en = zh_to_en.get(zh)
+            if en:
+                d[f] = {"zh": zh, "en": str(en).strip()}
+    return drafts
+
+
+def _to_json_if_dict(val) -> str:
+    """Serialize {zh, en} dicts to JSON strings for TEXT columns."""
+    if isinstance(val, dict):
+        return json.dumps(val, ensure_ascii=False)
+    return str(val) if val else ""
+
+
 # ─── DB writer ───────────────────────────────────────────────────────────────
 
 def _insert_draft(cur, workspace_id: str, week_of: date, draft: dict) -> None:
@@ -309,8 +365,14 @@ def _insert_draft(cur, workspace_id: str, week_of: date, draft: dict) -> None:
         """,
         (
             workspace_id, week_of, PLATFORM,
-            draft["title"], draft["hook_3s"], draft["main_15s"], draft["cta_3s"],
-            draft["hashtags"], draft["reasoning"], draft["why_now"], draft["based_on"],
+            _to_json_if_dict(draft["title"]),
+            _to_json_if_dict(draft["hook_3s"]),
+            _to_json_if_dict(draft["main_15s"]),
+            _to_json_if_dict(draft["cta_3s"]),
+            draft["hashtags"],
+            _to_json_if_dict(draft["reasoning"]),
+            _to_json_if_dict(draft["why_now"]),
+            draft["based_on"],
         ),
     )
 
@@ -366,6 +428,8 @@ def run_for_workspace(workspace_id: str, target_week: Optional[date] = None,
                 print(f"  [DEBUG] raw response (first 400 chars): {raw[:400]}")
                 conn.rollback()
                 return False
+
+            drafts = _translate_drafts(drafts)
 
             for d in drafts:
                 _insert_draft(cur, workspace_id, week_of, d)

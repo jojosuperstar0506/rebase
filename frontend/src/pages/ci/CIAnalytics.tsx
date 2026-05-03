@@ -99,7 +99,7 @@ export default function CIAnalytics() {
   useEffect(() => {
     setLoading(true);
     setError(false);
-    getAnalytics(workspaceId).then(d => {
+    getAnalytics(workspaceId, lang).then(d => {
       setData(d);
       setLoading(false);
     }).catch(() => {
@@ -110,11 +110,11 @@ export default function CIAnalytics() {
     // grid intentionally omits them (they're text, not scores). Surface them
     // alongside as a separate panel.
     if (workspaceId && workspaceId !== 'mock') {
-      getBrandInsights(workspaceId).then(setInsights).catch(() => setInsights({}));
+      getBrandInsights(workspaceId, lang).then(setInsights).catch(() => setInsights({}));
     } else {
       setInsights({});
     }
-  }, [workspaceId]);
+  }, [workspaceId, lang]);
 
   // ─── Styles ────────────────────────────────────────────────────────────
 

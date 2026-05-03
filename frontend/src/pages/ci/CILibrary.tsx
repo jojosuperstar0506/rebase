@@ -68,14 +68,14 @@ export default function CILibrary() {
   useEffect(() => {
     setLoading(true);
     setError(false);
-    getLibrary(workspaceId).then(data => {
+    getLibrary(workspaceId, lang).then(data => {
       setEntries(data);
       setLoading(false);
     }).catch(() => {
       setError(true);
       setLoading(false);
     });
-  }, [workspaceId]);
+  }, [workspaceId, lang]);
 
   // Flatten all past content across all weeks for the Content view
   const allContent = useMemo(() => {

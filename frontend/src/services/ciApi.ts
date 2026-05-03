@@ -339,9 +339,9 @@ export async function saveConnection(workspaceId: string, platform: string, cook
 
 // TODO: Requires GET /api/ci/brand-insights endpoint (coordinate with William)
 // Falls back to empty map if endpoint doesn't exist
-export async function getBrandInsights(workspaceId: string): Promise<Record<string, string>> {
+export async function getBrandInsights(workspaceId: string, lang: string = 'zh'): Promise<Record<string, string>> {
   const data = await tryApi<any[]>(
-    `/brand-insights?workspace_id=${encodeURIComponent(workspaceId)}`
+    `/brand-insights?workspace_id=${encodeURIComponent(workspaceId)}&lang=${lang}`
   );
   if (!data) return {};
   const map: Record<string, string> = {};

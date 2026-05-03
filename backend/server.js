@@ -928,6 +928,7 @@ app.get('/api/ci/dashboard', async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+    const lang = req.query.lang === 'en' ? 'en' : 'zh';
 
     // Get competitors
     const { rows: competitors } = await pool.query(
@@ -978,7 +979,8 @@ app.get('/api/ci/dashboard', async (req, res) => {
         threat_index: brandScores.find(s => s.metric_type === 'threat')?.score || 0,
         wtp_score: brandScores.find(s => s.metric_type === 'wtp')?.score || 0,
         trend_signals: (() => {
-          const narr = brandScores.find(s => s.ai_narrative)?.ai_narrative || '';
+          const rawNarr = brandScores.find(s => s.ai_narrative)?.ai_narrative || '';
+          const narr = resolveLang(rawNarr, lang);
           if (!narr) return [];
           return narr.split(/[，。；,;]/).filter(s => s.trim().length > 2 && s.trim().length < 20).slice(0, 3).map(s => s.trim());
         })(),
@@ -1072,6 +1074,7 @@ app.get('/api/ci/intelligence', async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+    const lang = req.query.lang === 'en' ? 'en' : 'zh';
 
     // Get ALL latest results per competitor × metric_type
     const { rows } = await pool.query(
@@ -1138,7 +1141,7 @@ app.get('/api/ci/intelligence', async (req, res) => {
         status,
         status_reason,
         raw_inputs: rawInputs,
-        ai_narrative: row.ai_narrative,
+        ai_narrative: resolveLang(row.ai_narrative, lang),
         analyzed_at: row.analyzed_at,
       };
     }
@@ -1179,6 +1182,95 @@ app.get('/api/ci/intelligence', async (req, res) => {
   }
 });
 
+// ─── Bilingual resolution helpers ───────────────────────────────────────
+// Pipeline outputs now store text fields as {zh: "原文", en: "translated"}.
+// Legacy rows still have plain strings. These helpers resolve to the requested
+// language, falling back gracefully for both shapes.
+
+function resolveLang(val, lang) {
+  if (val === null || val === undefined) return val;
+  if (typeof val === 'object' && !Array.isArray(val) && ('zh' in val || 'en' in val)) {
+    return val[lang] || val.zh || val.en || '';
+  }
+  if (typeof val === 'string' && val.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(val);
+      if (parsed && typeof parsed === 'object' && ('zh' in parsed || 'en' in parsed)) {
+        return parsed[lang] || parsed.zh || parsed.en || '';
+      }
+    } catch { }
+  }
+  return val;
+}
+
+function resolveObj(obj, lang, fields) {
+  if (!obj || typeof obj !== 'object') return obj;
+  const copy = { ...obj };
+  for (const f of fields) {
+    if (f in copy) copy[f] = resolveLang(copy[f], lang);
+  }
+  return copy;
+}
+
+// ─── Runtime translate-on-demand fallback ───────────────────────────────
+// When lang=en is requested and the DB still has Chinese-only legacy data,
+// translate via DeepSeek at request time and cache the result back to the
+// DB so subsequent reads are instant. This is the bridge between
+// "pipeline-time translation" (new cron data) and the existing
+// pre-bilingual rows that haven't been regenerated yet.
+
+const CJK_PATTERN = /[一-鿿]/;
+function hasChinese(s) {
+  return typeof s === 'string' && CJK_PATTERN.test(s);
+}
+
+async function translateBatch(texts) {
+  if (!Array.isArray(texts) || texts.length === 0) return [];
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) {
+    console.warn('[CI] No DEEPSEEK_API_KEY — runtime translation skipped');
+    return texts;
+  }
+  const baseUrl = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com';
+  const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+  const numbered = texts.map((t, i) => `${i + 1}. ${t}`).join('\n');
+  const prompt = `Translate each numbered Chinese sentence below into fluent English.
+Return ONLY a JSON array of strings in the same order, no markdown fences.
+
+${numbered}`;
+  try {
+    const charSum = texts.reduce((s, t) => s + t.length, 0);
+    const resp = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        max_tokens: Math.max(1500, charSum * 3),
+        temperature: 0.3,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+    if (!resp.ok) {
+      console.warn(`[CI] Translation API ${resp.status}`);
+      return texts;
+    }
+    const data = await resp.json();
+    let raw = (data.choices?.[0]?.message?.content || '').trim();
+    if (raw.startsWith('```')) {
+      raw = raw.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '').trim();
+    }
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr) || arr.length !== texts.length) {
+      console.warn(`[CI] Translation count mismatch: expected ${texts.length}, got ${Array.isArray(arr) ? arr.length : 'non-array'}`);
+      return texts;
+    }
+    return arr.map(t => String(t).trim());
+  } catch (err) {
+    console.warn('[CI] translateBatch failed:', err.message);
+    return texts;
+  }
+}
+
 // GET /api/ci/brief — current Brief (verdict + moves + drafts + opportunity)
 //
 // Reads weekly_briefs.verdict + .moves (written by brand_positioning_pipeline)
@@ -1199,6 +1291,7 @@ app.get('/api/ci/brief', async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+    const lang = req.query.lang === 'en' ? 'en' : 'zh';
     const requestedWeek = req.query.week_of || null;
 
     // Resolve the brief row: requested week if given, otherwise the latest.
@@ -1304,14 +1397,101 @@ app.get('/api/ci/brief', async (req, res) => {
       try { moves = JSON.parse(moves); } catch { moves = []; }
     }
 
+    // ─── Bilingual resolution ──────────────────────────────────────
+    const verdictFields = ['headline', 'sentence', 'top_action'];
+    const moveFields = ['headline', 'detail', 'so_what', 'action'];
+    const draftFields = ['title', 'hook_3s', 'main_15s', 'cta_3s', 'reasoning', 'why_now'];
+    const oppFields = ['concept_name', 'positioning', 'why_now', 'target_price', 'launch_timeline'];
+
+    const resolvedVerdict = resolveObj(verdict || {}, lang, verdictFields);
+    const resolvedMoves = (Array.isArray(moves) ? moves : []).map(m => resolveObj(m, lang, moveFields));
+    const resolvedDrafts = contentDrafts.map(d => resolveObj(d, lang, draftFields));
+    let resolvedOpp = productOpportunity;
+    if (resolvedOpp) {
+      resolvedOpp = resolveObj(resolvedOpp, lang, oppFields);
+      if (Array.isArray(resolvedOpp.signals)) {
+        resolvedOpp.signals = resolvedOpp.signals.map(s => resolveObj(s, lang, ['label', 'value']));
+      }
+      if (Array.isArray(resolvedOpp.target_channels)) {
+        resolvedOpp.target_channels = resolvedOpp.target_channels.map(ch => resolveLang(ch, lang));
+      }
+    }
+
+    // ─── Runtime translate-on-demand (legacy zh-only data) ─────────
+    // If the user requested English but resolveLang returned Chinese
+    // (because the row was generated before the bilingual pipeline ran),
+    // translate the Chinese-only fields via DeepSeek now and write the
+    // {zh, en} structure back to the DB so subsequent reads are instant.
+    if (lang === 'en') {
+      const toTranslate = new Set();
+      const collect = (obj, fields) => {
+        if (!obj) return;
+        for (const f of fields) if (hasChinese(obj[f])) toTranslate.add(obj[f]);
+      };
+      collect(resolvedVerdict, verdictFields);
+      for (const m of resolvedMoves) collect(m, moveFields);
+      for (const d of resolvedDrafts) collect(d, draftFields);
+      if (resolvedOpp) {
+        collect(resolvedOpp, oppFields);
+        for (const s of resolvedOpp.signals || []) collect(s, ['label', 'value']);
+        for (const ch of resolvedOpp.target_channels || []) {
+          if (hasChinese(ch)) toTranslate.add(ch);
+        }
+      }
+
+      if (toTranslate.size > 0) {
+        const texts = [...toTranslate];
+        console.log(`[CI] Runtime-translating ${texts.length} Chinese fields for workspace ${workspaceId}`);
+        const translated = await translateBatch(texts);
+        const map = Object.fromEntries(texts.map((zh, i) => [zh, translated[i]]));
+        const swap = (obj, fields) => {
+          if (!obj) return;
+          for (const f of fields) if (map[obj[f]]) obj[f] = map[obj[f]];
+        };
+        swap(resolvedVerdict, verdictFields);
+        for (const m of resolvedMoves) swap(m, moveFields);
+        for (const d of resolvedDrafts) swap(d, draftFields);
+        if (resolvedOpp) {
+          swap(resolvedOpp, oppFields);
+          for (const s of resolvedOpp.signals || []) swap(s, ['label', 'value']);
+          resolvedOpp.target_channels = (resolvedOpp.target_channels || []).map(ch => map[ch] || ch);
+        }
+
+        // Cache to DB: rewrite weekly_briefs JSONB with {zh, en} dicts
+        // so the next /api/ci/brief?lang=en hits cached data, not LLM.
+        try {
+          const enrich = (raw, fields) => {
+            if (!raw || typeof raw !== 'object') return raw;
+            const out = { ...raw };
+            for (const f of fields) {
+              const cur = out[f];
+              if (typeof cur === 'string' && map[cur]) {
+                out[f] = { zh: cur, en: map[cur] };
+              }
+            }
+            return out;
+          };
+          const newVerdict = enrich(verdict, verdictFields);
+          const newMoves = (Array.isArray(moves) ? moves : []).map(m => enrich(m, moveFields));
+          await pool.query(
+            `UPDATE weekly_briefs SET verdict = $1::jsonb, moves = $2::jsonb
+             WHERE workspace_id = $3 AND week_of = $4::date`,
+            [JSON.stringify(newVerdict), JSON.stringify(newMoves), workspaceId, weekOf]
+          );
+        } catch (err) {
+          console.warn('[CI] Translation cache write failed:', err.message);
+        }
+      }
+    }
+
     return res.json({
       week_of: weekOf,
       workspace_id: workspaceId,
       workspace_brand_name: workspaceBrandName,
-      verdict: verdict || {},
-      moves: Array.isArray(moves) ? moves : [],
-      content_drafts: contentDrafts,
-      product_opportunity: productOpportunity,
+      verdict: resolvedVerdict,
+      moves: resolvedMoves,
+      content_drafts: resolvedDrafts,
+      product_opportunity: resolvedOpp,
       generated_at: brief.generated_at instanceof Date
         ? brief.generated_at.toISOString()
         : brief.generated_at,
@@ -1414,6 +1594,7 @@ app.get('/api/ci/analytics', async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+    const lang = req.query.lang === 'en' ? 'en' : 'zh';
 
     const { rows: wsRows } = await pool.query(
       'SELECT brand_name FROM workspaces WHERE id = $1', [workspaceId]
@@ -1547,6 +1728,7 @@ app.get('/api/ci/library', async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+    const lang = req.query.lang === 'en' ? 'en' : 'zh';
     const limit = Math.min(parseInt(req.query.limit, 10) || 12, 52);
 
     const { rows: briefs } = await pool.query(
@@ -1636,13 +1818,22 @@ app.get('/api/ci/library', async (req, res) => {
       if (typeof moves === 'string') {
         try { moves = JSON.parse(moves); } catch { moves = []; }
       }
+      const draftFields = ['title', 'hook_3s', 'main_15s', 'cta_3s', 'reasoning', 'why_now'];
+      const oppFields = ['concept_name', 'positioning', 'why_now', 'target_price', 'launch_timeline'];
+      const drafts = (contentByWeek[b.week_of] || []).map(d => resolveObj(d, lang, draftFields));
+      let opp = oppByWeek[b.week_of] || null;
+      if (opp) {
+        opp = resolveObj(opp, lang, oppFields);
+        if (Array.isArray(opp.signals)) opp.signals = opp.signals.map(s => resolveObj(s, lang, ['label', 'value']));
+        if (Array.isArray(opp.target_channels)) opp.target_channels = opp.target_channels.map(ch => resolveLang(ch, lang));
+      }
       return {
         week_of: b.week_of,
-        verdict_headline: (verdict && verdict.headline) || '',
+        verdict_headline: resolveLang((verdict && verdict.headline) || '', lang),
         trend: (verdict && verdict.trend) || 'steady',
         moves_count: Array.isArray(moves) ? moves.length : 0,
-        content_drafts: contentByWeek[b.week_of] || [],
-        product_opportunity: oppByWeek[b.week_of] || null,
+        content_drafts: drafts,
+        product_opportunity: opp,
       };
     });
 
@@ -2476,11 +2667,16 @@ app.get('/api/ci/deep-dive/result', async (req, res) => {
       ORDER BY analyzed_at DESC LIMIT 1
     `, [workspace_id, brand_name]);
 
-    // Deduplicate scores by metric type (latest only)
+    const lang = req.query.lang === 'en' ? 'en' : 'zh';
+
+    // Deduplicate scores by metric type (latest only) — resolve bilingual ai_narrative
     const latestScores = {};
     for (const s of scores) {
       if (!latestScores[s.metric_type]) {
-        latestScores[s.metric_type] = s;
+        latestScores[s.metric_type] = {
+          ...s,
+          ai_narrative: resolveLang(s.ai_narrative, lang),
+        };
       }
     }
 
@@ -2489,7 +2685,7 @@ app.get('/api/ci/deep-dive/result', async (req, res) => {
       profile: profiles[0] || null,
       products,
       scores: latestScores,
-      insight: insights[0]?.ai_narrative || null,
+      insight: resolveLang(insights[0]?.ai_narrative || null, lang),
       raw_dimensions: profiles[0]?.raw_dimensions || null,
       last_deep_dive: profiles[0]?.scraped_at || null,
     });
@@ -2503,6 +2699,7 @@ app.get('/api/ci/deep-dive/result', async (req, res) => {
 app.get('/api/ci/brand-insights', async (req, res) => {
   const { workspace_id } = req.query;
   if (!workspace_id) return res.status(400).json({ error: 'Missing workspace_id' });
+  const lang = req.query.lang === 'en' ? 'en' : 'zh';
 
   try {
     const { rows } = await pool.query(`
@@ -2513,7 +2710,11 @@ app.get('/api/ci/brand-insights', async (req, res) => {
       ORDER BY competitor_name, analyzed_at DESC
     `, [workspace_id]);
 
-    res.json(rows);
+    const resolved = rows.map(r => ({
+      ...r,
+      ai_narrative: resolveLang(r.ai_narrative, lang),
+    }));
+    res.json(resolved);
   } catch (err) {
     console.error('[CI] GET brand-insights error:', err.message);
     res.status(500).json({ error: 'Failed to fetch brand insights' });

@@ -58,8 +58,16 @@ from typing import Optional
 
 from .db_bridge import get_conn
 from .narrative_pipeline import LLM_CONFIG, _call_llm
+from .brand_positioning_pipeline import _strip_markdown_fence as _strip_fence_bp
 
 METRIC_VERSION = "v1.0"
+
+
+def _zh_text(val) -> str:
+    """Extract a plain Chinese string from either a raw string or a {zh, en} dict."""
+    if isinstance(val, dict):
+        return val.get("zh") or val.get("en") or ""
+    return str(val) if val else ""
 TARGET_CONCEPTS_PER_RUN = 1
 VALID_LAUNCH_TIMELINES = ("3-6个月", "6-9个月", "9-12个月", "12个月以上", "1-3个月")
 
@@ -188,8 +196,8 @@ def _format_moves_for_prompt(moves: list) -> str:
         mid = m.get("id") or "?"
         brand = m.get("brand") or "?"
         impact = m.get("impact") or "medium"
-        headline = m.get("headline") or ""
-        detail = m.get("detail") or ""
+        headline = _zh_text(m.get("headline"))
+        detail = _zh_text(m.get("detail"))
         lines.append(f"- [{mid}] ({impact}) {brand}：{headline}（{detail}）")
     return "\n".join(lines)
 
@@ -220,8 +228,8 @@ def _build_prompt(workspace: dict, brief: dict, kws: list) -> str:
     )
 
     verdict = brief["verdict"] or {}
-    headline = verdict.get("headline") or ""
-    sentence = verdict.get("sentence") or ""
+    headline = _zh_text(verdict.get("headline"))
+    sentence = _zh_text(verdict.get("sentence"))
     moves_block = _format_moves_for_prompt(brief["moves"])
     kw_block = _format_keywords_for_prompt(kws)
 
@@ -346,6 +354,75 @@ def _parse_concept_json(raw: str) -> Optional[dict]:
     return _coerce_concept(data)
 
 
+# ─── Concept translation ─────────────────────────────────────────────────
+
+_CONCEPT_TEXT_FIELDS = ("concept_name", "positioning", "why_now", "target_price", "launch_timeline")
+
+
+def _translate_concept(concept: dict) -> dict:
+    """Add English translations to concept text fields + signal labels/values."""
+    texts = []
+    for f in _CONCEPT_TEXT_FIELDS:
+        t = _zh_text(concept.get(f))
+        if t and t not in texts:
+            texts.append(t)
+    for sig in concept.get("signals") or []:
+        for k in ("label", "value"):
+            t = _zh_text(sig.get(k))
+            if t and t not in texts:
+                texts.append(t)
+    for ch in concept.get("target_channels") or []:
+        t = _zh_text(ch)
+        if t and t not in texts:
+            texts.append(t)
+    if not texts:
+        return concept
+
+    prompt = (
+        "Translate each numbered Chinese sentence below into fluent English.\n"
+        "Return ONLY a JSON array of strings in the same order, no markdown fences.\n\n"
+        + "\n".join(f"{i+1}. {t}" for i, t in enumerate(texts))
+    )
+    try:
+        raw = _call_llm(prompt, LLM_CONFIG["brand_model"], max_tokens=1500)
+        raw = _strip_fence_bp(raw)
+        translations = json.loads(raw)
+        if not isinstance(translations, list) or len(translations) != len(texts):
+            raise ValueError("translation count mismatch")
+    except Exception as e:
+        print(f"  [WARN] Concept translation failed: {e}")
+        return concept
+
+    zh_to_en = dict(zip(texts, translations))
+
+    def _bilingual(val):
+        zh = _zh_text(val)
+        en = zh_to_en.get(zh)
+        return {"zh": zh, "en": str(en).strip()} if en else zh
+
+    for f in _CONCEPT_TEXT_FIELDS:
+        if concept.get(f):
+            concept[f] = _bilingual(concept[f])
+    for sig in concept.get("signals") or []:
+        for k in ("label", "value"):
+            if sig.get(k):
+                sig[k] = _bilingual(sig[k])
+    concept["target_channels"] = [_bilingual(ch) for ch in concept.get("target_channels") or []]
+    return concept
+
+
+def _to_json_if_dict(val) -> str:
+    """Serialize {zh, en} dicts to JSON strings for TEXT columns."""
+    if isinstance(val, dict):
+        return json.dumps(val, ensure_ascii=False)
+    return str(val) if val else ""
+
+
+def _channels_for_db(channels: list):
+    """Convert list of possibly-bilingual channels to a list of JSON-string items."""
+    return [_to_json_if_dict(ch) for ch in channels]
+
+
 # ─── DB writer ───────────────────────────────────────────────────────────────
 
 def _insert_concept(cur, workspace_id: str, week_of: date, concept: dict) -> None:
@@ -360,11 +437,13 @@ def _insert_concept(cur, workspace_id: str, week_of: date, concept: dict) -> Non
         """,
         (
             workspace_id, week_of,
-            concept["concept_name"], concept["positioning"], concept["why_now"],
+            _to_json_if_dict(concept["concept_name"]),
+            _to_json_if_dict(concept["positioning"]),
+            _to_json_if_dict(concept["why_now"]),
             json.dumps(concept["signals"], ensure_ascii=False),
-            concept["target_price"],
-            concept["target_channels"],
-            concept["launch_timeline"],
+            _to_json_if_dict(concept["target_price"]),
+            _channels_for_db(concept["target_channels"]),
+            _to_json_if_dict(concept["launch_timeline"]),
         ),
     )
 
@@ -418,6 +497,7 @@ def run_for_workspace(workspace_id: str, target_week: Optional[date] = None,
                 conn.rollback()
                 return False
 
+            concept = _translate_concept(concept)
             _insert_concept(cur, workspace_id, week_of, concept)
             conn.commit()
             print(f"  [DONE] concept={concept['concept_name']!r} "

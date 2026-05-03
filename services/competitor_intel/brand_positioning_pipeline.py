@@ -54,11 +54,19 @@ from .narrative_pipeline import LLM_CONFIG, _call_llm
 METRIC_VERSION = "v1.1"  # bumped: numeric-coherence coercer drops moves with hallucinated specifics
 
 DOMAIN_KEYS = ("consumer_domain", "product_domain", "marketing_domain")
-DOMAIN_LABELS_ZH = {
-    "consumer_domain":  "消费者心智",
-    "product_domain":   "产品力",
-    "marketing_domain": "营销声量",
+DOMAIN_LABELS = {
+    "zh": {
+        "consumer_domain":  "消费者心智",
+        "product_domain":   "产品力",
+        "marketing_domain": "营销声量",
+    },
+    "en": {
+        "consumer_domain":  "Consumer Mindshare",
+        "product_domain":   "Product Strength",
+        "marketing_domain": "Marketing Voice",
+    },
 }
+DOMAIN_LABELS_ZH = DOMAIN_LABELS["zh"]
 
 VALID_TRENDS = ("gaining", "steady", "losing")
 VALID_IMPACTS = ("high", "medium", "low")
@@ -363,10 +371,10 @@ def _audit_move_numbers(move: dict, supported: set, tolerance: int = 1) -> list:
     of any value in `supported`. Whitelisted round numbers always pass.
     """
     text_parts = [
-        move.get("headline") or "",
-        move.get("detail") or "",
-        move.get("so_what") or "",
-        move.get("action") or "",
+        _zh_text(move.get("headline")),
+        _zh_text(move.get("detail")),
+        _zh_text(move.get("so_what")),
+        _zh_text(move.get("action")),
     ]
     text = " | ".join(text_parts)
     unsupported = []
@@ -432,6 +440,85 @@ def _baseline_brief(brand_name: str, reason: str) -> dict:
         "moves": [],
         "_raw_inputs": {"reason": reason, "fallback": True},
     }
+
+
+# ─── Bilingual translation layer ────────────────────────────────────────
+# Pattern: generate Chinese (DeepSeek's strength), parse/coerce, then
+# translate all text fields to English in one batch LLM call. Store each
+# text field as {"zh": "原文", "en": "translated"}. The backend resolves
+# the right language via ?lang= query param.
+
+_BRIEF_TEXT_FIELDS_VERDICT = ("headline", "sentence", "top_action")
+_BRIEF_TEXT_FIELDS_MOVE = ("headline", "detail", "so_what", "action")
+
+
+def _zh_text(val) -> str:
+    """Extract a plain Chinese string from either a raw string or a {zh, en} dict."""
+    if isinstance(val, dict):
+        return val.get("zh") or val.get("en") or ""
+    return str(val) if val else ""
+
+
+def _collect_translatable_texts(brief: dict) -> list:
+    """Gather all unique text strings that need translation."""
+    texts = []
+    v = brief.get("verdict") or {}
+    for f in _BRIEF_TEXT_FIELDS_VERDICT:
+        t = _zh_text(v.get(f))
+        if t and t not in texts:
+            texts.append(t)
+    for m in brief.get("moves") or []:
+        for f in _BRIEF_TEXT_FIELDS_MOVE:
+            t = _zh_text(m.get(f))
+            if t and t not in texts:
+                texts.append(t)
+    return texts
+
+
+def _build_translation_prompt(texts: list) -> str:
+    numbered = "\n".join(f"{i+1}. {t}" for i, t in enumerate(texts))
+    return f"""Translate each numbered Chinese sentence below into fluent English.
+Return ONLY a JSON array of strings in the same order, no markdown fences.
+
+{numbered}"""
+
+
+def _translate_brief(brief: dict) -> dict:
+    """Add English translations to every text field. Returns the mutated brief."""
+    texts = _collect_translatable_texts(brief)
+    if not texts:
+        return brief
+
+    try:
+        raw = _call_llm(_build_translation_prompt(texts), LLM_CONFIG["brand_model"], max_tokens=1200)
+        raw = _strip_markdown_fence(raw)
+        translations = json.loads(raw)
+        if not isinstance(translations, list) or len(translations) != len(texts):
+            raise ValueError(f"expected {len(texts)} translations, got {len(translations) if isinstance(translations, list) else 'non-list'}")
+    except Exception as e:
+        print(f"  [WARN] Translation failed: {e} — brief stays Chinese-only")
+        return brief
+
+    zh_to_en = dict(zip(texts, translations))
+
+    def _bilingual(val):
+        zh = _zh_text(val)
+        en = zh_to_en.get(zh)
+        if en:
+            return {"zh": zh, "en": str(en).strip()}
+        return zh  # untranslated fallback
+
+    v = brief.get("verdict") or {}
+    for f in _BRIEF_TEXT_FIELDS_VERDICT:
+        if v.get(f):
+            v[f] = _bilingual(v[f])
+
+    for m in brief.get("moves") or []:
+        for f in _BRIEF_TEXT_FIELDS_MOVE:
+            if m.get(f):
+                m[f] = _bilingual(m[f])
+
+    return brief
 
 
 # ─── DB writer ───────────────────────────────────────────────────────────────
@@ -535,6 +622,9 @@ def run_for_workspace(workspace_id: str, target_week: Optional[date] = None) -> 
                 print(f"  [COERCER] dropped {dropped}/{len(parsed['moves'])} moves "
                       f"for numeric-coherence violations")
             parsed["moves"] = kept_moves
+
+            # ─── Bilingual translation ──────────────────────────────────
+            parsed = _translate_brief(parsed)
 
             _upsert_brief(cur, workspace_id, week_of, parsed)
             conn.commit()
