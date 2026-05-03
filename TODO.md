@@ -165,6 +165,7 @@
 | F6 | Computer-use agent for legacy Kingdee (no API) | W | 2026-03-15 | UI automation for older versions |
 | F7 | Layer 4: Cross-department event bus | TBD | 2026-03-15 | After Layer 3 virtual employees operational |
 | F8 | Layer 5: Self-serve onboarding platform | TBD | 2026-03-15 | After Layer 2 + 3 proven |
+| F9 | CI: scraper-backed brand-name extraction for XHS profile links | J | 2026-05-03 | v1 in PR #29 covers URL parse → DB lookup → KNOWN_BRANDS → `og:title` fetch. XHS profile pages gate behind login/captcha, so the page-title fallback returns null for unauthenticated requests. Real fix: route XHS link-parses through the authenticated scraper (post-burner-account, depends on B0 in CI tracker) so we render the page in a logged-in session and pull the nickname reliably. Same path also unlocks Douyin sec_uid → nickname lookups. |
 
 ---
 

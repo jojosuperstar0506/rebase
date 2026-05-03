@@ -2409,7 +2409,164 @@ app.post('/api/ci/resolve-brand', async (req, res) => {
   }
 });
 
-// POST /api/ci/parse-link — extract platform + brand from a URL
+// ── parse-link helpers ───────────────────────────────────────────
+// Server-side mirror of the frontend's looksLikePlatformId() — an extra
+// guard so we never return an obviously-wrong "brand name" extracted from
+// noisy HTML. Any candidate that matches this is dropped.
+function looksLikePlatformId(s) {
+  if (!s) return false;
+  const t = String(s).trim();
+  if (!t) return false;
+  if (/^(xhs|douyin|taobao|tmall|jd|京东|淘宝|抖音|小红书)\s*[:：]\s*\S+/i.test(t)) return true;
+  if (/^[a-f0-9]{16,}$/i.test(t)) return true;
+  if (/^\d{14,}$/.test(t)) return true;
+  return false;
+}
+
+// Strip the trailing platform suffixes that pages append to <title>:
+//   "Songmont - 小红书"  →  "Songmont"
+//   "古良吉吉的个人主页 - 小红书"  →  "古良吉吉"
+//   "songmont 旗舰店 - 淘宝网"  →  "songmont"
+function cleanExtractedName(raw) {
+  if (!raw) return null;
+  let s = String(raw).trim();
+  // Drop common site-suffix tails (separators: -, |, ·)
+  s = s.replace(/\s*[-—|·]\s*(小红书|RED|xiaohongshu|淘宝(?:网)?|天猫|TMALL|抖音|TIKTOK|京东(?:商城)?|JD\.COM)\s*.*$/i, '');
+  // Drop common page-type suffixes that aren't part of the brand name
+  s = s.replace(/(的个人主页|的主页|的商品|官方旗舰店|旗舰店|官方店)\s*$/u, '');
+  s = s.trim();
+  // Reject obvious garbage: empty / just punctuation / a login wall / a captcha page
+  if (!s) return null;
+  if (s.length < 2 || s.length > 60) return null;
+  if (/^(登录|登錄|login|sign\s*in|verify|captcha|验证|安全|404|页面不存在|page\s*not\s*found)/i.test(s)) return null;
+  if (looksLikePlatformId(s)) return null;
+  return s;
+}
+
+// Extract a candidate brand name from raw HTML. Tries og:title (most
+// reliable on platform pages), JSON-LD name, twitter:title, then <title>.
+function extractNameFromHtml(html) {
+  if (!html || typeof html !== 'string') return null;
+  // og:title — most platforms set this on profile/shop pages
+  const og = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
+          || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
+  if (og && og[1]) {
+    const cleaned = cleanExtractedName(decodeHtmlEntities(og[1]));
+    if (cleaned) return cleaned;
+  }
+  // twitter:title fallback
+  const tw = html.match(/<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']+)["']/i);
+  if (tw && tw[1]) {
+    const cleaned = cleanExtractedName(decodeHtmlEntities(tw[1]));
+    if (cleaned) return cleaned;
+  }
+  // JSON-LD name (often in <script type="application/ld+json">)
+  const jsonLd = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i);
+  if (jsonLd && jsonLd[1]) {
+    try {
+      const data = JSON.parse(jsonLd[1].trim());
+      const candidate = (Array.isArray(data) ? data[0] : data)?.name;
+      if (candidate) {
+        const cleaned = cleanExtractedName(candidate);
+        if (cleaned) return cleaned;
+      }
+    } catch { /* ignore malformed JSON-LD */ }
+  }
+  // <title> — last resort, often noisy
+  const title = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+  if (title && title[1]) {
+    const cleaned = cleanExtractedName(decodeHtmlEntities(title[1]));
+    if (cleaned) return cleaned;
+  }
+  return null;
+}
+
+function decodeHtmlEntities(s) {
+  if (!s) return s;
+  return s
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)));
+}
+
+// Best-effort HTML fetch with browser-y headers + a tight timeout. Many
+// Chinese platforms (XHS especially) gate behind login or captcha and will
+// return a useless body — the caller checks for null and falls through.
+async function fetchPageTitle(url) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4000);
+  try {
+    const resp = await fetch(url, {
+      method: 'GET',
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: {
+        // Real Chrome on macOS — slip past the laziest bot heuristics
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      },
+    });
+    if (!resp.ok) return null;
+    // Cap the read so a misbehaving server can't OOM us. og:title / <title>
+    // are always in the head — first 256KB is plenty.
+    const text = await resp.text();
+    return extractNameFromHtml(text.slice(0, 256 * 1024));
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// Reverse lookup: given (platform, identifier), see if we already know the
+// brand name from prior workspace_competitors rows. The cheapest enrichment
+// we can do, and it sidesteps the scraping problem for any brand someone on
+// the platform has already curated.
+async function lookupNameByPlatformId(platform, identifier) {
+  if (!platform || !identifier) return null;
+  try {
+    const { rows } = await pool.query(
+      `SELECT brand_name
+         FROM workspace_competitors
+        WHERE platform_ids ->> $1 = $2
+          AND brand_name IS NOT NULL
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [platform, identifier]
+    );
+    if (rows[0] && !looksLikePlatformId(rows[0].brand_name)) {
+      return rows[0].brand_name;
+    }
+  } catch (err) {
+    console.warn('[CI] parse-link DB lookup failed:', err.message);
+  }
+  return null;
+}
+
+// Last-ditch registry match — KNOWN_BRANDS hardcodes some Tmall stores +
+// XHS/Douyin keywords. Mostly useful when an identifier matches a registered
+// `tmall_store` slug.
+function lookupNameInRegistry(platform, identifier) {
+  if (!platform || !identifier) return null;
+  const id = String(identifier).toLowerCase();
+  for (const b of KNOWN_BRANDS) {
+    if (platform === 'taobao' && b.tmall_store && b.tmall_store.toLowerCase() === id) return b.name;
+    if (platform === 'xhs'    && b.xhs_keyword  && b.xhs_keyword.toLowerCase()  === id) return b.name;
+    if (platform === 'douyin' && b.douyin_keyword && b.douyin_keyword.toLowerCase() === id) return b.name;
+  }
+  return null;
+}
+
+// POST /api/ci/parse-link — extract platform + brand from a URL.
+// Strategy: parse URL → if no brand_name, check DB → check registry →
+// best-effort HTML fetch. Each step bails out the moment it has a valid
+// name. The HTML fetch is heavily gated by platform rate limits (XHS
+// especially), so it's the last resort, not the first.
 app.post('/api/ci/parse-link', async (req, res) => {
   const { url } = req.body;
   if (!url) return res.status(400).json({ error: 'Missing url' });
@@ -2417,6 +2574,7 @@ app.post('/api/ci/parse-link', async (req, res) => {
   let platform = null;
   let identifier = null;
   let brand_name = null;
+  let resolved_via = null;
 
   try {
     const parsed = new URL(url);
@@ -2437,7 +2595,7 @@ app.post('/api/ci/parse-link', async (req, res) => {
 
       // Search URL: /search_result?keyword=Songmont
       const kwMatch = parsed.searchParams.get('keyword');
-      if (kwMatch) { identifier = kwMatch; brand_name = kwMatch; }
+      if (kwMatch) { identifier = kwMatch; brand_name = kwMatch; resolved_via = 'url_keyword'; }
 
       // Short link (xhslink.com/abc123) — just detect platform
       if (host.includes('xhslink.com') && !identifier) {
@@ -2453,6 +2611,7 @@ app.post('/api/ci/parse-link', async (req, res) => {
       if (subdomain && subdomain !== 'www' && subdomain !== 'item' && subdomain !== 'detail') {
         identifier = subdomain;
         brand_name = subdomain.replace(/^shop/, '');
+        resolved_via = 'url_subdomain';
       }
 
       // Path shop: /shop/xxx
@@ -2473,7 +2632,7 @@ app.post('/api/ci/parse-link', async (req, res) => {
 
       // Search: /search/品牌名
       const kwMatch = urlPath.match(/\/search\/([^\/\?]+)/);
-      if (kwMatch) { identifier = decodeURIComponent(kwMatch[1]); brand_name = identifier; }
+      if (kwMatch) { identifier = decodeURIComponent(kwMatch[1]); brand_name = identifier; resolved_via = 'url_keyword'; }
     }
     // ── JD ──
     else if (host.includes('jd.com')) {
@@ -2489,12 +2648,42 @@ app.post('/api/ci/parse-link', async (req, res) => {
     return res.json({ parsed: false, error: 'Unrecognized platform URL' });
   }
 
+  // Reject brand names from URL parsing that are themselves platform-id
+  // shaped (e.g. tmall subdomain "shop123456" → "123456"). Don't lie.
+  if (brand_name && looksLikePlatformId(brand_name)) {
+    brand_name = null;
+    resolved_via = null;
+  }
+
+  // Enrichment chain: only run when we have an identifier but no name.
+  if (!brand_name && identifier) {
+    // 1. Reverse lookup in workspace_competitors — covers any brand someone
+    //    has already manually associated with this platform_id.
+    brand_name = await lookupNameByPlatformId(platform, identifier);
+    if (brand_name) resolved_via = 'database';
+  }
+  if (!brand_name && identifier) {
+    // 2. KNOWN_BRANDS registry — covers Tmall store slugs etc.
+    brand_name = lookupNameInRegistry(platform, identifier);
+    if (brand_name) resolved_via = 'registry';
+  }
+  if (!brand_name) {
+    // 3. Best-effort HTML fetch. May return null on captcha/login walls;
+    //    the frontend already prompts the user when brand_name is empty.
+    const fetched = await fetchPageTitle(url);
+    if (fetched) {
+      brand_name = fetched;
+      resolved_via = 'page_title';
+    }
+  }
+
   res.json({
     parsed: true,
     platform,
     identifier,
     brand_name,
     platform_ids: { [platform]: identifier },
+    resolved_via,  // 'url_keyword' | 'url_subdomain' | 'database' | 'registry' | 'page_title' | null
   });
 });
 
