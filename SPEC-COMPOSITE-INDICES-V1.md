@@ -966,21 +966,35 @@ Not "0".
 
 ---
 
-## 10. Open questions for William
+## 10. Decisions Log — open questions resolved
 
-1. **Cost ceiling.** The composite layer adds ~12 derivation calculations per workspace per `run-analysis` trigger. Most are arithmetic on existing scores; only the new pipelines (trend_capture, innovation) have meaningful compute. Comfortable adding to the existing ~12-second run time?
+> **Status: All 5 questions resolved 2026-05-04.** William reviewed in `WILLIAM-TO-JOANNA-2026-05-04.md` §4; Joanna locked the answers.
 
-2. **NPS scale convention.** Real NPS is -100 to +100. All other indices are 0-100. UI complication: do we (a) keep NPS at its native scale and have one "weird" score, or (b) normalize NPS to 0-100 and lose the convention? My preference: (a) — NPS at -100 to +100 is the recognizable signal; UI shows it with explicit `−` prefix.
+### Locked answers
 
-3. **First-week defaults.** When `direction` and `delta` are null (first week, no prior period), how should the UI render? My vote: show the score, hide the arrow, soft note: "Trends start appearing next week."
+| # | Question | Locked answer | Rationale |
+|---|---|---|---|
+| Q1 | Cost ceiling on +12 derivations per `run-analysis` | **Acceptable.** Targeted runtime ≤ 30s on Songmont workspace. Most derivations are arithmetic on existing scores. | William verified during V1 trust polish work. |
+| Q2 | NPS scale convention | **Normalize to 0-100.** Drop the native -100..+100 NPS convention for UI consistency. | SMB customers don't compare these to internal NPS surveys; visual consistency across all 12 indices outweighs convention purity. The underlying signal is the same. |
+| Q3 | First-week defaults when direction/delta are null | **Show score, hide arrow, show soft note.** "Trends start appearing next week." | Honest about the gap; doesn't fake a delta. |
+| Q4 | Trend Capture detection algorithm | **Defer to V2.** Don't build until snapshot history table exists and we have 4-8 weeks of data to validate against. | Trend detection is a hard ML problem that needs historical data to validate. Building it on Day 1 with no validation set would produce noise. |
+| Q5 | Versioning policy — what triggers a version bump | **Any output-affecting change bumps a patch version.** No silent changes. | Customers seeing scores move without changelog erodes trust. `v1.0 → v1.0.1` cost is near-zero. Weight tweaks ARE output-affecting → they bump. |
 
-4. **Trend Capture detection algorithm.** This is the most novel pipeline. We need a "what's a trend?" definition — e.g. hashtag with >100% week-over-week growth in usage rate within a category. Worth a 30-min discussion before implementation.
+### Implementation implications
 
-5. **Versioning policy.** Once `v1.0` indices ship, what triggers a `v1.1` bump?
-   - Algorithm change of any kind → bump (my proposal)
-   - Weight tweak only → no bump (my proposal — weights are tuning, not methodology)
-   - Add new input → bump
-   - Drop input → bump
+- **Trend Capture Index defers to V2.** Of the 4 new pipelines flagged in §4, only `trend_capture` is dropped; `innovation_score`, deeper `kol_strategy`, and `loyalty_index` repeat-author tracking remain.
+- **NPS normalization** changes §4.2 formula. Update at impl time: scale `nps_proxy` from raw `(pos-neg) * 2` (range -100 to +100) to `(pos-neg+100) / 2` (range 0 to 100). Document the conversion in the index `explain_text`.
+- **First-week UX** must be implemented in the API response: when `delta IS NULL`, the API returns `direction: null` and the UI hides the arrow.
+- **Patch version policy** means `composite_indices.index_version` may move `v1.0 → v1.0.1` between releases. Database stores the full version string per row (already in schema).
+
+### Sequencing decision (locked 2026-05-04)
+
+The full implementation of W9-W11 (composite indices) **is paused** pending two prerequisites:
+
+1. **`analysis_history` snapshot table (Will's #21)** — provides the WoW deltas and trend data this spec depends on. Recommended next major work item.
+2. **3-5 SMB customer signal (Joanna's J5)** — informs whether all 12 indices are right, or whether we trim to a high-confidence subset.
+
+When both prerequisites are met, this spec is implementation-ready as written (with the locked Q1-Q5 answers above).
 
 ---
 
