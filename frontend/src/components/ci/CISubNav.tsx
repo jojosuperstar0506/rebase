@@ -18,18 +18,32 @@ interface CITab {
   path: string;
   label: { en: string; zh: string };
   icon: string;
+  /** When true, render a thin vertical divider AFTER this tab to separate
+   *  conceptual groups (current state | recommend next | admin). */
+  groupBreakAfter?: boolean;
 }
 
-// Tab order is intentional — by time horizon:
-//   Actions (today) → Brief (week) → Opportunity (month) → Analytics (deep)
-//   → Library (archive) → Brands → Settings → Help
+// Tab order is intentional — grouped by purpose:
+//   ── Current state ────────────────────────────────────────
+//     Brief (week summary) → Analytics (deep dive) →
+//     Library (archive) → Brands (tracked competitors)
+//   ── Recommended next ─────────────────────────────────────
+//     Actions (today) → Opportunity (this month)
+//   ── Admin ────────────────────────────────────────────────
+//     Settings → Help
+//
+// The visual breaks between groups help customers understand:
+// "first half is what's happening, second half is what to do."
 const CI_TABS: CITab[] = [
-  { path: '/ci/actions',     label: { en: 'Actions',     zh: '今日'    }, icon: '🎯' },
+  // ── Current state
   { path: '/ci',             label: { en: 'Brief',       zh: '简报'    }, icon: '📰' },
-  { path: '/ci/opportunity', label: { en: 'Opportunity', zh: '本月机会' }, icon: '🗺️' },
   { path: '/ci/analytics',   label: { en: 'Analytics',   zh: '分析'    }, icon: '📊' },
   { path: '/ci/library',     label: { en: 'Library',     zh: '资料库'  }, icon: '📚' },
-  { path: '/ci/competitors', label: { en: 'Brands',      zh: '品牌'    }, icon: '🏷️' },
+  { path: '/ci/competitors', label: { en: 'Brands',      zh: '品牌'    }, icon: '🏷️', groupBreakAfter: true },
+  // ── Recommended next
+  { path: '/ci/actions',     label: { en: 'Actions',     zh: '今日'    }, icon: '🎯' },
+  { path: '/ci/opportunity', label: { en: 'Opportunity', zh: '本月机会' }, icon: '🗺️', groupBreakAfter: true },
+  // ── Admin
   { path: '/ci/settings',    label: { en: 'Settings',    zh: '设置'    }, icon: '⚙️' },
   { path: '/ci/help',        label: { en: 'Help',        zh: '帮助'    }, icon: '💡' },
 ];
@@ -63,28 +77,40 @@ export default function CISubNav() {
             ? current === '/ci'
             : current.startsWith(tab.path);
           return (
-            <Link
-              key={tab.path}
-              to={tab.path}
-              style={{
-                padding: '8px 14px',
-                borderRadius: 6,
-                fontSize: 13,
-                fontWeight: active ? 600 : 400,
-                color: active ? C.ac : C.t2,
-                background: active ? C.s2 : 'transparent',
-                textDecoration: 'none',
-                whiteSpace: 'nowrap',
-                flexShrink: 0,
-                minHeight: 44,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-              }}
-            >
-              <span style={{ fontSize: 14 }}>{tab.icon}</span>
-              <span>{lang === 'zh' ? tab.label.zh : tab.label.en}</span>
-            </Link>
+            <span key={tab.path} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+              <Link
+                to={tab.path}
+                style={{
+                  padding: '8px 14px',
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontWeight: active ? 600 : 400,
+                  color: active ? C.ac : C.t2,
+                  background: active ? C.s2 : 'transparent',
+                  textDecoration: 'none',
+                  whiteSpace: 'nowrap',
+                  minHeight: 44,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <span style={{ fontSize: 14 }}>{tab.icon}</span>
+                <span>{lang === 'zh' ? tab.label.zh : tab.label.en}</span>
+              </Link>
+              {tab.groupBreakAfter && (
+                <span
+                  aria-hidden
+                  style={{
+                    width: 1,
+                    height: 20,
+                    background: C.bd,
+                    margin: '0 8px',
+                    flexShrink: 0,
+                  }}
+                />
+              )}
+            </span>
           );
         })}
       </div>
