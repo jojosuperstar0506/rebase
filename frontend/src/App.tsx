@@ -30,6 +30,8 @@ import CILibrary from "./pages/ci/CILibrary";
 import CICompetitors from "./pages/ci/CICompetitors";
 import CISettings from "./pages/ci/CISettings";
 import CIHelp from "./pages/ci/CIHelp";
+import CIActions from "./pages/ci/CIActions";
+import CIOpportunity from "./pages/ci/CIOpportunity";
 import { CIErrorBoundary } from "./components/ci/CIErrorBoundary";
 
 const Calculator = lazy(() => import("./pages/Calculator"));
@@ -254,6 +256,8 @@ function AppRoutes() {
             Those UIs were redundant dashboards of the same data — their content is now
             inside the Brief (collapsed metrics) or per-brand detail views from Brands. */}
         <Route path="/ci" element={<ProtectedRoute><CIErrorBoundary><CIBrief /></CIErrorBoundary></ProtectedRoute>} />
+        <Route path="/ci/actions" element={<ProtectedRoute><CIErrorBoundary><CIActions /></CIErrorBoundary></ProtectedRoute>} />
+        <Route path="/ci/opportunity" element={<ProtectedRoute><CIErrorBoundary><CIOpportunity /></CIErrorBoundary></ProtectedRoute>} />
         <Route path="/ci/analytics" element={<ProtectedRoute><CIErrorBoundary><CIAnalytics /></CIErrorBoundary></ProtectedRoute>} />
         <Route path="/ci/library" element={<ProtectedRoute><CIErrorBoundary><CILibrary /></CIErrorBoundary></ProtectedRoute>} />
         <Route path="/ci/competitors" element={<ProtectedRoute><CIErrorBoundary><CICompetitors /></CIErrorBoundary></ProtectedRoute>} />
