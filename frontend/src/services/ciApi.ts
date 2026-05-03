@@ -49,6 +49,51 @@ async function tryApi<T>(path: string, options?: RequestInit): Promise<T | null>
   }
 }
 
+// Verbose variant — same fetch logic, but returns status + body so the UI
+// can distinguish "auth failed" / "backend down" / "valid response, empty
+// payload" / "LLM upstream error" instead of conflating them all into
+// "feature unavailable." Use this for any UX surface where the user sees
+// an explicit error message (loadAiSuggestions, brief refresh failures).
+//
+// Shape:
+//   { ok: true,  status: 2xx, data: T }
+//   { ok: false, status: number, message?: string }   // server-shaped error (4xx/5xx with body)
+//   { ok: false, status: 0,      message?: string }   // network / abort / no-response
+export type ApiResult<T> =
+  | { ok: true;  status: number; data: T }
+  | { ok: false; status: number; message?: string };
+
+async function tryApiVerbose<T>(path: string, options?: RequestInit): Promise<ApiResult<T>> {
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: { ...getHeaders(), ...(options?.headers as Record<string, string> | undefined) },
+    });
+    // Try JSON first; fall back to text. Backend errors are usually JSON
+    // ({"error": "..."}), but a Vercel proxy 502 returns plain text/HTML.
+    const ct = res.headers.get('content-type') || '';
+    let body: any = null;
+    let bodyText: string | null = null;
+    if (ct.includes('application/json')) {
+      body = await res.json().catch(() => null);
+    } else {
+      bodyText = await res.text().catch(() => null);
+    }
+    if (!res.ok) {
+      const message = (body && (body.error || body.message))
+        || (bodyText && bodyText.slice(0, 200))
+        || `HTTP ${res.status}`;
+      console.warn(`[CI API] ${options?.method || 'GET'} ${path} → ${res.status}`, message);
+      return { ok: false, status: res.status, message };
+    }
+    return { ok: true, status: res.status, data: body as T };
+  } catch (err) {
+    const e = err as Error;
+    console.warn(`[CI API] ${options?.method || 'GET'} ${path} → network error`, e.message);
+    return { ok: false, status: 0, message: e.message || 'Network error' };
+  }
+}
+
 // ─── Workspace ────────────────────────────────────────────────────
 
 export interface Workspace {
@@ -427,16 +472,57 @@ export async function parseLink(url: string): Promise<ParsedLink | null> {
   });
 }
 
+/**
+ * Result of suggestCompetitors. Always carries `suggestions` (possibly empty)
+ * plus an optional human-readable `message` from the backend (e.g. fallback
+ * source explanation, LLM upstream error) and `error` shape when the request
+ * itself failed (auth/network/proxy). The UI uses these to show the actual
+ * cause instead of a generic "AI unavailable" placeholder.
+ */
+export interface SuggestCompetitorsResult {
+  suggestions: CompetitorSuggestion[];
+  /** 'llm' | 'fallback' | 'error' — where the result came from */
+  source: 'llm' | 'fallback' | 'error';
+  /** Backend-supplied or client-derived message; safe to show to the user */
+  message?: string;
+  /** HTTP status of the underlying request (0 for network errors). */
+  status: number;
+}
+
 export async function suggestCompetitors(
   brandName: string,
   category: string,
   priceRange?: { min: number; max: number }
-): Promise<{ suggestions: CompetitorSuggestion[] }> {
-  const data = await tryApi<{ suggestions: CompetitorSuggestion[] }>('/suggest-competitors', {
+): Promise<SuggestCompetitorsResult> {
+  const result = await tryApiVerbose<{
+    suggestions: CompetitorSuggestion[];
+    source?: 'llm' | 'fallback';
+    message?: string;
+  }>('/suggest-competitors', {
     method: 'POST',
     body: JSON.stringify({ brand_name: brandName, brand_category: category, brand_price_range: priceRange }),
   });
-  return data || { suggestions: [] };
+
+  if (!result.ok) {
+    // Distinguish ECS-reachable failures from the proxy/network layer so the
+    // UI can offer the right next-step (try again vs check connection).
+    return {
+      suggestions: [],
+      source: 'error',
+      status: result.status,
+      message: result.message
+        || (result.status === 0
+          ? 'Could not reach the server. Please check your connection and try again.'
+          : `Request failed (HTTP ${result.status})`),
+    };
+  }
+
+  return {
+    suggestions: result.data?.suggestions || [],
+    source: result.data?.source || 'llm',
+    status: result.status,
+    message: result.data?.message,
+  };
 }
 
 export async function searchBrands(query: string): Promise<BrandResolution[]> {

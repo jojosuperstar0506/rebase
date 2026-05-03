@@ -85,39 +85,121 @@ LLM_CONFIG = _get_llm_config()
 print(f"[LLM] Using provider: {LLM_CONFIG['provider']}, model: {LLM_CONFIG['brand_model']}")
 
 
+class LlmCallError(Exception):
+    """Structured error for LLM call failures.
+
+    Carries enough context that the caller can decide whether to retry,
+    fall back to a baseline, or propagate. ``status_code`` is the upstream
+    HTTP status (or 0 for network/timeout); ``snippet`` is the first chunk
+    of the response body when available; ``timed_out`` distinguishes
+    AbortError-class failures from real upstream rejections.
+    """
+
+    def __init__(self, message, *, status_code=0, snippet="", model="", timed_out=False):
+        super().__init__(message)
+        self.status_code = status_code
+        self.snippet = snippet
+        self.model = model
+        self.timed_out = timed_out
+
+
+# Single point of timeout config so cron and ad-hoc runs share behavior.
+# 60s matches the previous behavior; expose as env to allow tuning per
+# deployment without a code change.
+LLM_TIMEOUT_SEC = float(os.environ.get("LLM_TIMEOUT_SEC", "60"))
+
+
 def _call_llm(prompt: str, model: str, max_tokens: int = 1000) -> str:
-    """Call the configured LLM and return the text response."""
+    """Call the configured LLM and return the text response.
+
+    Raises :class:`LlmCallError` on any failure — HTTP non-2xx, network
+    error, timeout, or malformed response shape. Callers that want to
+    degrade gracefully (e.g. ``generate_brand_insight``) catch it and
+    return a baseline; callers that should fail loud (e.g. the workspace
+    synthesis) let it bubble to the cron supervisor.
+
+    Previous behavior allowed bare httpx.HTTPStatusError / KeyError /
+    TimeoutException to propagate, which crashed the orchestrator stage
+    and left the user with a Brief 404 and no diagnostic — just a missing
+    weekly_briefs row. The structured error gives the operator something
+    to grep in the cron log instead.
+    """
 
     if LLM_CONFIG["provider"] == "anthropic":
-        # Use Anthropic SDK format
-        from anthropic import Anthropic
+        try:
+            from anthropic import Anthropic
 
-        client = Anthropic(api_key=LLM_CONFIG["api_key"])
-        response = client.messages.create(
+            client = Anthropic(api_key=LLM_CONFIG["api_key"])
+            response = client.messages.create(
+                model=model,
+                max_tokens=max_tokens,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            # Find the first text block; future tool_use blocks shouldn't crash us.
+            for block in response.content or []:
+                if getattr(block, "type", None) == "text" and getattr(block, "text", None):
+                    return block.text.strip()
+            raise LlmCallError(
+                "Anthropic response missing text block",
+                model=model,
+            )
+        except LlmCallError:
+            raise
+        except Exception as exc:
+            raise LlmCallError(
+                f"Anthropic call failed: {exc}",
+                model=model,
+            ) from exc
+
+    # OpenAI-compatible API (DeepSeek, Qwen, GLM)
+    url = f"{LLM_CONFIG['base_url'].rstrip('/')}/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {LLM_CONFIG['api_key']}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.7,
+    }
+
+    try:
+        resp = httpx.post(url, headers=headers, json=payload, timeout=LLM_TIMEOUT_SEC)
+    except httpx.TimeoutException as exc:
+        raise LlmCallError(
+            f"LLM timed out after {LLM_TIMEOUT_SEC}s",
+            status_code=0,
             model=model,
-            max_tokens=max_tokens,
-            messages=[{"role": "user", "content": prompt}],
+            timed_out=True,
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise LlmCallError(
+            f"LLM transport error: {exc}",
+            status_code=0,
+            model=model,
+        ) from exc
+
+    if resp.status_code >= 400:
+        snippet = (resp.text or "")[:200]
+        raise LlmCallError(
+            f"LLM HTTP {resp.status_code}: {snippet}",
+            status_code=resp.status_code,
+            snippet=snippet,
+            model=model,
         )
-        return response.content[0].text.strip()
 
-    else:
-        # OpenAI-compatible API (DeepSeek, Qwen, GLM)
-        url = f"{LLM_CONFIG['base_url']}/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {LLM_CONFIG['api_key']}",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "model": model,
-            "max_tokens": max_tokens,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.7,
-        }
-
-        resp = httpx.post(url, headers=headers, json=payload, timeout=60)
-        resp.raise_for_status()
+    try:
         data = resp.json()
         return data["choices"][0]["message"]["content"].strip()
+    except (ValueError, KeyError, IndexError, TypeError) as exc:
+        snippet = (resp.text or "")[:200]
+        raise LlmCallError(
+            f"LLM response shape mismatch: {exc}",
+            status_code=resp.status_code,
+            snippet=snippet,
+            model=model,
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +224,37 @@ Top engagement metrics: {json.dumps(profile.get('engagement_metrics', {}), ensur
 
 Write ONLY the insight paragraph, no headers or bullet points."""
 
-    zh_text = _call_llm(prompt, LLM_CONFIG["brand_model"], max_tokens=300)
+    # Step 1 (zh) — the primary insight. If this fails we degrade to a
+    # baseline string so the cron orchestrator doesn't crash on a single
+    # brand. The baseline is intentionally honest about being a fallback
+    # so reviewers can spot it in the analytics_results table.
+    try:
+        zh_text = _call_llm(prompt, LLM_CONFIG["brand_model"], max_tokens=300)
+    except LlmCallError as exc:
+        print(
+            f"[narrative] brand_insight zh failed for '{brand_name}': "
+            f"status={exc.status_code} timed_out={exc.timed_out} model={exc.model} :: {exc}"
+        )
+        baseline_zh = (
+            f"{brand_name} 的策略洞察暂时不可用 (LLM 调用失败)。"
+            "等待下次抓取后将自动重新生成。"
+        )
+        return json.dumps(
+            {
+                "zh": baseline_zh,
+                "en": (
+                    f"Strategic insight for {brand_name} is temporarily "
+                    "unavailable (LLM call failed); will regenerate on the "
+                    "next scrape."
+                ),
+                "_fallback": True,
+            },
+            ensure_ascii=False,
+        )
+
+    # Step 2 (en) — translation. If this fails we still return the zh
+    # text on its own (the runtime translate-on-demand layer in
+    # backend/server.js will pick it up on first English read).
     try:
         en_text = _call_llm(
             f"Translate the following Chinese competitive intelligence insight "
@@ -150,7 +262,11 @@ Write ONLY the insight paragraph, no headers or bullet points."""
             LLM_CONFIG["brand_model"], max_tokens=300,
         )
         return json.dumps({"zh": zh_text, "en": en_text.strip()}, ensure_ascii=False)
-    except Exception:
+    except LlmCallError as exc:
+        print(
+            f"[narrative] brand_insight en-translation failed for '{brand_name}': "
+            f"status={exc.status_code} timed_out={exc.timed_out} :: {exc}"
+        )
         return zh_text
 
 
@@ -209,7 +325,27 @@ Respond in this exact JSON format, no markdown, no explanation outside the JSON:
   ]
 }}"""
 
-    raw = _call_llm(prompt, LLM_CONFIG["synthesis_model"], max_tokens=1000)
+    # Wrap so an LLM blip on the synthesis call doesn't crash the
+    # orchestrator stage (which would leave the user with a Brief 404
+    # and no diagnostic). The cron is invoked with --brands-only today,
+    # so this path is rare — but the failure mode it produces is severe
+    # (whole stage aborts), which is exactly when a graceful degrade is
+    # most valuable.
+    try:
+        raw = _call_llm(prompt, LLM_CONFIG["synthesis_model"], max_tokens=1000)
+    except LlmCallError as exc:
+        print(
+            f"[narrative] workspace synthesis failed for '{brand_name}': "
+            f"status={exc.status_code} timed_out={exc.timed_out} :: {exc}"
+        )
+        return {
+            "narrative": (
+                f"工作区策略综合暂时不可用 (LLM 调用失败)。"
+                "本周简报基于现有数据，下次抓取将重试。"
+            ),
+            "action_items": [],
+            "_fallback": True,
+        }
 
     # Parse JSON response (handle potential markdown wrapping)
     if raw.startswith("```"):
@@ -222,10 +358,13 @@ Respond in this exact JSON format, no markdown, no explanation outside the JSON:
             "action_items": result.get("action_items", []),
         }
     except json.JSONDecodeError:
-        # If JSON parsing fails, use the raw text as narrative
+        # JSON parse failure — keep raw text as narrative, drop action_items.
+        # Still better than a stack trace; flag so downstream knows it's
+        # degraded structure.
         return {
             "narrative": raw[:500],
             "action_items": [],
+            "_parse_failed": True,
         }
 
 

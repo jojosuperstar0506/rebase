@@ -1231,6 +1231,29 @@ function hasChinese(s) {
   return typeof s === 'string' && CJK_PATTERN.test(s);
 }
 
+// ─── DeepSeek URL builder (single source of truth) ───────────────────────
+// Two callers existed historically — callLLM appended /v1/chat/completions
+// while translateBatch and the Python pipelines appended /chat/completions
+// (no /v1). DeepSeek accepts both, but a misconfigured DEEPSEEK_BASE_URL
+// (e.g. set to https://api.deepseek.com/v1) would break one path silently
+// while the other kept working — exactly the kind of partial outage that
+// makes "AI suggestions broken but Brief works" mysterious. One helper,
+// one convention, no drift.
+//
+// Convention: append "/chat/completions" unless the env already includes
+// a path. This matches the known-working translateBatch caller.
+//
+// LLM_TIMEOUT_MS gates how long we wait on a single LLM call. Without
+// this, a wedged DeepSeek connection blocks the request indefinitely
+// (no AbortSignal previously). 30s is generous — DeepSeek typically
+// responds in 2-8s for our prompts.
+const LLM_TIMEOUT_MS = parseInt(process.env.LLM_TIMEOUT_MS || '30000', 10);
+function buildDeepseekUrl() {
+  const baseUrl = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '');
+  if (baseUrl.includes('/chat/completions')) return baseUrl;
+  return `${baseUrl}/chat/completions`;
+}
+
 async function translateBatch(texts) {
   if (!Array.isArray(texts) || texts.length === 0) return [];
   const apiKey = process.env.DEEPSEEK_API_KEY;
@@ -1238,7 +1261,7 @@ async function translateBatch(texts) {
     console.warn('[CI] No DEEPSEEK_API_KEY — runtime translation skipped');
     return texts;
   }
-  const baseUrl = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com';
+  const url = buildDeepseekUrl();
   const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
   const numbered = texts.map((t, i) => `${i + 1}. ${t}`).join('\n');
   const prompt = `Translate each numbered Chinese sentence below into fluent English.
@@ -1247,7 +1270,7 @@ Return ONLY a JSON array of strings in the same order, no markdown fences.
 ${numbered}`;
   try {
     const charSum = texts.reduce((s, t) => s + t.length, 0);
-    const resp = await fetch(`${baseUrl}/chat/completions`, {
+    const resp = await fetch(url, {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1256,9 +1279,11 @@ ${numbered}`;
         temperature: 0.3,
         messages: [{ role: 'user', content: prompt }],
       }),
+      signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
     });
     if (!resp.ok) {
-      console.warn(`[CI] Translation API ${resp.status}`);
+      const errText = await resp.text().catch(() => '');
+      console.warn(`[CI] Translation API ${resp.status}: ${errText.slice(0, 200)}`);
       return texts;
     }
     const data = await resp.json();
@@ -1273,7 +1298,8 @@ ${numbered}`;
     }
     return arr.map(t => String(t).trim());
   } catch (err) {
-    console.warn('[CI] translateBatch failed:', err.message);
+    const isTimeout = err && (err.name === 'TimeoutError' || err.name === 'AbortError');
+    console.warn(`[CI] translateBatch ${isTimeout ? 'TIMED OUT' : 'failed'}:`, err.message);
     return texts;
   }
 }
@@ -1501,7 +1527,30 @@ app.get('/api/ci/brief', async (req, res) => {
         const texts = [...toTranslate];
         console.log(`[CI] Runtime-translating ${texts.length} Chinese fields for workspace ${workspaceId}`);
         const translated = await translateBatch(texts);
-        const map = Object.fromEntries(texts.map((zh, i) => [zh, translated[i]]));
+        // Build the map of zh→en, but ONLY include entries where the
+        // translation is actually English (i.e. doesn't still contain CJK).
+        // translateBatch returns the original `texts` unchanged on any
+        // failure (HTTP error, JSON parse fail, count mismatch, timeout) —
+        // if we treat those as valid translations and cache them back to
+        // weekly_briefs, every future ?lang=en read returns Chinese forever
+        // for that workspace×week. That was happening: a single LLM blip
+        // silently poisoned the English cache.
+        const map = {};
+        for (let i = 0; i < texts.length; i++) {
+          const zh = texts[i];
+          const en = translated[i];
+          if (typeof en === 'string' && en !== zh && !hasChinese(en)) {
+            map[zh] = en;
+          }
+        }
+        const validCount = Object.keys(map).length;
+        if (validCount < texts.length) {
+          console.warn(
+            `[CI] Translation partial: ${validCount}/${texts.length} fields got valid English; ` +
+            `untranslated entries kept as Chinese (no DB cache write for failed entries).`
+          );
+        }
+
         const swap = (obj, fields) => {
           if (!obj) return;
           for (const f of fields) if (map[obj[f]]) obj[f] = map[obj[f]];
@@ -1515,29 +1564,33 @@ app.get('/api/ci/brief', async (req, res) => {
           resolvedOpp.target_channels = (resolvedOpp.target_channels || []).map(ch => map[ch] || ch);
         }
 
-        // Cache to DB: rewrite weekly_briefs JSONB with {zh, en} dicts
-        // so the next /api/ci/brief?lang=en hits cached data, not LLM.
-        try {
-          const enrich = (raw, fields) => {
-            if (!raw || typeof raw !== 'object') return raw;
-            const out = { ...raw };
-            for (const f of fields) {
-              const cur = out[f];
-              if (typeof cur === 'string' && map[cur]) {
-                out[f] = { zh: cur, en: map[cur] };
+        // Cache to DB only when we actually have at least one valid
+        // translation. enrich() also no-ops on entries missing from `map`
+        // so partially-failed runs only cache what worked — the next read
+        // re-tries the still-Chinese fields rather than serving stale junk.
+        if (validCount > 0) {
+          try {
+            const enrich = (raw, fields) => {
+              if (!raw || typeof raw !== 'object') return raw;
+              const out = { ...raw };
+              for (const f of fields) {
+                const cur = out[f];
+                if (typeof cur === 'string' && map[cur]) {
+                  out[f] = { zh: cur, en: map[cur] };
+                }
               }
-            }
-            return out;
-          };
-          const newVerdict = enrich(verdict, verdictFields);
-          const newMoves = (Array.isArray(moves) ? moves : []).map(m => enrich(m, moveFields));
-          await pool.query(
-            `UPDATE weekly_briefs SET verdict = $1::jsonb, moves = $2::jsonb
-             WHERE workspace_id = $3 AND week_of = $4::date`,
-            [JSON.stringify(newVerdict), JSON.stringify(newMoves), workspaceId, weekOf]
-          );
-        } catch (err) {
-          console.warn('[CI] Translation cache write failed:', err.message);
+              return out;
+            };
+            const newVerdict = enrich(verdict, verdictFields);
+            const newMoves = (Array.isArray(moves) ? moves : []).map(m => enrich(m, moveFields));
+            await pool.query(
+              `UPDATE weekly_briefs SET verdict = $1::jsonb, moves = $2::jsonb
+               WHERE workspace_id = $3 AND week_of = $4::date`,
+              [JSON.stringify(newVerdict), JSON.stringify(newMoves), workspaceId, weekOf]
+            );
+          } catch (err) {
+            console.warn('[CI] Translation cache write failed:', err.message);
+          }
         }
       }
     }
@@ -2960,15 +3013,18 @@ app.get('/api/ci/brand-insights', async (req, res) => {
 });
 
 // ── LLM Helper ──────────────────────────────────────────────────────────────
+// Calls DeepSeek (primary) or Anthropic (fallback) and returns the assistant
+// message text. Throws on failure with the upstream HTTP status + body in
+// the message — callers can surface the real cause to the user instead of
+// the generic "AI is unavailable" placeholder.
 async function callLLM(prompt, maxTokens = 1000) {
   const deepseekKey = process.env.DEEPSEEK_API_KEY;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  let lastErr = null;
 
   if (deepseekKey) {
     try {
-      const baseUrl = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '');
-      const url = baseUrl.includes('/chat/completions') ? baseUrl : `${baseUrl}/v1/chat/completions`;
-
+      const url = buildDeepseekUrl();
       const resp = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${deepseekKey}` },
@@ -2977,20 +3033,32 @@ async function callLLM(prompt, maxTokens = 1000) {
           messages: [{ role: 'user', content: prompt }],
           max_tokens: maxTokens,
         }),
+        signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
       });
 
       if (!resp.ok) {
         const errText = await resp.text().catch(() => 'unknown');
-        console.error(`[callLLM] DeepSeek HTTP ${resp.status}: ${errText.slice(0, 200)}`);
-        throw new Error(`DeepSeek API returned ${resp.status}`);
+        const snippet = errText.slice(0, 200);
+        console.error(`[callLLM] DeepSeek HTTP ${resp.status}: ${snippet}`);
+        // Surface the upstream status + a snippet so suggest-competitors etc
+        // can include actionable detail in the user-facing message.
+        throw new Error(`DeepSeek HTTP ${resp.status}: ${snippet}`);
       }
 
       const data = await resp.json();
-      return data.choices?.[0]?.message?.content || '';
+      const text = data.choices?.[0]?.message?.content;
+      if (typeof text !== 'string') {
+        throw new Error('DeepSeek response missing choices[0].message.content');
+      }
+      return text;
     } catch (err) {
-      console.error('[callLLM] DeepSeek failed:', err.message);
-      // Fall through to Anthropic if available
-      if (!anthropicKey) throw err;
+      const isTimeout = err && (err.name === 'TimeoutError' || err.name === 'AbortError');
+      lastErr = isTimeout
+        ? new Error(`DeepSeek timed out after ${LLM_TIMEOUT_MS}ms`)
+        : err;
+      console.error(`[callLLM] DeepSeek ${isTimeout ? 'TIMED OUT' : 'failed'}:`, err.message);
+      // Fall through to Anthropic only if a key is configured.
+      if (!anthropicKey) throw lastErr;
     }
   }
 
@@ -3002,7 +3070,13 @@ async function callLLM(prompt, maxTokens = 1000) {
         max_tokens: maxTokens,
         messages: [{ role: 'user', content: prompt }],
       });
-      return msg.content[0].text;
+      // Anthropic responses can include tool_use blocks before text. Find
+      // the first text block instead of blindly indexing [0].text.
+      const textBlock = (msg.content || []).find(b => b && b.type === 'text');
+      if (!textBlock || typeof textBlock.text !== 'string') {
+        throw new Error('Anthropic response missing text block');
+      }
+      return textBlock.text;
     } catch (err) {
       console.error('[callLLM] Anthropic failed:', err.message);
       throw err;
@@ -3430,9 +3504,15 @@ Respond in this exact JSON format, no markdown:
       }
     }
 
-    res.json({ suggestions, count: suggestions.length });
+    res.json({ suggestions, count: suggestions.length, source: 'llm' });
   } catch (err) {
     console.error('[SUGGEST] AI suggestion failed:', err.message);
+
+    // Build a user-safe summary of WHY the AI call failed. callLLM throws
+    // with the upstream HTTP status + body snippet in err.message, which is
+    // exactly what we want to surface (e.g. "DeepSeek HTTP 401: ..." or
+    // "DeepSeek timed out after 30000ms"). Trim to keep the banner tidy.
+    const causeSnippet = (err.message || '').slice(0, 160);
 
     // Fallback: return known brands only if they match the user's category
     const sameCat = KNOWN_BRANDS.filter(b => b.category === brand_category);
@@ -3445,17 +3525,27 @@ Respond in this exact JSON format, no markdown:
       badge: b.badge,
     }));
 
-    // If no category-matching brands in registry, return empty with helpful message
+    // If no category-matching brands in registry, return empty with a message
+    // that names BOTH causes (no seeded data + which LLM error fired) so the
+    // operator can see at a glance what to fix.
     if (fallback.length === 0) {
       return res.json({
         suggestions: [],
         count: 0,
         source: 'fallback',
-        message: `暂无"${brand_category}"品类的预置品牌数据。AI推荐暂时不可用，请使用搜索或粘贴链接添加竞品。`,
+        message: `暂无"${brand_category}"品类的预置品牌数据，且 AI 推荐失败 (${causeSnippet})。请使用搜索或粘贴链接添加竞品。`,
       });
     }
 
-    res.json({ suggestions: fallback, count: fallback.length, source: 'fallback' });
+    // Seeded fallback IS available — return it but tell the user these are
+    // pre-loaded suggestions (not fresh AI output) and include the LLM
+    // error so customer support can read what actually went wrong.
+    res.json({
+      suggestions: fallback,
+      count: fallback.length,
+      source: 'fallback',
+      message: `AI 实时推荐暂不可用 (${causeSnippet})；以下为预置同品类品牌兜底建议。`,
+    });
   }
 });
 

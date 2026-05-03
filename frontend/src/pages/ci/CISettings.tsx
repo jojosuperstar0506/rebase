@@ -453,11 +453,33 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
     setAiError('');
     try {
       const result = await suggestCompetitors(ws.brand_name, ws.brand_category, ws.price_range);
-      setAiSuggestions(result?.suggestions ?? []);
-      if (!result?.suggestions?.length) {
-        setAiError(t(T.ci.suggestionsUnavailable, lang as any));
+      setAiSuggestions(result.suggestions);
+
+      // Show actual cause to the user instead of a generic "unavailable"
+      // banner. Backend now returns:
+      //   - source='llm' + suggestions.length>0  → success, no banner
+      //   - source='fallback' + suggestions      → seeded brands, optional banner
+      //   - source='fallback' + empty + message  → registry has no seeded brands for this category
+      //   - source='error'                       → upstream LLM/HTTP/proxy failure with message
+      // The generic suggestionsUnavailable string is the last-resort fallback
+      // when the backend gives us nothing actionable to show.
+      if (result.source === 'error') {
+        const base = t(T.ci.suggestionsUnavailable, lang as any);
+        setAiError(result.message ? `${base}: ${result.message}` : base);
+      } else if (result.suggestions.length === 0) {
+        setAiError(result.message || t(T.ci.suggestionsUnavailable, lang as any));
+      } else if (result.message) {
+        // Suggestions present + message present (e.g. "showing seeded brands;
+        // AI temporarily unavailable") — surface as a soft note so the user
+        // knows these aren't the AI's pick. We use aiError because that's
+        // the field the AI tab renders today; copy is honest, not alarming.
+        setAiError(result.message);
       }
-    } catch {
+    } catch (err) {
+      // Should rarely happen — suggestCompetitors catches everything itself.
+      // This branch only fires on truly unexpected runtime errors (e.g. JSON
+      // shape mismatch in the helper). Log and degrade.
+      console.error('[CI] loadAiSuggestions threw unexpectedly:', err);
       setAiError(t(T.ci.suggestionsUnavailable, lang as any));
     }
     setAiLoading(false);
