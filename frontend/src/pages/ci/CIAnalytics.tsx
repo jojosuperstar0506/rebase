@@ -97,6 +97,11 @@ export default function CIAnalytics() {
   const workspaceId = workspace?.id || 'mock';
 
   useEffect(() => {
+    // Don't fire API calls before workspace state hydrates.
+    if (!workspace?.id || workspace.id === 'mock' || workspace.id === 'local') {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(false);
     getAnalytics(workspaceId, lang).then(d => {

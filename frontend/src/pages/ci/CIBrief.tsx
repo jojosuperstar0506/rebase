@@ -171,6 +171,12 @@ export default function CIBrief() {
   const workspaceId = workspace?.id || 'mock';
 
   useEffect(() => {
+    // Don't fire API calls before workspace state hydrates — backend will
+    // 404 on the placeholder workspace_id but it spams logs and adds latency.
+    if (!workspace?.id || workspace.id === 'mock' || workspace.id === 'local') {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(false);
     Promise.all([
