@@ -18,7 +18,7 @@
  * brief_generator + white_space pipelines ship.
  */
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useApp } from '../../context/AppContext';
 import type { ColorSet } from '../../theme/colors';
@@ -669,6 +669,105 @@ function MetricDetailView({ metric, ownBrand, trends, C, lang }: {
           <TrendLine data={trends} color={C.ac} C={C} />
         </>
       )}
+
+      {/* "Why this score?" — closes Joanna's gap analysis #16.
+          Displays the raw_inputs that fed each brand's score. The inputs
+          come pre-attached on the FullMetric (backend passthrough from
+          analysis_results.raw_inputs JSONB). Each brand's inputs are
+          rendered as key-value pairs; we let the user expand per-brand
+          to keep the default view clean. */}
+      <WhyThisScore metric={metric} ownBrand={ownBrand} C={C} lang={lang} />
+    </div>
+  );
+}
+
+// Pretty-print a raw_inputs value: numbers get fixed precision, percent-
+// like fields get a % suffix, nested objects collapse to JSON for the
+// "more details" expandable. Leaves human-readable strings alone.
+function formatRawValue(key: string, val: unknown): string {
+  if (val === null || val === undefined) return '—';
+  if (typeof val === 'number') {
+    // Heuristic: keys with 'pct' / 'rate' / 'growth' / 'share' look like %
+    if (/_pct$|_rate$|_share$|_growth$/i.test(key) || /_pct\b|growth_/i.test(key)) {
+      return val.toFixed(1) + '%';
+    }
+    return Number.isInteger(val) ? String(val) : val.toFixed(2);
+  }
+  if (typeof val === 'string') return val;
+  if (Array.isArray(val)) return JSON.stringify(val);
+  if (typeof val === 'object') return JSON.stringify(val, null, 2);
+  return String(val);
+}
+
+function WhyThisScore({ metric, ownBrand, C, lang }: {
+  metric: FullMetric; ownBrand: string; C: ColorSet; lang: string;
+}) {
+  const [expandedBrand, setExpandedBrand] = useState<string | null>(ownBrand);
+  const allInputs = metric.raw_inputs || {};
+  const brandsWithInputs = Object.keys(allInputs).filter(
+    b => allInputs[b] && Object.keys(allInputs[b] as object).length > 0
+  );
+  if (brandsWithInputs.length === 0) return null;
+
+  // Skip noisy keys that aren't useful for human inspection
+  const SKIP_KEYS = new Set(['error', 'reason', 'raw_dump', 'note_authors']);
+
+  return (
+    <div style={{ marginTop: 22, paddingTop: 16, borderTop: `1px solid ${C.bd}` }}>
+      <h4 style={{ fontSize: 12, fontWeight: 700, color: C.t2, letterSpacing: '0.05em', textTransform: 'uppercase', margin: '0 0 10px' }}>
+        {lang === 'zh' ? '这个分数是怎么算出来的' : 'Why this score?'}
+      </h4>
+      <div style={{ fontSize: 11, color: C.t3, marginBottom: 10, lineHeight: 1.6 }}>
+        {lang === 'zh'
+          ? '展开每个品牌查看支撑该指标得分的真实数据 (来自 analysis_results.raw_inputs)。'
+          : 'Expand each brand to see the underlying inputs that produced its score (from analysis_results.raw_inputs).'}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {brandsWithInputs.map(brand => {
+          const inputs = allInputs[brand] as Record<string, unknown>;
+          const isExpanded = expandedBrand === brand;
+          const isOwn = brand === ownBrand;
+          const entries = Object.entries(inputs).filter(([k]) => !SKIP_KEYS.has(k));
+          return (
+            <div key={brand} style={{
+              background: C.s2, borderRadius: 6,
+              border: `1px solid ${isOwn ? `${C.ac}33` : C.bd}`,
+            }}>
+              <button
+                onClick={() => setExpandedBrand(isExpanded ? null : brand)}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center',
+                  justifyContent: 'space-between', padding: '8px 12px',
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  fontSize: 12, color: C.tx, fontWeight: isOwn ? 700 : 500,
+                }}
+              >
+                <span>{isOwn && '🏷️ '}{brand}</span>
+                <span style={{ fontSize: 10, color: C.t3 }}>
+                  {entries.length} {lang === 'zh' ? '项输入' : 'inputs'} {isExpanded ? '▾' : '▸'}
+                </span>
+              </button>
+              {isExpanded && (
+                <div style={{
+                  padding: '4px 12px 10px', borderTop: `1px solid ${C.bd}`,
+                  display: 'grid', gridTemplateColumns: 'minmax(120px, max-content) 1fr',
+                  columnGap: 12, rowGap: 4,
+                  fontSize: 11, fontFamily: 'monospace',
+                }}>
+                  {entries.map(([k, v]) => (
+                    <React.Fragment key={k}>
+                      <span style={{ color: C.t3 }}>{k}</span>
+                      <span style={{ color: C.tx, wordBreak: 'break-word' }}>
+                        {formatRawValue(k, v)}
+                      </span>
+                    </React.Fragment>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
