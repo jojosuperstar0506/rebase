@@ -106,6 +106,7 @@ function BrandProfileSection({ C, lang, isMobile }: { C: ReturnType<typeof useAp
     platforms: saved?.platforms ?? [],
   });
   const [savedOk, setSavedOk] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   function togglePlatform(p: string) {
     setForm(f => ({
@@ -114,8 +115,30 @@ function BrandProfileSection({ C, lang, isMobile }: { C: ReturnType<typeof useAp
     }));
   }
 
-  function handleSave() {
+  async function handleSave() {
+    setSaving(true);
+    // Local first so reads inside this session are immediate even if API is down.
     saveCIWorkspace(form);
+    // Push to API so the workspace pill (which reads from /workspace/me via
+    // useCIData) reflects the new brand name across every CI page. Without
+    // this, the pill stays stale and "Save" only updates localStorage.
+    if (form.brand_name && form.brand_category) {
+      // W7 split: saveWorkspace dispatches to PATCH when an id is passed,
+      // POST otherwise. We need to PATCH the existing workspace, not create
+      // a new one — so look up the current workspace's id first.
+      const current = await getWorkspace();
+      const existingId = current.data?.id && current.data.id !== 'local' ? current.data.id : undefined;
+      await saveWorkspace({
+        ...(existingId ? { id: existingId } : {}),
+        brand_name: form.brand_name,
+        brand_category: form.brand_category,
+        brand_price_range: form.price_range,
+        brand_platforms: form.platforms.length ? Object.fromEntries(form.platforms.map(p => [p, ''])) : null,
+      });
+      // Force useCIData to refetch so WorkspaceSwitcher updates immediately
+      window.dispatchEvent(new CustomEvent('ci-data-updated'));
+    }
+    setSaving(false);
     setSavedOk(true);
     setTimeout(() => setSavedOk(false), 2000);
   }
@@ -209,21 +232,22 @@ function BrandProfileSection({ C, lang, isMobile }: { C: ReturnType<typeof useAp
 
       <button
         onClick={handleSave}
+        disabled={saving}
         style={{
           marginTop: 20,
-          background: savedOk ? C.success : C.ac,
+          background: saving ? C.t3 : (savedOk ? C.success : C.ac),
           border: 'none',
           borderRadius: 8,
           padding: '10px 24px',
           color: '#fff',
           fontSize: 14,
           fontWeight: 600,
-          cursor: 'pointer',
+          cursor: saving ? 'default' : 'pointer',
           minHeight: 44,
           width: isMobile ? '100%' : undefined,
         }}
       >
-        {savedOk ? t(T.ci.saved, lang as any) : t(T.ci.saveBrand, lang as any)}
+        {saving ? (lang === 'zh' ? '保存中…' : 'Saving…') : (savedOk ? t(T.ci.saved, lang as any) : t(T.ci.saveBrand, lang as any))}
       </button>
     </Section>
   );
@@ -236,7 +260,13 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
   competitors: CICompetitor[];
   onAdd: (c: CICompetitor) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<'name' | 'link' | 'ai'>('name');
+  // Type Name + Paste Link tabs are temporarily disabled — AI Suggestions
+  // is the canonical onboarding path until the backend's link parser can
+  // reliably extract names past XHS login walls (tracked: TODO.md F9 /
+  // ROADMAP TASK-46). The tab state + Type-Name and Paste-Link state below
+  // is left intact so we can flip SHOW_MANUAL_TABS back on without rework.
+  const SHOW_MANUAL_TABS = false;
+  const [activeTab, setActiveTab] = useState<'name' | 'link' | 'ai'>(SHOW_MANUAL_TABS ? 'name' : 'ai');
   const [error, setError] = useState('');
   const watchlistCount = competitors.filter(c => c.tier === 'watchlist').length;
 
@@ -468,25 +498,29 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
 
   return (
     <div style={{ marginBottom: 20 }}>
-      {/* Tab bar */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: `1px solid ${C.bd}` }}>
-        {tabs.map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => { setActiveTab(tab.key); setError(''); }}
-            style={{
-              padding: '8px 16px', border: 'none',
-              borderBottom: activeTab === tab.key ? `2px solid ${C.ac}` : '2px solid transparent',
-              background: 'transparent',
-              color: activeTab === tab.key ? C.ac : C.t2,
-              fontWeight: activeTab === tab.key ? 600 : 400,
-              fontSize: 13, cursor: 'pointer',
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {/* Tab bar — hidden while only AI Suggestions is exposed. The tab
+          handlers and state above stay intact so flipping SHOW_MANUAL_TABS
+          back to true in source restores Type Name + Paste Link instantly. */}
+      {SHOW_MANUAL_TABS && (
+        <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: `1px solid ${C.bd}` }}>
+          {tabs.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => { setActiveTab(tab.key); setError(''); }}
+              style={{
+                padding: '8px 16px', border: 'none',
+                borderBottom: activeTab === tab.key ? `2px solid ${C.ac}` : '2px solid transparent',
+                background: 'transparent',
+                color: activeTab === tab.key ? C.ac : C.t2,
+                fontWeight: activeTab === tab.key ? 600 : 400,
+                fontSize: 13, cursor: 'pointer',
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── Tab: Name with autocomplete ────────────────────────── */}
       {activeTab === 'name' && (
@@ -1461,16 +1495,23 @@ function StartAnalysisCard({ C, lang, competitorCount, workspaceName, isMobile }
   );
 }
 
-// ── Reset Data Section ───────────────────────────────────────────
-function ResetDataSection({ C, lang, onReset }: {
+// ── Reset Data card ──────────────────────────────────────────────
+// Sits right under Brand Profile rather than at the bottom of the page.
+// Use case: user typed "Nike" + got AI competitor suggestions, then
+// realized they meant Adidas — they need to see the reset button without
+// scrolling past their suggestions.
+function ResetDataCard({ C, lang, onReset, isMobile }: {
   C: ReturnType<typeof useApp>['colors'];
   lang: string;
   onReset: () => void;
+  isMobile: boolean;
 }) {
   const [confirming, setConfirming] = useState(false);
 
   function handleReset() {
-    // Clear all CI localStorage keys
+    // Clear all CI localStorage keys (workspace, competitors, connections,
+    // analysis flags, welcome banner state, and the multi-workspace cache
+    // added in this PR — the active id and the known-workspaces list).
     localStorage.removeItem('rebase_ci_workspace');
     localStorage.removeItem('rebase_ci_competitors');
     localStorage.removeItem('rebase_ci_connections');
@@ -1478,21 +1519,36 @@ function ResetDataSection({ C, lang, onReset }: {
     localStorage.removeItem('rebase_ci_analysis_job_id');
     localStorage.removeItem('rebase_ci_welcome_dismissed');
     localStorage.removeItem('rebase_ci_last_visit');
-    // Notify parent + other listeners
+    localStorage.removeItem('rebase_ci_active_workspace_id');
+    localStorage.removeItem('rebase_ci_known_workspaces');
     onReset();
     window.dispatchEvent(new CustomEvent('ci-data-updated'));
     setConfirming(false);
-    // Redirect to fresh settings
     window.location.href = '/ci/settings';
   }
 
   return (
-    <Section title={lang === 'zh' ? '重置数据' : 'Reset Data'} C={C}>
-      <p style={{ fontSize: 13, color: C.t2, lineHeight: 1.7, marginTop: 0, marginBottom: 16 }}>
-        {lang === 'zh'
-          ? '清除所有本地保存的品牌资料、竞品列表和分析状态，重新开始设置。此操作不可撤销。'
-          : 'Clear all locally saved brand profile, competitor list, and analysis state. Start fresh. This cannot be undone.'}
-      </p>
+    <div style={{
+      background: C.s1,
+      border: `1px dashed ${C.danger}55`,
+      borderRadius: 12,
+      padding: isMobile ? 14 : 18,
+      marginBottom: 24,
+      display: 'flex',
+      flexDirection: isMobile ? 'column' : 'row',
+      gap: isMobile ? 12 : 18,
+      alignItems: isMobile ? 'stretch' : 'center',
+    }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.tx, marginBottom: 4 }}>
+          {lang === 'zh' ? '切换品牌或行业？' : 'Switching to a different brand or industry?'}
+        </div>
+        <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.6 }}>
+          {lang === 'zh'
+            ? '一键清除：品牌档案、所有追踪的竞品、AI 推荐缓存、分析状态。然后在上方重新填写新品牌信息即可。'
+            : 'One click clears: brand profile, all tracked competitors, AI suggestion cache, and analysis state. Then enter the new brand profile above to start fresh.'}
+        </div>
+      </div>
       {!confirming ? (
         <button
           onClick={() => setConfirming(true)}
@@ -1500,19 +1556,21 @@ function ResetDataSection({ C, lang, onReset }: {
             background: 'transparent',
             border: `1px solid ${C.danger}`,
             color: C.danger,
-            padding: '8px 20px',
+            padding: '9px 18px',
             borderRadius: 8,
             fontSize: 13,
             fontWeight: 600,
             cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
           }}
         >
-          {lang === 'zh' ? '重置所有CI数据' : 'Reset All CI Data'}
+          {lang === 'zh' ? '重置所有数据' : 'Reset all data'}
         </button>
       ) : (
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <span style={{ fontSize: 13, color: C.danger, fontWeight: 600 }}>
-            {lang === 'zh' ? '确定要重置吗？' : 'Are you sure?'}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+          <span style={{ fontSize: 12, color: C.danger, fontWeight: 600 }}>
+            {lang === 'zh' ? '确定？' : 'Sure?'}
           </span>
           <button
             onClick={handleReset}
@@ -1520,14 +1578,14 @@ function ResetDataSection({ C, lang, onReset }: {
               background: C.danger,
               border: 'none',
               color: '#fff',
-              padding: '8px 20px',
+              padding: '8px 16px',
               borderRadius: 8,
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: 600,
               cursor: 'pointer',
             }}
           >
-            {lang === 'zh' ? '确认重置' : 'Yes, Reset'}
+            {lang === 'zh' ? '确认重置' : 'Yes, reset'}
           </button>
           <button
             onClick={() => setConfirming(false)}
@@ -1535,9 +1593,9 @@ function ResetDataSection({ C, lang, onReset }: {
               background: 'transparent',
               border: `1px solid ${C.bd}`,
               color: C.t2,
-              padding: '8px 16px',
+              padding: '8px 14px',
               borderRadius: 8,
-              fontSize: 13,
+              fontSize: 12,
               cursor: 'pointer',
             }}
           >
@@ -1545,7 +1603,7 @@ function ResetDataSection({ C, lang, onReset }: {
           </button>
         </div>
       )}
-    </Section>
+    </div>
   );
 }
 
@@ -1597,6 +1655,12 @@ export default function CISettings() {
         {/* 1 — Brand Profile */}
         <BrandProfileSection C={C} lang={lang} isMobile={isMobile} />
 
+        {/* 1b — Reset Data (sits right under Brand Profile so it's reachable
+                  without scrolling past the AI suggestions panel) */}
+        <ResetDataCard C={C} lang={lang} isMobile={isMobile} onReset={() => {
+          setCompetitors([]);
+        }} />
+
         {/* 2 — My Competitors (renamed from "Manage Competitors") */}
         <Section title={t(T.ci.myCompetitors, lang as any)} C={C}>
           <AddCompetitorSection
@@ -1643,10 +1707,7 @@ export default function CISettings() {
         {/* Cookie connection UI removed for beta. See TASK-17 for backend. Bring back with browser extension in v2. */}
         {/* <ConnectionsSection C={C} lang={lang} isMobile={isMobile} /> */}
 
-        {/* 5 — Reset All Data */}
-        <ResetDataSection C={C} lang={lang} onReset={() => {
-          setCompetitors([]);
-        }} />
+        {/* Reset moved up — see ResetDataCard immediately under Brand Profile. */}
       </div>
     </div>
   );
