@@ -15,7 +15,7 @@ import math
 import sys
 import traceback
 from typing import Optional
-from .db_bridge import get_conn
+from .db_bridge import get_conn, VALID_PROFILE_FILTER
 from .category_baselines import resolve_baseline
 
 METRIC_VERSION = "v1.2"  # bumped for category-aware WTP baselines
@@ -137,11 +137,13 @@ def compute_scores_for_workspace(workspace_id: str, job_id: str = None):
                 # Update progress
                 update_job(job_id, completed_brands=idx, current_brand=brand)
 
-                # Get latest scraped profile for this brand (any platform)
+                # Get latest scraped profile for this brand (any platform).
+                # VALID_PROFILE_FILTER excludes auth-walled / silent-zero scrape
+                # rows that would otherwise poison growth math (W3 fix).
                 cur.execute(
-                    """
+                    f"""
                     SELECT * FROM scraped_brand_profiles
-                    WHERE brand_name = %s
+                    WHERE brand_name = %s AND {VALID_PROFILE_FILTER}
                     ORDER BY scraped_at DESC LIMIT 1
                     """,
                     (brand,),

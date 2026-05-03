@@ -1,6 +1,21 @@
 """
 Design DNA pipeline (metric_type: "design_profile").
 
+⚠️ KNOWN DARK METRIC AS OF 2026-05-03 (W2 audit):
+This pipeline currently emits 0 across every brand because the inputs it
+expects — `scraped_products.material_tags`, `scraped_products.image_urls`,
+and `raw_dimensions.d3.top_notes` — are empty for every brand in the DB.
+
+Root cause is NOT in this pipeline. The XHS scraper today captures
+profile-level stats only (followers, total likes). Note-feed enrichment
+that would populate hashtags / material tags / image URLs is scaffolded
+but not running — disabled to reduce nav budget after the 2026-04-22 ban.
+
+Real fix: re-enable note-feed enrichment in xhs_scraper.py once the
+burner XHS account (J2 in HANDOFF-WILLIAM-2026-05-03.md) is provisioned
++ pre-warmed. Until then this metric correctly returns 0 with no_data
+markers; frontend renders "Coverage pending" badge (PR #29).
+
 Phase 1 (current): Deterministic scoring from hashtags, product metadata,
 and image diversity. Zero AI cost.
 

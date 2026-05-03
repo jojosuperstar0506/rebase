@@ -30,6 +30,33 @@ except ImportError:
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 
+# ─── Profile-quality filter ──────────────────────────────────────────────
+# A SQL WHERE-clause snippet that excludes "buggy" scrape rows where the
+# scraper hit an auth-wall / network failure / silent-zero outcome. These
+# rows have follower_count=0 AND no engagement signal anywhere — clearly
+# not a legitimate snapshot. Treating them as real data poisons growth /
+# voice-volume math (see DATA-FLOW-AND-METRICS-ANALYSIS-2026-05-02.md
+# Issue 1: Joanna's case where Songmont's voice_volume scored 15 instead
+# of ~85 because a row of zeros pulled the trend down).
+#
+# Usage:
+#     from .db_bridge import VALID_PROFILE_FILTER
+#     cur.execute(f"""
+#         SELECT * FROM scraped_brand_profiles
+#         WHERE brand_name = %s AND {VALID_PROFILE_FILTER}
+#         ORDER BY scraped_at DESC LIMIT 2
+#     """, (brand,))
+#
+# Always combined with `AND` — caller is responsible for putting it after
+# their primary brand_name filter.
+VALID_PROFILE_FILTER = """(
+    follower_count > 0
+    OR COALESCE(NULLIF(engagement_metrics->>'total_likes', '')::numeric, 0) > 0
+    OR COALESCE(NULLIF(engagement_metrics->>'total_notes', '')::numeric, 0) > 0
+    OR COALESCE(NULLIF(content_metrics->>'total_notes', '')::numeric, 0) > 0
+)"""
+
+
 def get_conn():
     """Get a PostgreSQL connection. Caller must close it."""
     return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
