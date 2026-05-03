@@ -216,6 +216,107 @@ export default function CIBrief() {
     };
   }, []);
 
+  // Resume polling when navigating into Brief with a job in flight.
+  //
+  // Background: clicking "Start Analysis" in Settings spawns the orchestrator
+  // server-side (detached bash) and stores rebase_ci_analysis_job_id +
+  // rebase_ci_analysis_started in localStorage, then navigates here. Without
+  // this effect the user lands on a stale Brief with no progress signal and
+  // has to click Refresh themselves to see the orchestrator running.
+  //
+  // Same effect also recovers when the click in Settings showed a transient
+  // error but the orchestrator did kick off — they navigate here, we find
+  // the job_id, and resume polling.
+  useEffect(() => {
+    if (!workspace?.id || workspace.id === 'mock' || workspace.id === 'local') return;
+    if (regenerating) return; // already polling
+
+    const storedJobId = localStorage.getItem('rebase_ci_analysis_job_id');
+    const justStarted = localStorage.getItem('rebase_ci_analysis_started');
+    if (!storedJobId || !justStarted) return;
+
+    // We don't refresh the page on completion via this path (handleRegenerate
+    // does that). Instead, we mirror the polling and let the existing logic
+    // refresh `brief` + `domains` once the job settles.
+    setRegenerating(true);
+    setJobError(null);
+    setJobStatus('queued');
+
+    const POLL_MS = 1500;
+    const MAX_POLLS = Math.floor((3 * 60_000) / POLL_MS);
+    let polls = 0;
+    let cancelled = false;
+
+    const poll = async () => {
+      if (cancelled) return;
+      polls += 1;
+      const status = await getAnalysisStatus(workspaceId);
+      if (cancelled) return;
+      if (!status) {
+        if (polls < MAX_POLLS) {
+          pollTimerRef.current = window.setTimeout(poll, POLL_MS);
+        }
+        return;
+      }
+      setJobStatus(status.status);
+      if (status.status === 'complete') {
+        const [fresh, lib, ds] = await Promise.all([
+          getBrief(workspaceId, lang),
+          getLibrary(workspaceId, lang),
+          getDomainScores(workspaceId),
+        ]);
+        if (cancelled) return;
+        setBrief(fresh);
+        setHasHistory((lib || []).length > 0);
+        setDomains(ds);
+        // Once the resumed job completes, drop the started flag so future
+        // navigations don't redundantly re-poll. job_id stays in localStorage
+        // for ~debugging until next Start.
+        localStorage.removeItem('rebase_ci_analysis_started');
+        window.setTimeout(() => {
+          setRegenerating(false);
+          setJobStatus(null);
+        }, 1200);
+        return;
+      }
+      if (status.status === 'failed') {
+        setJobError(status.error
+          || (lang === 'zh' ? '分析失败,请重试' : 'Analysis failed. Please retry.'));
+        localStorage.removeItem('rebase_ci_analysis_started');
+        window.setTimeout(() => {
+          setRegenerating(false);
+          setJobStatus(null);
+        }, 3000);
+        return;
+      }
+      if (polls >= MAX_POLLS) {
+        setJobError(lang === 'zh'
+          ? '分析超时(>3分钟),请稍后查看'
+          : 'Analysis is taking longer than expected. Refresh the page in a few minutes.');
+        setJobStatus('failed');
+        localStorage.removeItem('rebase_ci_analysis_started');
+        window.setTimeout(() => {
+          setRegenerating(false);
+          setJobStatus(null);
+        }, 3000);
+        return;
+      }
+      pollTimerRef.current = window.setTimeout(poll, POLL_MS);
+    };
+    pollTimerRef.current = window.setTimeout(poll, POLL_MS);
+
+    return () => {
+      cancelled = true;
+      if (pollTimerRef.current !== null) {
+        window.clearTimeout(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    };
+    // workspaceId/lang baked into the closures used by poll(); listing them
+    // ensures the resume effect re-arms after lang switch or workspace swap.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId, lang]);
+
   // Trigger the real run_analysis_for_workspace.sh orchestrator and poll status
   // every 1.5s. The orchestrator transitions queued → scoring → narrating →
   // complete in roughly 12s on a small workspace; we hard-cap polling at 3 min

@@ -1380,58 +1380,119 @@ function StartAnalysisCard({ C, lang, competitorCount, workspaceName, isMobile }
     setStarting(true);
     setStartError('');
 
-    // Step 1: Get or create workspace on API
-    let ws = await getWorkspace();
-    let wsId = ws.data?.id;
+    // Step 1: resolve a real workspace_id we can pass to runAnalysis.
+    //
+    // The previous version conflated three different failure modes ("API
+    // returned 404 the first time", "save POST failed", "session JWT user_id
+    // doesn't match any DB row") into a single "Cannot connect to backend
+    // server" message. That was misleading — most testers saw the error
+    // even though the orchestrator was actually starting up server-side
+    // because of a transient proxy hiccup. Now each step reports its own
+    // failure verbatim so we can tell what actually broke.
+    let wsId: string | null | undefined = null;
+    let stepThatFailed: 'fetch' | 'create' | 'analysis' | null = null;
+    let stepDetail = '';
 
-    // If workspace only exists locally, sync it to the API first
+    try {
+      const ws = await getWorkspace();
+      wsId = ws.data?.id;
+    } catch (err) {
+      stepDetail = (err as Error).message || 'unknown error';
+      console.warn('[CI] getWorkspace threw:', stepDetail);
+    }
+
+    // If we couldn't get a real id, try to create one. Only do so when
+    // the local form has a name+category — otherwise the POST will 400.
     if (!wsId || wsId === 'local') {
       const localWs = getCIWorkspace();
-      if (localWs?.brand_name) {
-        console.log('[CI] Workspace is local-only, syncing to API...');
-        const apiWs = await saveWorkspace({
-          brand_name: localWs.brand_name,
-          brand_category: localWs.brand_category || null,
-          brand_price_range: localWs.price_range || null,
-          brand_platforms: null,
-        });
-        if (apiWs && apiWs.id && apiWs.id !== 'local') {
-          wsId = apiWs.id;
-          console.log(`[CI] Workspace synced to API: ${wsId}`);
+      if (localWs?.brand_name && localWs?.brand_category) {
+        console.log('[CI] No API workspace yet — creating from local form...');
+        try {
+          const apiWs = await saveWorkspace({
+            brand_name: localWs.brand_name,
+            brand_category: localWs.brand_category,
+            brand_price_range: localWs.price_range || null,
+            brand_platforms: null,
+          });
+          if (apiWs && apiWs.id && apiWs.id !== 'local') {
+            wsId = apiWs.id;
+            console.log(`[CI] Workspace created: ${wsId}`);
 
-          // Sync competitors to API workspace
-          const localComps = getCICompetitors();
-          for (const comp of localComps) {
-            await addCompetitor({
-              workspace_id: wsId,
-              brand_name: comp.brand_name,
-              tier: comp.tier,
-              platform_ids: comp.platform_ids || {},
-              added_via: comp.added_via || 'manual',
-            });
+            // Sync local competitors. Sequential to keep ordering, but
+            // each is fire-and-catch so one bad row doesn't poison the
+            // remaining list. The backend POST upserts on
+            // (workspace_id, brand_name) so re-runs are safe.
+            const localComps = getCICompetitors();
+            let synced = 0;
+            for (const comp of localComps) {
+              try {
+                await addCompetitor({
+                  workspace_id: wsId,
+                  brand_name: comp.brand_name,
+                  tier: comp.tier,
+                  platform_ids: comp.platform_ids || {},
+                  added_via: comp.added_via || 'manual',
+                });
+                synced += 1;
+              } catch (err) {
+                console.warn(`[CI] addCompetitor failed for ${comp.brand_name}:`, (err as Error).message);
+              }
+            }
+            console.log(`[CI] Synced ${synced}/${localComps.length} competitors`);
+          } else {
+            stepThatFailed = 'create';
+            stepDetail = 'API returned no id (likely 4xx/5xx — check network tab)';
           }
-          console.log(`[CI] Synced ${localComps.length} competitors to API`);
+        } catch (err) {
+          stepThatFailed = 'create';
+          stepDetail = (err as Error).message || 'unknown error';
+          console.warn('[CI] saveWorkspace threw:', stepDetail);
         }
+      } else {
+        stepThatFailed = 'fetch';
+        stepDetail = 'No workspace on server and brand profile is incomplete locally';
       }
     }
 
-    // Step 2: Verify we have a real workspace ID
+    // Step 2: stop here if we still don't have an id — but with a SPECIFIC
+    // message naming the failed step so the user (and we, in console) can
+    // diagnose without DevTools spelunking.
     if (!wsId || wsId === 'local') {
-      console.error('[CI] Cannot start analysis: workspace not synced to API');
-      setStartError(lang === 'zh'
-        ? '无法连接后端服务器，请检查网络连接后重试。'
-        : 'Cannot connect to backend server. Please check your connection and try again.');
+      const zh = stepThatFailed === 'fetch'
+        ? `获取工作区失败：${stepDetail}`
+        : stepThatFailed === 'create'
+          ? `创建工作区失败：${stepDetail}`
+          : `无法连接后端：${stepDetail || '未知错误'}`;
+      const en = stepThatFailed === 'fetch'
+        ? `Couldn't fetch your workspace: ${stepDetail}`
+        : stepThatFailed === 'create'
+          ? `Couldn't create the workspace: ${stepDetail}`
+          : `Couldn't reach the backend: ${stepDetail || 'unknown error'}`;
+      setStartError(lang === 'zh' ? zh : en);
       setStarting(false);
       return;
     }
 
-    // Step 3: Start the tracked analysis job
+    // Step 3: kick off the analysis job. Backend spawns a detached bash
+    // process and returns ~50ms, so this should not be slow. If we DO
+    // get null here it's almost always a Vercel→ECS transport problem
+    // (the orchestrator may still have spawned server-side). We surface
+    // that clearly AND store the workspace id so /ci can poll for any
+    // job that did kick off.
     const job = await runAnalysis(wsId);
     if (!job || !job.job_id) {
-      console.error('[CI] runAnalysis returned null — backend may be unreachable or no competitors in DB');
+      console.error('[CI] runAnalysis returned null — proxy/network failure or no competitors');
+      // The user might already have an in-flight job from a prior click —
+      // navigate to Brief so its polling can pick it up either way.
+      const priorJob = localStorage.getItem('rebase_ci_analysis_job_id');
+      if (priorJob) {
+        console.log(`[CI] runAnalysis failed but a prior job (${priorJob}) is on file — navigating to Brief to track it.`);
+        window.location.href = '/ci';
+        return;
+      }
       setStartError(lang === 'zh'
-        ? '启动分析失败。请确认已添加竞品，并检查网络连接。'
-        : 'Failed to start analysis. Make sure competitors are added and check your connection.');
+        ? '启动分析请求失败：后端可能正在处理（请1分钟后查看简报），或者请检查网络。'
+        : "The 'start analysis' request failed. The orchestrator may already be running server-side (check Brief in ~1 min), or check your connection.");
       setStarting(false);
       return;
     }
