@@ -172,7 +172,11 @@ export default function Home() {
                   <div style={{ fontSize: 17, fontWeight: 700 }}>{t(f.name, lang)}</div>
                   <div style={{ fontSize: 12, color: C.ac, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase" }}>{t(f.role, lang)}</div>
                 </div>
-                <p style={{ fontSize: 14, color: C.t2, lineHeight: 1.6, margin: 0 }}>{t(f.bio, lang)}</p>
+                <ul style={{ fontSize: 14, color: C.t2, lineHeight: 1.6, margin: 0, paddingLeft: 18 }}>
+                  {(f.bio[lang] as readonly string[]).map((point, idx) => (
+                    <li key={idx} style={{ marginBottom: 4 }}>{point}</li>
+                  ))}
+                </ul>
               </div>
             </div>
           ))}

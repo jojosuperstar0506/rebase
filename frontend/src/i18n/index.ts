@@ -370,8 +370,16 @@ export const T = {
         name: { en: "Joanna", zh: "Joanna" },
         role: { en: "CEO", zh: "首席执行官" },
         bio: {
-          en: "Ex-McKinsey · founding member of Deloitte's M&A Consumer Data Analytics team ($1M → $10M+ ARR in four years).",
-          zh: "前麦肯锡 · 德勤并购消费数据分析团队创始成员（4 年从 100 万营收做到 1000 万+）。",
+          en: [
+            "Ex-McKinsey consultant",
+            "Brand operator — ran competitive teardowns and GTM playbooks for consumer companies",
+            "Owns product, design, and customer-facing operations at Rebase",
+          ],
+          zh: [
+            "前麦肯锡咨询顾问",
+            "品牌运营人——为消费品公司主持竞品拆解与 GTM 策略",
+            "在 Rebase 负责产品、设计与客户运营",
+          ],
         },
       },
       {
@@ -379,8 +387,18 @@ export const T = {
         name: { en: "William", zh: "William" },
         role: { en: "CTO", zh: "首席技术官" },
         bio: {
-          en: "Ex-Deloitte M&A consumer practice · served PE clients on consumer GTM diligence and post-merger integration.",
-          zh: "前德勤并购消费业务 · 服务 PE 客户进行消费品 GTM 尽调与并购后整合。",
+          en: [
+            "Ex-Deloitte M&A consumer practice",
+            "Founding member of Deloitte's M&A Consumer Data Analytics team — grew from $1M to $10M+ ARR in four years with a ~10-person team",
+            "Served PE clients on consumer GTM diligence and post-merger integration",
+            "Owns engineering, infrastructure, and the data pipeline at Rebase",
+          ],
+          zh: [
+            "前德勤并购消费业务",
+            "德勤并购消费数据分析团队创始成员——4 年带领约 10 人团队，将业务从 100 万美金做到 1000 万美金以上 ARR",
+            "服务 PE 客户进行消费品 GTM 尽调与并购后整合",
+            "在 Rebase 负责工程、基础设施与数据管道",
+          ],
         },
       },
     ],
