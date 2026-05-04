@@ -42,6 +42,36 @@ import { runAnalysis, getAnalysisStatus, type AnalysisJob } from '../../services
 // Show "data is stale" warning if the brief is older than this many days.
 const STALE_DAYS_THRESHOLD = 7;
 
+/**
+ * Defensive language resolver — handles fields that should already be
+ * single-language strings (resolved by the backend) but might still be
+ * bilingual `{zh, en}` objects if:
+ *   - the backend hasn't been restarted after a deploy that added new
+ *     resolveLang fields, or
+ *   - resolveLang missed a nested structure (e.g. an array we didn't
+ *     teach it to walk)
+ *
+ * Without this, `<div>{p.someField}</div>` would render `[object Object]`
+ * and `{evidence.map(...)}` would crash with `evidence.map is not a
+ * function` because the value is `{zh: [...], en: [...]}` instead of
+ * a flat array. The fix on the backend is one PM2 restart away, but the
+ * frontend should never crash on data shape regressions.
+ *
+ * Usage:
+ *   pickLang(value, lang, '')        // string fallback
+ *   pickLang(value, lang, [])        // array fallback
+ */
+function pickLang<T>(val: unknown, lang: string, fallback: T): T {
+  if (val == null) return fallback;
+  if (typeof val === 'string' || Array.isArray(val)) return val as unknown as T;
+  if (typeof val === 'object') {
+    const obj = val as Record<string, unknown>;
+    const picked = obj[lang] ?? obj.zh ?? obj.en;
+    if (picked != null) return picked as T;
+  }
+  return fallback;
+}
+
 // Pretty-print a relative timestamp: "2 hours ago", "5 days ago", "just now".
 // Falls back to absolute date for anything > 30 days.
 function formatRelativeTime(iso: string, lang: string): string {
@@ -713,11 +743,14 @@ export default function CIBrief() {
             }}>
               {brief.verdict.headline}
             </h2>
-            {brief.verdict.summary ? (
-              <p style={{ fontSize: isMobile ? 14 : 15, color: C.t2, margin: '0 0 22px', lineHeight: 1.65 }}>
-                {brief.verdict.summary}
-              </p>
-            ) : null}
+            {(() => {
+              const summary = pickLang<string>(brief.verdict.summary, lang, '');
+              return summary ? (
+                <p style={{ fontSize: isMobile ? 14 : 15, color: C.t2, margin: '0 0 22px', lineHeight: 1.65 }}>
+                  {summary}
+                </p>
+              ) : null;
+            })()}
 
             {/* Structured pressure grid (when present) */}
             {Array.isArray(brief.verdict.pressure_points) && brief.verdict.pressure_points.length > 0 ? (
@@ -728,81 +761,113 @@ export default function CIBrief() {
                   gap: 12,
                   marginBottom: 18,
                 }}>
-                  {brief.verdict.pressure_points.map((p, idx) => (
-                    <div key={`${p.brand}-${idx}`} style={{
-                      background: C.bg,
-                      border: `1px solid ${C.bd}`,
-                      borderRadius: 10,
-                      padding: '14px 16px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 10,
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
-                        <span style={{
-                          fontSize: 13, fontWeight: 800, color: C.tx, letterSpacing: -0.1,
-                          maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }} title={p.brand}>
-                          {p.brand}
-                        </span>
-                        <span style={{
-                          fontSize: 10, fontWeight: 700,
-                          color: trendColor(brief.verdict.trend),
-                          background: `${trendColor(brief.verdict.trend)}1a`,
-                          padding: '3px 8px', borderRadius: 12,
-                          letterSpacing: '0.05em', whiteSpace: 'nowrap', flexShrink: 0,
-                        }}>
-                          {p.badge}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: C.tx, lineHeight: 1.4 }}>
-                        {p.headline}
-                      </div>
-                      <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: C.t2, lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        {(p.evidence || []).map((line, i) => (
-                          <li key={i}>{line}</li>
-                        ))}
-                      </ul>
-                      {p.source ? (
-                        <div style={{ fontSize: 10, color: C.t3, marginTop: 'auto', paddingTop: 4, fontStyle: 'italic' }}>
-                          {lang === 'zh' ? '来源：' : 'Source: '}{p.source}
+                  {brief.verdict.pressure_points.map((p, idx) => {
+                    // Defensive: if backend hasn't been restarted after adding the
+                    // resolveLang for these nested fields, badge/headline/evidence/
+                    // source still arrive as bilingual {zh, en} objects. pickLang
+                    // handles both shapes so the UI never crashes.
+                    const badge = pickLang<string>(p.badge, lang, '');
+                    const headline = pickLang<string>(p.headline, lang, '');
+                    const evidence = pickLang<string[]>(p.evidence, lang, []);
+                    const source = pickLang<string>(p.source, lang, '');
+                    return (
+                      <div key={`${p.brand}-${idx}`} style={{
+                        background: C.bg,
+                        border: `1px solid ${C.bd}`,
+                        borderRadius: 10,
+                        padding: '14px 16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 10,
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+                          <span style={{
+                            fontSize: 13, fontWeight: 800, color: C.tx, letterSpacing: -0.1,
+                            maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }} title={p.brand}>
+                            {p.brand}
+                          </span>
+                          {badge ? (
+                            <span style={{
+                              fontSize: 10, fontWeight: 700,
+                              color: trendColor(brief.verdict.trend),
+                              background: `${trendColor(brief.verdict.trend)}1a`,
+                              padding: '3px 8px', borderRadius: 12,
+                              letterSpacing: '0.05em', whiteSpace: 'nowrap', flexShrink: 0,
+                            }}>
+                              {badge}
+                            </span>
+                          ) : null}
                         </div>
-                      ) : null}
-                    </div>
-                  ))}
+                        {headline ? (
+                          <div style={{ fontSize: 13, fontWeight: 600, color: C.tx, lineHeight: 1.4 }}>
+                            {headline}
+                          </div>
+                        ) : null}
+                        {Array.isArray(evidence) && evidence.length > 0 ? (
+                          <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: C.t2, lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            {evidence.map((line, i) => (
+                              <li key={i}>{typeof line === 'string' ? line : ''}</li>
+                            ))}
+                          </ul>
+                        ) : null}
+                        {source ? (
+                          <div style={{ fontSize: 10, color: C.t3, marginTop: 'auto', paddingTop: 4, fontStyle: 'italic' }}>
+                            {lang === 'zh' ? '来源：' : 'Source: '}{source}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* At-risk callout */}
-                {brief.verdict.at_risk ? (
-                  <div style={{
-                    background: `${trendColor(brief.verdict.trend)}0d`,
-                    border: `1px solid ${trendColor(brief.verdict.trend)}40`,
-                    borderRadius: 10,
-                    padding: isMobile ? '14px 16px' : '16px 20px',
-                    display: 'flex',
-                    alignItems: isMobile ? 'flex-start' : 'center',
-                    flexDirection: isMobile ? 'column' : 'row',
-                    gap: isMobile ? 10 : 18,
-                    marginBottom: 18,
-                  }}>
-                    <div style={{ flexShrink: 0 }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: trendColor(brief.verdict.trend), letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
-                        {brief.verdict.at_risk.metric}
+                {brief.verdict.at_risk ? (() => {
+                  const metric = pickLang<string>(brief.verdict.at_risk.metric, lang, '');
+                  const magnitude = pickLang<string>(brief.verdict.at_risk.magnitude, lang, '');
+                  const narrative = pickLang<string>(brief.verdict.at_risk.narrative, lang, '');
+                  // Only render if at least one field has content — otherwise the
+                  // callout shows up as an empty colored box.
+                  if (!metric && !magnitude && !narrative) return null;
+                  return (
+                    <div style={{
+                      background: `${trendColor(brief.verdict.trend)}0d`,
+                      border: `1px solid ${trendColor(brief.verdict.trend)}40`,
+                      borderRadius: 10,
+                      padding: isMobile ? '14px 16px' : '16px 20px',
+                      display: 'flex',
+                      alignItems: isMobile ? 'flex-start' : 'center',
+                      flexDirection: isMobile ? 'column' : 'row',
+                      gap: isMobile ? 10 : 18,
+                      marginBottom: 18,
+                    }}>
+                      <div style={{ flexShrink: 0 }}>
+                        {metric ? (
+                          <div style={{ fontSize: 10, fontWeight: 700, color: trendColor(brief.verdict.trend), letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
+                            {metric}
+                          </div>
+                        ) : null}
+                        {magnitude ? (
+                          <div style={{ fontSize: isMobile ? 26 : 30, fontWeight: 800, color: trendColor(brief.verdict.trend), letterSpacing: -0.5, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+                            {magnitude}
+                          </div>
+                        ) : null}
                       </div>
-                      <div style={{ fontSize: isMobile ? 26 : 30, fontWeight: 800, color: trendColor(brief.verdict.trend), letterSpacing: -0.5, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
-                        {brief.verdict.at_risk.magnitude}
-                      </div>
+                      {narrative ? (
+                        <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.6 }}>
+                          {narrative}
+                        </div>
+                      ) : null}
                     </div>
-                    <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.6 }}>
-                      {brief.verdict.at_risk.narrative}
-                    </div>
-                  </div>
-                ) : null}
+                  );
+                })() : null}
               </>
             ) : (
-              /* Legacy fallback: render the single paragraph sentence as before. */
+              /* Legacy fallback: render the single paragraph sentence as before.
+                 pickLang handles the rare case where sentence comes through
+                 unresolved as a bilingual object. */
               <p style={{ fontSize: 14, color: C.t2, margin: '0 0 18px', lineHeight: 1.7, whiteSpace: 'pre-line' }}>
-                {brief.verdict.sentence}
+                {pickLang<string>(brief.verdict.sentence, lang, '')}
               </p>
             )}
 
@@ -834,7 +899,7 @@ export default function CIBrief() {
                   lineHeight: 1.7, display: 'flex', flexDirection: 'column', gap: 2,
                 }}>
                   {brief.verdict.sources.map((s, i) => (
-                    <li key={i}>{s}</li>
+                    <li key={i}>{pickLang<string>(s, lang, '')}</li>
                   ))}
                 </ul>
               </details>
