@@ -359,25 +359,35 @@ DEMO_OWN_BRAND_DATA = {
         {"name": "Tory Burch T Monogram Cube Bag", "price": 1990, "original_price": 2890, "sales_volume": 8400, "category": "crossbody", "material_tags": ["涂层", "logo印花"]},
     ],
     "metrics": {
-        "voice_volume":        {"score": 64, "raw": {"growth_rate": -2, "follower_growth": 4, "voice_share_pct": 12, "content_growth": -4, "engagement_growth": -1, "platform_breakdown": {"douyin": {"followers": 720_000, "follower_growth": 4}}}},
-        "consumer_mindshare":  {"score": 68, "raw": {"sentiment_ratio": 0.72, "engagement_share_pct": 11, "ugc_ratio": 0.58, "avg_comments_per_note": 22, "positive_keywords": ["精致", "Logo", "送礼", "通勤", "T 字"], "negative_keywords": ["贵"], "top_ugc": ["tory burch 通勤包推荐", "T 字 logo 经典款", "送礼自用都可"]}},
-        "content_strategy":    {"score": 66, "raw": {"engagement_per_note": 435, "volume_share_pct": 13, "n_content_types": 4, "posting_consistency_cv": 0.32, "total_notes": 6800, "total_likes": 2_960_000}},
-        "design_profile":      {"score": 72, "raw": {"material_diversity": 7, "silhouette_count": 10, "n_signature_designs": 3}},
-        "kol_strategy":        {"score": 64, "raw": {"n_kols": 22, "tier_breakdown": {"nano": 10, "micro": 8, "mid": 3, "macro": 1}, "kol_count": 22}},
-        "trending_products":   {"score": 62, "raw": {"top_products": [{"product_name": "T Monogram Cube", "sales_volume": 8400, "recent_growth": 8}, {"product_name": "McGraw Hobo", "sales_volume": 6200, "recent_growth": 2}, {"product_name": "Robinson Mini", "sales_volume": 4800, "recent_growth": -4}], "new_launches": ["Kira Chevron 25 SS26"], "total_products": 22}},
-        "launch_frequency":    {"score": 60, "raw": {"avg_per_week": 0.8, "acceleration_pct": -2, "consistency_cv": 0.4, "total_launches_90d": 9}},
-        "price_positioning":   {"score": 74, "raw": {"avg_price": 2470, "premium_ratio": 72, "avg_discount_depth": 30, "price_band_distribution": {"<1000": 0, "1000-2000": 24, "2000-3000": 42, "3000-4000": 22, ">4000": 12}}},
-        "wtp":                 {"score": 70, "raw": {"price_premium": 14, "sales_outperformance": 12, "cap_hit": False, "raw_score_uncapped": 70}},
-        "keywords":            {"score": 66, "raw": {"keyword_cloud": {"T 字": 280, "通勤": 320, "送礼": 220, "精致": 240, "Robinson": 140}, "trending": [{"keyword": "Cube Bag"}, {"keyword": "迷你包"}], "categories": {"tote": 5, "shoulder_bag": 4, "crossbody": 4, "hobo": 3}, "total_products_analyzed": 22}},
-        "consumer_domain":     {"score": 67, "raw": {}},
-        "product_domain":      {"score": 69, "raw": {}},
-        "marketing_domain":    {"score": 65, "raw": {}},
-        "momentum":            {"score": 60, "raw": {"score": 60, "version": "demo-v1"}},
-        "threat":              {"score": 64, "raw": {"score": 64, "version": "demo-v1"}},
+        # Rebalanced 2026-05-04: previous version had Tory Burch in the 60s
+        # across the board, which produced "behind on 12/12 indices" — not
+        # how a real mid-luxury heritage brand looks. New profile: STRONG on
+        # premium positioning / hero products / design heritage / sentiment
+        # (the brand-equity dimensions Tory built over decades), WEAK on
+        # Chinese-market execution velocity (voice, content, KOL, launch
+        # cadence) where COACH and 古良吉吉 outpace. This produces a more
+        # realistic 5-ahead / 5-behind / 2-tied composite distribution and
+        # tells the consultant-grade story: "your brand equity is intact;
+        # your demand-gen engine is under-invested in Chinese channels."
+        "voice_volume":        {"score": 62, "raw": {"growth_rate": -2, "follower_growth": 4, "voice_share_pct": 12, "content_growth": -4, "engagement_growth": -1, "platform_breakdown": {"douyin": {"followers": 720_000, "follower_growth": 4}}}},
+        "consumer_mindshare":  {"score": 80, "raw": {"sentiment_ratio": 0.86, "engagement_share_pct": 14, "ugc_ratio": 0.62, "avg_comments_per_note": 28, "recommendation_density": 0.18, "positive_keywords": ["精致", "Logo", "送礼", "通勤", "T 字", "气质", "经典", "百搭", "永恒", "工艺", "回购"], "negative_keywords": ["贵"], "top_ugc": ["tory burch 通勤包推荐", "T 字 logo 经典款", "送礼自用都可", "5 年还在背 robinson", "已经第二个 cube bag 了"]}},
+        "content_strategy":    {"score": 54, "raw": {"engagement_per_note": 348, "volume_share_pct": 9, "n_content_types": 3, "posting_consistency_cv": 0.42, "total_notes": 5400, "total_likes": 1_960_000}},
+        "design_profile":      {"score": 84, "raw": {"material_diversity": 9, "silhouette_count": 14, "n_signature_designs": 5, "signature_recognition": ["T-Monogram", "Cube Bag", "Robinson Mini", "Lee Radziwill", "Kira Chevron"]}},
+        "kol_strategy":        {"score": 58, "raw": {"n_kols": 18, "tier_breakdown": {"nano": 7, "micro": 6, "mid": 4, "macro": 1}, "kol_count": 18}},
+        "trending_products":   {"score": 76, "raw": {"top_products": [{"product_name": "T Monogram Cube Bag", "sales_volume": 8400, "recent_growth": 18}, {"product_name": "McGraw Hobo", "sales_volume": 6200, "recent_growth": 8}, {"product_name": "Robinson Mini", "sales_volume": 4800, "recent_growth": 4}, {"product_name": "Kira Chevron 25", "sales_volume": 3800, "recent_growth": 12}], "new_launches": ["Kira Chevron 25 SS26", "Lee Radziwill Limited"], "total_products": 22}},
+        "launch_frequency":    {"score": 56, "raw": {"avg_per_week": 0.7, "acceleration_pct": -2, "consistency_cv": 0.4, "total_launches_90d": 9}},
+        "price_positioning":   {"score": 86, "raw": {"avg_price": 2470, "premium_ratio": 82, "avg_discount_depth": 22, "price_band_distribution": {"<1000": 0, "1000-2000": 18, "2000-3000": 44, "3000-4000": 26, ">4000": 12}}},
+        "wtp":                 {"score": 84, "raw": {"price_premium": 26, "sales_outperformance": 14, "cap_hit": False, "raw_score_uncapped": 84}},
+        "keywords":            {"score": 76, "raw": {"keyword_cloud": {"T 字": 480, "通勤": 380, "送礼": 320, "精致": 290, "Robinson": 240, "Cube Bag": 220, "T-Monogram": 180}, "trending": [{"keyword": "Cube Bag"}, {"keyword": "T-Monogram"}, {"keyword": "迷你包"}], "categories": {"tote": 5, "shoulder_bag": 4, "crossbody": 4, "hobo": 3, "satchel": 2}, "total_products_analyzed": 22}},
+        "consumer_domain":     {"score": 78, "raw": {}},
+        "product_domain":      {"score": 78, "raw": {}},
+        "marketing_domain":    {"score": 58, "raw": {}},
+        "momentum":            {"score": 64, "raw": {"score": 64, "version": "demo-v1"}},
+        "threat":              {"score": 60, "raw": {"score": 60, "version": "demo-v1"}},
     },
     "brand_insight": {
-        "zh": "TORY BURCH 当前态势诊断：\n• 资产端（强）：溢价能力 70 / 价格定位 74——健康的轻奢中场卡位，¥2,400-2,800 客单价仍受市场认可。设计资产 (T-Monogram + Cube Bag) 仍具辨识度。\n• 引擎端（弱）：声量 64 (-2% WoW)、内容动能 66 (落后 COACH 16 点)、上新节奏 60 (落后行业头部 26 点)。运营投入不足是核心病因。\n• 心智端（受压）：'轻奢通勤'认知份额从 14% (Q1) 降至 12% (Q2 至今)。25-35 岁年轻客群中，约 12% (≈ 9,600 人) 在过去 90 天有过 Dissona 浏览或加购行为。\n核心矛盾：资产健康但运营不足；如果资产持续而引擎不补，6-9 个月内将转为'品牌力下行'阶段（参考 MK 2024 路径）。\n本周决策三件事（按优先级）：\n1. 立即——'通勤精选'直播专场（5/15 前发布，目标¥1.2M GMV）\n2. 本月——'第二个包礼遇'老客忠诚度试点（截击 Dissona 流失风险）\n3. 周五前——决定是否启动 Q3 国潮匠心限定系列（向上突围）",
-        "en": "TORY BURCH current diagnosis:\n• Assets (strong): pricing power 70 / price positioning 74 — healthy mid-light-luxury position, ¥2,400-2,800 AOV still validated by market. Design assets (T-Monogram + Cube Bag) retain recognizability.\n• Engine (weak): voice 64 (-2% WoW), content velocity 66 (16pts behind COACH), launch cadence 60 (26pts behind cat leader). Under-investment in operations is the core diagnosis.\n• Mindshare (under pressure): 'light-luxury commuter' share dropped 14% (Q1) → 12% (Q2-to-date). ~12% of 25-35 cohort (~9,600 customers) had Dissona browse / wishlist activity in past 90 days.\nCore tension: assets healthy but engine insufficient. If assets keep eroding without engine investment, will transition to 'brand-decline' phase in 6-9 months (cf. MK 2024 trajectory).\nThree decisions this week (priority order):\n1. Immediate — 'Commuter Capsule' Douyin live (publish by 5/15, GMV target ¥1.2M)\n2. This month — 'Second-Bag VIP' loyalty pilot (intercept Dissona churn risk)\n3. By Friday — go/no-go on Q3 Guochao Craft Limited Series (upmarket break-out)",
+        "zh": "TORY BURCH 当前态势诊断：\n• 资产端（强）：溢价能力 84 / 价格定位 86——清晰的中高端卡位，¥2,400-2,800 客单价被市场充分认可，全价销售份额 78% (类目最高)。设计资产强（T-Monogram + Cube Bag + Robinson Mini 三大标志款已建立辨识度），消费者情绪 0.86 (类目最高)。\n• 引擎端（弱）：声量 62 (-2% WoW)、内容动能 54 (落后 COACH 28 点)、KOL 战 58 (落后 1/3)、上新节奏 56 (落后头部 33 点)。中国市场运营引擎是核心短板。\n• 综合：5/12 项指数领先 (溢价 / 设计 / 爆款 / 心智情绪 / 折扣纪律)；6/12 项落后 (声量 / 内容 / KOL / 趋势捕捉 / 上新速度 / 忠诚度)；1/12 项持平。\n核心矛盾：品牌资产健康（典型海外轻奢），但中国本地执行引擎严重欠投。如果引擎不补强，6-9 个月内的复利效应——失去 25-35 岁年轻客群对'快上新 + 国潮 + 中腰部 KOL'的偏好——将让品牌资产开始耗损。\n本周决策三件事（按优先级）：\n1. 立即——'通勤精选'抖音直播专场（5/15 前发布，目标 ¥1.2M GMV）\n2. 本月——'第二个包礼遇'老客忠诚度试点（凭借 NPS 优势截击 Dissona 流失风险）\n3. 周五前——决定 Q3 国潮匠心限定系列（用品牌资产向上突围 ¥3,500+ 段，瞄准 MCM 流失客群）",
+        "en": "TORY BURCH current diagnosis:\n• Assets (strong): pricing power 84 / price positioning 86 — clear mid-premium positioning, ¥2,400-2,800 AOV fully validated, 78% full-price share (category-top). Design heritage strong (T-Monogram + Cube Bag + Robinson Mini are recognized signature pieces); sentiment 0.86 (category-leading).\n• Engine (weak): voice 62 (-2% WoW), content velocity 54 (28pts behind COACH), KOL strategy 58 (1/3 behind), launch cadence 56 (33pts behind category leader). The China-market execution engine is the core bottleneck.\n• Aggregate: leading on 5 of 12 indices (Pricing Power / Design / Hero Products / Sentiment / Promotional Discipline); behind on 6 of 12 (Voice / Content / KOL / Trend Capture / Launch Cadence / Loyalty); even on 1.\n• Core tension: brand equity is intact (textbook overseas light-luxury), but local execution is critically under-invested. Without engine reinforcement, the compounding effect over 6-9 months — losing the 25-35 cohort's preference for 'fast launches + guochao + mid-tier KOLs' — will start eroding the equity itself.\nThree decisions this week (priority order):\n1. Immediate — 'Commuter Capsule' Douyin live (publish by 5/15, GMV target ¥1.2M)\n2. This month — 'Second-Bag VIP' loyalty pilot (lean on NPS strength to intercept Dissona's churn pull)\n3. By Friday — go/no-go on Q3 Guochao Craft Limited Series (use brand equity to break upmarket at ¥3,500+, capture MCM's bleeding cohort)",
     },
 }
 
@@ -388,15 +398,15 @@ DEMO_BRIEF = {
     "verdict": {
         "trend": "losing",
         "headline": {
-            "zh": "TORY BURCH 中场被三向挤压",
-            "en": "TORY BURCH squeezed from three sides in the mid-segment",
+            "zh": "品牌资产健康，但中国引擎需补足",
+            "en": "Brand equity intact — but the China demand-engine needs reinforcement",
         },
         # Short context line right under the headline. Replaces the long
         # paragraph for the hero — full evidence lives in pressure_points
         # below, sources collapse into a disclosure.
         "summary": {
-            "zh": "COACH 奥莱下压价格锚点，古良吉吉以国潮联名抢心智，Dissona 用回购建忠诚度——三种攻势同时挤入 ¥1,800–2,800 核心客群。",
-            "en": "COACH outlet drops the pricing anchor, 古良吉吉 captures mindshare via guochao collabs, Dissona builds loyalty through rebuy — three different vectors all converging on the ¥1,800–2,800 core cohort.",
+            "zh": "TORY BURCH 在 12 项指数中 5 项领先 / 6 项落后 / 1 项持平：溢价能力、设计资产、爆款表现处于类目前列；声量、内容动能、上新节奏、KOL 战是结构性短板——COACH、古良吉吉、Dissona 各自从一个角度挤压这个引擎缺口。",
+            "en": "Across 12 indices: TORY BURCH leads on 5 (premium positioning, design heritage, hero products, sentiment, promotional discipline), trails on 6 (voice, content, launch cadence, KOL, trend capture, loyalty), and is even on 1. COACH, 古良吉吉, and Dissona each press a different angle of the engine gap.",
         },
         # Legacy paragraph kept for backwards compat with LLM-generated briefs
         # that don't yet emit pressure_points. Frontend prefers structured
@@ -499,12 +509,12 @@ DEMO_BRIEF = {
                 "en": "12-mo GMV at risk",
             },
             "magnitude": {
-                "zh": "¥18 – 22M",
-                "en": "¥18 – 22M",
+                "zh": "¥12 – 18M",
+                "en": "¥12 – 18M",
             },
             "narrative": {
-                "zh": "保守估算：若 TORY BURCH 不在本季内调整定位，核心 ¥1,800–2,800 段 25–35 岁客群将以 6–9% 速度向 COACH 奥莱 / 古良吉吉 / Dissona 分流。",
-                "en": "Conservative projection: without a Q-end repositioning, the core ¥1,800–2,800 / 25–35 cohort will leak to COACH outlet, 古良吉吉, and Dissona at a 6–9% rate.",
+                "zh": "前提：品牌资产仍稳。如果 6-9 个月内不补强中国本地引擎（声量 / 内容 / 上新 / KOL），25-35 岁年轻客群对'快上新 + 国潮 + 中腰部 KOL'的偏好会让既有资产开始耗损——估算 ¥12-18M GMV 流失（多为 ¥1,800-2,800 段，本来就是这部分客群的核心阵地）。",
+                "en": "Premise: brand equity still holds. If the China execution engine (voice / content / launch / KOL) isn't reinforced in 6-9 months, the 25-35 cohort's preference for 'fast launches + guochao + mid-tier KOLs' will start eroding the equity itself — estimated ¥12-18M GMV loss, concentrated in the ¥1,800-2,800 band where this cohort already is.",
             },
         },
         "top_action": {
