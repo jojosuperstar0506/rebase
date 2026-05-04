@@ -21,7 +21,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { CSSProperties } from 'react';
-import { AlertTriangle, BarChart3, ListChecks, Tag } from 'lucide-react';
+import { AlertTriangle, BarChart3, ListChecks, Tag, TrendingUp, TrendingDown, Minus, ChevronDown } from 'lucide-react';
 import { MetricIcon } from '../../utils/metricIcons';
 import { useApp } from '../../context/AppContext';
 import type { ColorSet } from '../../theme/colors';
@@ -209,15 +209,15 @@ export default function CIAnalytics() {
       <div style={container}>
         <CISubNav />
 
-        {/* Header */}
+        {/* Header — page title + 1-line orientation */}
         <header style={{ margin: '20px 0 24px' }}>
           <h1 style={{ fontSize: isMobile ? 24 : 30, fontWeight: 800, margin: 0, letterSpacing: -0.3 }}>
             {lang === 'zh' ? '分析' : 'Analytics'}
           </h1>
           <p style={{ color: C.t2, fontSize: 14, margin: '6px 0 0', lineHeight: 1.6 }}>
             {lang === 'zh'
-              ? `本周优先指标 · 市场空白机会 · 全部12项指标深度分析`
-              : 'Priority metrics · white space opportunities · all-12 deep dive'}
+              ? '本周竞争位置 + 各项指数与竞品对比'
+              : "Your competitive position + per-index comparison vs competitors"}
           </p>
         </header>
 
@@ -259,18 +259,26 @@ export default function CIAnalytics() {
           </div>
         )}
 
-        {/* ─── §0. Composite indices (3 pillars × 12 indices) ──────────────
-             Renders ABOVE the legacy priority/whitespace/all-metrics blocks.
-             Falls through silently when /api/ci/indices returns null (e.g.
-             older backend or empty workspace) — the rest of the page still
-             works as it did pre-V1.5. */}
+        {/* ─── §0a. Scorecard hero ──────────────────────────────────────
+             "Where you stand at a glance" — the consultant-grade answer-first
+             pattern. Computes ahead/behind/tied counts + strongest/weakest 3
+             from the indices data. Defensive: renders nothing if own brand
+             is missing from indices (e.g. compute_all_for_workspace hasn't
+             run yet on this workspace). */}
+        {indices && (
+          <IndexScorecard indices={indices} C={C} lang={lang} isMobile={isMobile} />
+        )}
+
+        {/* ─── §0b. Composite indices (3 pillars × 12 indices) ──────────
+             The detailed breakdown that backs up the scorecard. Falls through
+             silently when /api/ci/indices returns null. */}
         {indices && Object.keys(indices.indices_by_competitor).length > 0 && (
           <section style={{ marginBottom: 28 }}>
             <SectionHeader
-              title={lang === 'zh' ? '12 项专属指数 · 3 大支柱' : '12 Composite Indices · 3 Pillars'}
+              title={lang === 'zh' ? '12 项指数 · 详细分解' : '12 Indices · Detail'}
               subtitle={lang === 'zh'
-                ? '基于底层信号合成的用户面层指数。点击任一卡片查看权重与计算输入。'
-                : 'User-facing indices composed from raw signals. Click any card to see weights + inputs.'}
+                ? '点击任一卡片查看权重与计算输入。'
+                : 'Click any card to see weights + inputs.'}
               count={null}
               C={C}
             />
@@ -283,14 +291,13 @@ export default function CIAnalytics() {
               />
             ))}
 
-            {/* Scatter plot — its own section header so customers don't miss
-                this 2-axis comparison view sitting underneath the pillars. */}
+            {/* Scatter plot — separate header so customers find it. */}
             <div style={{ marginTop: 28 }}>
               <SectionHeader
-                title={lang === 'zh' ? '比较视图 · 任选两项指数对比' : 'Comparison View · Pick any two indices'}
+                title={lang === 'zh' ? '比较视图' : 'Comparison view'}
                 subtitle={lang === 'zh'
-                  ? '将任意两项指数作为 X 轴和 Y 轴，看自己与竞品在矩阵中的相对位置。'
-                  : 'Plot own brand vs competitors across any two of the 12 indices as X / Y axes.'}
+                  ? '任选两项指数作为 X / Y 轴。'
+                  : 'Pick any two indices as X / Y axes.'}
                 count={null}
                 C={C}
               />
@@ -304,8 +311,8 @@ export default function CIAnalytics() {
           <SectionHeader
             title={lang === 'zh' ? '本周优先指标' : "This week's priority metrics"}
             subtitle={lang === 'zh'
-              ? '按照"变化幅度 × 与领先者差距"自动排序，优先级最高的3-5项。'
-              : "Ranked by |delta| × gap_to_leader. The metrics most likely to shift your verdict."}
+              ? '按变化幅度 × 与领先者差距自动排序。'
+              : 'Ranked by |delta| × gap to leader.'}
             count={data.priority_metrics.length}
             C={C}
           />
@@ -332,8 +339,8 @@ export default function CIAnalytics() {
             <SectionHeader
               title={lang === 'zh' ? 'AI 品牌洞察' : 'AI brand insights'}
               subtitle={lang === 'zh'
-                ? '每个被追踪品牌的一段 AI 综合诊断，基于本周所有指标得分自动生成。'
-                : 'A short AI diagnosis per tracked brand, synthesized from this week’s metric scores.'}
+                ? '每个品牌的 AI 综合诊断 · 点击展开。'
+                : 'Per-brand AI diagnosis · click to expand.'}
               count={Object.keys(insights).length + (data.workspace_brand_name && !insights[data.workspace_brand_name] ? 1 : 0)}
               C={C}
             />
@@ -382,8 +389,8 @@ export default function CIAnalytics() {
           <SectionHeader
             title={lang === 'zh' ? '市场空白机会' : 'White space opportunities'}
             subtitle={lang === 'zh'
-              ? '竞品集中没有人占领的维度、价位带或关键词领域。这是Rebase的独特分析输出。'
-              : "Uncontested dimensions, price bands, or keyword pockets — Rebase's most differentiated output."}
+              ? '竞品都没占的维度、价位带、关键词。'
+              : 'Dimensions, price bands, or keywords no competitor has claimed.'}
             count={data.white_space.length}
             C={C}
           />
@@ -500,6 +507,198 @@ export default function CIAnalytics() {
 
 // ─── Sub-components ──────────────────────────────────────────────────────
 
+/**
+ * IndexScorecard — the "where you stand at a glance" hero at the top of the
+ * Analytics page. Mirrors the consultant-grade Brief verdict pattern:
+ * answer first, evidence second.
+ *
+ * Computes from indices.indices_by_competitor:
+ *   - ahead/behind/tied counts (own brand vs best competitor, gap threshold ±2)
+ *   - strongest 3 indices (largest positive gap)
+ *   - weakest 3 indices (largest negative gap)
+ *
+ * Defensive: if indices is missing the workspace's own brand (e.g. backend
+ * hasn't run compute_all_for_workspace with the own-brand fix yet), returns
+ * null and the card just doesn't render — Analytics page still works.
+ */
+function IndexScorecard({ indices, C, lang, isMobile }: {
+  indices: IndicesResponse; C: ColorSet; lang: string; isMobile: boolean;
+}) {
+  const ownBrand = indices.workspace_brand_name;
+  const ownScores = indices.indices_by_competitor[ownBrand];
+  if (!ownScores) return null;
+
+  const allBrands = Object.keys(indices.indices_by_competitor);
+  const competitors = allBrands.filter(b => b !== ownBrand);
+  const indexNames = Object.keys(indices.index_labels);
+
+  const positions: Array<{ idx: string; ownScore: number; bestComp: number; gap: number; label: string }> = [];
+  for (const idx of indexNames) {
+    const ownVal = ownScores[idx as keyof typeof ownScores];
+    if (!ownVal || ownVal.score === null || ownVal.score === undefined) continue;
+    const ownScore = Number(ownVal.score);
+
+    let bestComp = 0;
+    let bestSeen = false;
+    for (const c of competitors) {
+      const v = indices.indices_by_competitor[c]?.[idx as keyof typeof ownScores];
+      if (v && v.score !== null && v.score !== undefined) {
+        const s = Number(v.score);
+        if (!bestSeen || s > bestComp) { bestComp = s; bestSeen = true; }
+      }
+    }
+    if (!bestSeen) continue;
+
+    positions.push({
+      idx,
+      ownScore,
+      bestComp,
+      gap: Math.round((ownScore - bestComp) * 10) / 10,
+      label: indices.index_labels[idx as keyof typeof indices.index_labels]?.label || idx,
+    });
+  }
+
+  if (positions.length === 0) return null;
+
+  // Tied threshold: ±2 points either way is "essentially even" — keeps the
+  // ahead/behind counts meaningful instead of letting tiny noise dominate.
+  const TIE_THRESHOLD = 2;
+  let ahead = 0, behind = 0, tied = 0;
+  for (const p of positions) {
+    if (Math.abs(p.gap) <= TIE_THRESHOLD) tied++;
+    else if (p.gap > 0) ahead++;
+    else behind++;
+  }
+
+  const sorted = [...positions].sort((a, b) => b.gap - a.gap);
+  const strongest = sorted.filter(p => p.gap > TIE_THRESHOLD).slice(0, 3);
+  const weakest = [...sorted].reverse().filter(p => p.gap < -TIE_THRESHOLD).slice(0, 3);
+
+  const netDirection = ahead > behind ? 'gaining' : ahead < behind ? 'losing' : 'steady';
+  const trendC = netDirection === 'gaining' ? '#22c55e' : netDirection === 'losing' ? '#ef4444' : C.t3;
+  const trendIcon = netDirection === 'gaining' ? <TrendingUp size={12} strokeWidth={2.5} />
+                  : netDirection === 'losing' ? <TrendingDown size={12} strokeWidth={2.5} />
+                  : <Minus size={12} strokeWidth={2.5} />;
+  const trendLabelText = lang === 'zh'
+    ? (netDirection === 'gaining' ? '净领先' : netDirection === 'losing' ? '净落后' : '势均力敌')
+    : (netDirection === 'gaining' ? 'Net ahead' : netDirection === 'losing' ? 'Net behind' : 'Even');
+
+  const Stat = ({ label, value, color }: { label: string; value: number; color: string }) => (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: C.t3, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
+        {label}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+        <span style={{ fontSize: isMobile ? 26 : 32, fontWeight: 800, color, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+          {value}
+        </span>
+        <span style={{ fontSize: 13, color: C.t3, fontVariantNumeric: 'tabular-nums' }}>
+          / {positions.length}
+        </span>
+      </div>
+    </div>
+  );
+
+  const ranked = (rows: typeof strongest, accent: string) => (
+    <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {rows.map(r => (
+        <li key={r.idx} style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: 10, padding: '6px 0', borderBottom: `1px dashed ${C.bd}`,
+        }}>
+          <span style={{ fontSize: 13, color: C.tx, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.label}>
+            {r.label}
+          </span>
+          <span style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexShrink: 0 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: C.tx, fontVariantNumeric: 'tabular-nums' }}>
+              {Math.round(r.ownScore)}
+            </span>
+            <span style={{
+              fontSize: 11, fontWeight: 700, color: accent,
+              background: `${accent}1a`, padding: '2px 6px', borderRadius: 8,
+              fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+            }}>
+              {r.gap > 0 ? '+' : ''}{r.gap}
+            </span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+
+  return (
+    <section style={{ marginBottom: 28 }}>
+      <div style={{
+        background: `linear-gradient(135deg, ${C.s1} 0%, ${trendC}08 100%)`,
+        border: `1px solid ${trendC}44`,
+        borderRadius: 12,
+        padding: isMobile ? 18 : 24,
+      }}>
+        {/* Hero band — trend pill + context label */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            fontSize: 12, fontWeight: 700, color: trendC,
+            background: `${trendC}18`, padding: '4px 10px', borderRadius: 20,
+            letterSpacing: '0.05em', textTransform: 'uppercase',
+          }}>
+            {trendIcon} {trendLabelText}
+          </span>
+          <span style={{ fontSize: 11, color: C.t3 }}>
+            {lang === 'zh' ? '12 项指数 · 与最强竞品对比' : '12 indices · vs best competitor'}
+          </span>
+        </div>
+
+        {/* Stat row */}
+        <div style={{
+          display: 'flex', gap: isMobile ? 18 : 32,
+          padding: isMobile ? '14px 0 18px' : '16px 0 22px',
+          borderBottom: `1px solid ${C.bd}`,
+          marginBottom: 18,
+        }}>
+          <Stat label={lang === 'zh' ? '领先' : 'Ahead'} value={ahead} color="#22c55e" />
+          <Stat label={lang === 'zh' ? '落后' : 'Behind'} value={behind} color="#ef4444" />
+          <Stat label={lang === 'zh' ? '势均' : 'Tied'} value={tied} color={C.t3} />
+        </div>
+
+        {/* Strongest + Weakest two-column */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+          gap: isMobile ? 18 : 28,
+        }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+              <TrendingUp size={13} strokeWidth={2.5} color="#22c55e" />
+              <span style={{ fontSize: 11, fontWeight: 700, color: C.t2, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                {lang === 'zh' ? '最强 3 项' : 'Strongest 3'}
+              </span>
+            </div>
+            {strongest.length > 0
+              ? ranked(strongest, '#22c55e')
+              : <p style={{ margin: 0, fontSize: 12, color: C.t3, fontStyle: 'italic' }}>
+                  {lang === 'zh' ? '暂无显著领先项。' : 'No clear leads yet.'}
+                </p>}
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+              <TrendingDown size={13} strokeWidth={2.5} color="#ef4444" />
+              <span style={{ fontSize: 11, fontWeight: 700, color: C.t2, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                {lang === 'zh' ? '最弱 3 项' : 'Weakest 3'}
+              </span>
+            </div>
+            {weakest.length > 0
+              ? ranked(weakest, '#ef4444')
+              : <p style={{ margin: 0, fontSize: 12, color: C.t3, fontStyle: 'italic' }}>
+                  {lang === 'zh' ? '暂无显著落后项。' : 'No clear weaknesses yet.'}
+                </p>}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function SectionHeader({ title, subtitle, count, C }: {
   title: string; subtitle: string; count: number | null; C: ColorSet;
 }) {
@@ -525,11 +724,34 @@ function SectionHeader({ title, subtitle, count, C }: {
   );
 }
 
+/** First-paragraph extractor for AI insight previews. The seeder writes
+ * narratives as `\n`-separated paragraphs (诊断 / 关键数据 / 用户语 /
+ * TORY BURCH 应对). The first paragraph is always the diagnosis claim —
+ * a perfect 1-line preview. Falls back to a hard truncation for long
+ * single-paragraph narratives. */
+function firstParagraph(text: string, maxChars = 220): string {
+  if (!text) return '';
+  const trimmed = text.trim();
+  const para = (trimmed.split('\n')[0] || '').trim();
+  const candidate = para || trimmed;
+  if (candidate.length > maxChars) return candidate.slice(0, maxChars).trim() + '…';
+  return candidate;
+}
+
 function BrandInsightCard({ brand, isOwn, narrative, C, lang, highlight, cardRef }: {
   brand: string; isOwn: boolean; narrative: string; C: ColorSet; lang: string;
   highlight?: boolean;
   cardRef?: (el: HTMLDivElement | null) => void;
 }) {
+  const [expanded, setExpanded] = React.useState(false);
+  const preview = firstParagraph(narrative);
+  const hasMore = preview.length < (narrative || '').trim().length;
+  // When the cross-link from Brief targets this card, default to expanded
+  // so the user sees the full diagnosis without an extra click.
+  React.useEffect(() => {
+    if (highlight) setExpanded(true);
+  }, [highlight]);
+
   return (
     <div
       ref={cardRef}
@@ -559,8 +781,35 @@ function BrandInsightCard({ brand, isOwn, narrative, C, lang, highlight, cardRef
         )}
       </div>
       <p style={{ fontSize: 13, color: C.t2, margin: 0, lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
-        {narrative}
+        {expanded ? narrative : preview}
       </p>
+      {hasMore && (
+        <button
+          onClick={() => setExpanded(v => !v)}
+          style={{
+            marginTop: 10,
+            background: 'transparent',
+            border: 'none',
+            color: C.ac,
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: 'pointer',
+            padding: 0,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          <span>{expanded
+            ? (lang === 'zh' ? '收起' : 'Show less')
+            : (lang === 'zh' ? '查看完整诊断' : 'Read full diagnosis')}</span>
+          <ChevronDown
+            size={12}
+            strokeWidth={2.5}
+            style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}
+          />
+        </button>
+      )}
     </div>
   );
 }
