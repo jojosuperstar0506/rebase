@@ -243,32 +243,23 @@ export default function PillarSection({ pillarName, pillarConfig, data }: Pillar
         </ul>
       </details>
 
-      {/* Hero */}
-      <div style={{ marginBottom: 12 }}>
-        <IndexCard
-          indexName={pillarConfig.hero}
-          label={index_labels[pillarConfig.hero].label}
-          ownValue={ownEntries[pillarConfig.hero]}
-          competitorValues={valuesFor(pillarConfig.hero)}
-          size="hero"
-          workspaceBrandName={workspace_brand_name}
-        />
-      </div>
-
-      {/* Supporting — responsive grid:
-          mobile  → 1 col (everything stacks)
-          tablet  → 2 cols
-          desktop → up to 4 cols (capped to supporting.length so 2 supporting
-                    don't stretch into 4 sparse columns) */}
+      {/* All indices in a single uniform grid — no hero/supporting visual
+          hierarchy. The previous design rendered the pillar's "hero" index
+          at 2x the size of the others, which implied the hero was a roll-
+          up of the supporting indices. It isn't — all indices in a pillar
+          are independent equal-weight signals. Equal sizing matches the
+          underlying weighting. The PillarConfig.hero / .supporting split
+          stays in the data layer in case future scoring weights diverge,
+          but rendering treats them as peers. */}
       <div style={{
         display: 'grid',
         gridTemplateColumns:
           bp === 'mobile'  ? '1fr' :
           bp === 'tablet'  ? 'repeat(2, 1fr)' :
-                             `repeat(${Math.min(pillarConfig.supporting.length, 4)}, 1fr)`,
+                             'repeat(auto-fit, minmax(180px, 1fr))',
         gap: 10,
       }}>
-        {pillarConfig.supporting.map(idxName => (
+        {[pillarConfig.hero, ...pillarConfig.supporting].map(idxName => (
           <IndexCard
             key={idxName}
             indexName={idxName}

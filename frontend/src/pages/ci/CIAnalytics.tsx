@@ -363,50 +363,81 @@ export default function CIAnalytics() {
              we just don't surface it here anymore. Future home: Library or
              a dedicated /ci/opportunity tab. */}
 
-        {/* ─── §C. All 12 metrics (collapsed) ──────────────────────────── */}
-        <section style={{ marginBottom: 40 }}>
-          <button
-            onClick={() => setShowAllMetrics(v => !v)}
-            style={{
-              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              background: 'transparent', border: `1px solid ${C.bd}`, borderRadius: 10,
-              padding: '12px 16px', color: C.t2, fontSize: 13, fontWeight: 600,
-              cursor: 'pointer', marginBottom: showAllMetrics ? 14 : 0,
-            }}
-          >
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              <ListChecks size={14} strokeWidth={2} />
-              {lang === 'zh' ? `查看全部12项指标详情` : `See all 12 metrics`}
-              <span style={{ color: C.t3, marginLeft: 4 }}>· {data.all_metrics.length}</span>
-            </span>
-            <span style={{
-              fontSize: 11, color: C.t3,
-              transform: showAllMetrics ? 'rotate(180deg)' : 'none',
-              transition: 'transform 0.2s',
-            }}>
-              ▼
-            </span>
-          </button>
+        {/* ─── §C. All 12 indices (collapsed) ────────────────────────────
+             Flat-grid view of the 12 composite indices — same data the
+             pillar grid above renders, but flat instead of grouped, for
+             quick scanning. Used to source from data.all_metrics (the
+             legacy raw-metric scores: Mindshare / Keywords / Hot
+             Products / etc.); now sources from the composite indices
+             so the names match the rest of the page (Brand Heat /
+             Brand NPS / Pricing Power / etc.). */}
+        {indices && Object.keys(indices.indices_by_competitor).length > 0 && (() => {
+          const ownBrand = indices.workspace_brand_name;
+          const ownEntries = indices.indices_by_competitor[ownBrand] || {};
+          const allIndexNames = Object.keys(indices.index_labels) as Array<keyof typeof indices.index_labels>;
+          const competitorBrands = Object.keys(indices.indices_by_competitor).filter(b => b !== ownBrand);
 
-          {showAllMetrics && (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(260px, 1fr))',
-              gap: 10,
-            }}>
-              {data.all_metrics.map(m => (
-                <AllMetricMiniCard
-                  key={m.metric_key}
-                  metric={m}
-                  ownBrand={data.workspace_brand_name}
-                  onClick={() => setDrill({ kind: 'metric', metric: m })}
-                  C={C}
-                  lang={lang}
-                />
-              ))}
-            </div>
-          )}
-        </section>
+          return (
+            <section style={{ marginBottom: 40 }}>
+              <button
+                onClick={() => setShowAllMetrics(v => !v)}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  background: 'transparent', border: `1px solid ${C.bd}`, borderRadius: 10,
+                  padding: '12px 16px', color: C.t2, fontSize: 13, fontWeight: 600,
+                  cursor: 'pointer', marginBottom: showAllMetrics ? 14 : 0,
+                }}
+              >
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <ListChecks size={14} strokeWidth={2} />
+                  {lang === 'zh' ? '查看全部 12 项指数（平铺视图）' : 'See all 12 indices (flat view)'}
+                  <span style={{ color: C.t3, marginLeft: 4 }}>· {allIndexNames.length}</span>
+                </span>
+                <span style={{
+                  fontSize: 11, color: C.t3,
+                  transform: showAllMetrics ? 'rotate(180deg)' : 'none',
+                  transition: 'transform 0.2s',
+                }}>
+                  ▼
+                </span>
+              </button>
+
+              {showAllMetrics && (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(220px, 1fr))',
+                  gap: 10,
+                }}>
+                  {allIndexNames.map(idxName => {
+                    const labelEntry = indices.index_labels[idxName];
+                    const ownVal = ownEntries[idxName];
+                    // Best competitor on this index
+                    let bestComp: { brand: string; score: number } | null = null;
+                    for (const c of competitorBrands) {
+                      const v = indices.indices_by_competitor[c]?.[idxName];
+                      if (v && v.score !== null && v.score !== undefined) {
+                        const s = Number(v.score);
+                        if (!bestComp || s > bestComp.score) bestComp = { brand: c, score: s };
+                      }
+                    }
+                    return (
+                      <CompositeIndexMiniCard
+                        key={idxName}
+                        label={labelEntry?.label || String(idxName)}
+                        pillar={labelEntry?.pillar || 'brand_equity'}
+                        ownScore={ownVal?.score ?? null}
+                        isProxy={Boolean(ownVal?.is_proxy)}
+                        leader={bestComp}
+                        C={C}
+                        lang={lang}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          );
+        })()}
       </div>
 
       {/* ─── Drill-down modal ─────────────────────────────────────────── */}
@@ -879,6 +910,92 @@ function isCoveragePending(metric: FullMetric): boolean {
   const scores = Object.values(metric.scores);
   if (scores.length === 0) return true;
   return scores.every(s => s === 0);
+}
+
+/**
+ * Flat-grid mini-card for a single composite index. Used by the
+ * "See all 12 indices" expandable on the Analytics page. Visual mirror
+ * of AllMetricMiniCard (legacy) but reads from indices_by_competitor
+ * data instead of FullMetric.
+ *
+ * Pillar dot color matches the pillar grid above (brand_equity = consumer
+ * domain pink, marketing_engine = marketing domain blue, commerce_engine
+ * = product domain orange) — keeps the visual language consistent.
+ */
+function CompositeIndexMiniCard({ label, pillar, ownScore, isProxy, leader, C, lang }: {
+  label: string;
+  pillar: PillarName;
+  ownScore: number | null;
+  isProxy: boolean;
+  leader: { brand: string; score: number } | null;
+  C: ColorSet;
+  lang: string;
+}) {
+  const pending = ownScore === null || ownScore === undefined;
+  const own = pending ? 0 : Math.round(Number(ownScore));
+  const leaderScore = leader ? Math.round(leader.score) : null;
+  const isLeading = !pending && leader ? own >= leaderScore! : !leader;
+  const pillarLabel = pillar === 'brand_equity' ? (lang === 'zh' ? '品牌资产' : 'Brand Equity')
+                    : pillar === 'marketing_engine' ? (lang === 'zh' ? '营销引擎' : 'Marketing Engine')
+                    : (lang === 'zh' ? '商业引擎' : 'Commerce Engine');
+  const pillarDotColor = pillar === 'brand_equity' ? C.domainConsumer
+                       : pillar === 'marketing_engine' ? C.domainMarketing
+                       : C.domainProduct;
+
+  return (
+    <div style={{
+      background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 10,
+      padding: 12, opacity: pending ? 0.85 : 1,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, justifyContent: 'space-between' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 6, height: 6, background: pillarDotColor, borderRadius: 2 }} />
+          <span style={{ fontSize: 11, color: C.t3 }}>{pillarLabel}</span>
+        </span>
+        {isProxy && (
+          <span style={{
+            fontSize: 9, padding: '2px 6px', borderRadius: 4,
+            background: `${C.warning || '#f59e0b'}20`, color: C.warning || '#f59e0b', fontWeight: 600,
+            letterSpacing: 0.5, textTransform: 'uppercase',
+          }}>
+            {lang === 'zh' ? '估算' : 'PROXY'}
+          </span>
+        )}
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: C.tx, marginBottom: 6 }}>
+        {label}
+      </div>
+      {pending ? (
+        <div style={{
+          display: 'inline-block', marginTop: 2,
+          fontSize: 11, fontWeight: 600, color: C.t3,
+          background: C.s2, border: `1px dashed ${C.bd}`,
+          padding: '3px 9px', borderRadius: 12,
+        }}>
+          {lang === 'zh' ? '覆盖待补' : 'Coverage pending'}
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <span style={{
+              fontSize: 22, fontWeight: 700,
+              color: isLeading ? '#22c55e' : C.tx,
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+              {own}
+            </span>
+            <span style={{ fontSize: 11, color: C.t3 }}>/ 100</span>
+          </div>
+          {leader && (
+            <div style={{ fontSize: 10, color: C.t3, marginTop: 4 }}>
+              {lang === 'zh' ? '领先者：' : 'Leader: '}
+              {leader.brand} ({leaderScore})
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
 }
 
 function AllMetricMiniCard({ metric, ownBrand, onClick, C, lang }: {
