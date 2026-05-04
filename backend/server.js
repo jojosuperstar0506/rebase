@@ -1723,6 +1723,208 @@ app.get('/api/ci/brief', async (req, res) => {
   }
 });
 
+// POST /api/ci/brief/draft — generate a publish-ready XHS post draft
+// for one of the current Brief's moves. This is the "execution layer" the
+// AI-Native Agency thesis sells: insight → playbook → ready-to-publish copy
+// in one click.
+//
+// Body:
+//   workspace_id  (required) UUID
+//   move_index    (optional) integer, defaults to 0 = highest-pressure move
+//   channel       (optional) 'xhs' for v1; structure left open for douyin /
+//                            email / comment_reply later
+//   lang          (optional) 'zh' | 'en' — controls UI labels in the
+//                            response. The XHS draft itself is always Chinese
+//                            because XHS is a Chinese platform; when lang=en
+//                            we additionally include en_translation as a
+//                            readable gloss for English-mode reviewers.
+//
+// Response 200:
+//   {
+//     channel: 'xhs',
+//     based_on: { move_index, move_headline },
+//     draft: {
+//       title: string,        // 15-20 char Chinese hook
+//       body: string,         // 200-300 char story-driven post
+//       tags: string[],       // 6-8 hashtags incl. brand + category + trend
+//       image_concept: string // one-sentence shoot brief
+//     },
+//     en_translation?: {       // present iff lang=en
+//       title, body, image_concept
+//     }
+//   }
+//
+// Frontend gate: only `workspaces.is_demo=TRUE` workspaces show the trigger
+// button (CIBrief.tsx). The endpoint accepts any workspace so it can ship
+// to all customers later by removing that one gate, without touching server
+// business logic.
+app.post('/api/ci/brief/draft', async (req, res) => {
+  try {
+    const workspaceId = req.body.workspace_id;
+    const moveIndex = Number.isInteger(req.body.move_index) ? req.body.move_index : 0;
+    const channel = req.body.channel === 'xhs' ? 'xhs' : 'xhs'; // v1: XHS only
+    const lang = req.body.lang === 'en' ? 'en' : 'zh';
+
+    if (!workspaceId || !isValidUuid(workspaceId)) {
+      return res.status(400).json({ error: 'Missing or invalid workspace_id' });
+    }
+
+    // 1. Pull workspace context — brand identity feeds the prompt.
+    const { rows: wsRows } = await pool.query(
+      `SELECT brand_name, brand_category, brand_price_range
+         FROM workspaces WHERE id = $1`,
+      [workspaceId]
+    );
+    if (wsRows.length === 0) return res.status(404).json({ error: 'Workspace not found' });
+    const ws = wsRows[0];
+
+    // 2. Pull the latest Brief for this workspace and pick the move.
+    const { rows: briefRows } = await pool.query(
+      `SELECT verdict, moves FROM weekly_briefs
+        WHERE workspace_id = $1
+        ORDER BY week_of DESC LIMIT 1`,
+      [workspaceId]
+    );
+    if (briefRows.length === 0) {
+      return res.status(404).json({ error: 'No brief generated yet — run analysis first' });
+    }
+    let moves = briefRows[0].moves;
+    if (typeof moves === 'string') {
+      try { moves = JSON.parse(moves); } catch { moves = []; }
+    }
+    if (!Array.isArray(moves) || moves.length === 0) {
+      return res.status(404).json({ error: 'Brief has no moves to respond to' });
+    }
+    const safeMoveIndex = Math.min(Math.max(0, moveIndex), moves.length - 1);
+    const move = moves[safeMoveIndex];
+
+    // Resolve bilingual fields on the move so the LLM sees concrete strings,
+    // not the raw {zh, en} envelopes (which would confuse the prompt).
+    const moveFields = ['headline', 'detail', 'so_what', 'action'];
+    const resolvedMove = resolveObj(move || {}, 'zh', moveFields); // always feed zh to the LLM
+    const moveHeadlineZh = resolvedMove.headline || '';
+    const moveDetailZh = resolvedMove.detail || '';
+    const moveSoWhatZh = resolvedMove.so_what || '';
+    const moveActionZh = resolvedMove.action || '';
+
+    // 3. Build the prompt. One Claude call returns JSON; we extract.
+    //    Voice and structure tuned to match real XHS operator posts:
+    //    story-driven first-person, mid-density emoji, hashtag mix of
+    //    brand + category + trend + scene words.
+    const priceRangeStr = ws.brand_price_range
+      ? `¥${ws.brand_price_range.min || '?'}-${ws.brand_price_range.max || '?'}`
+      : '未知';
+    const prompt = `你是一位资深的小红书内容运营,正在为消费品牌策划本周的对位响应。
+
+品牌背景:
+- 品牌:${ws.brand_name}
+- 品类:${ws.brand_category || '未知'}
+- 价位带:${priceRangeStr}
+
+本周需要响应的竞争动作 (来自竞品智能简报):
+- 动作标题:${moveHeadlineZh}
+- 详情:${moveDetailZh}
+- 核心判断:${moveSoWhatZh}
+- 建议行动:${moveActionZh}
+
+请草拟一篇可直接发布的小红书图文笔记,语气贴近真实运营,不要写得像广告。
+
+要求:
+1. 标题:15-20 字的钩子句,带情绪或对比;不要堆砌品牌名
+2. 正文:200-300 字,第一人称叙事,包含 1-2 个真实场景细节,中等密度 emoji (3-6 个),不要罗列卖点
+3. 标签:6-8 个井号开头的标签,组合 = 品牌词 + 品类词 + 场景词 + 当前热点
+4. 配图建议:一句话描述拍摄方向 (光线、构图、道具),让运营可以直接交给摄影师
+
+仅以以下 JSON 格式回复,不要任何额外文字、不要 markdown 代码块:
+{
+  "title": "...",
+  "body": "...",
+  "tags": ["#...", "#...", "..."],
+  "image_concept": "..."
+}`;
+
+    // 4. Generate. Haiku is fast + cheap and good enough for content drafting;
+    //    swap to Sonnet later if quality regresses.
+    const aiResponse = await anthropicClient.messages.create({
+      model: process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001',
+      max_tokens: 1500,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    // Extract JSON from the response. Handle a few defensive cases:
+    // raw JSON, JSON wrapped in ```json fences, or markdown commentary
+    // around the JSON. We pick the first {...} block.
+    const rawText = (aiResponse.content || [])
+      .map(b => b.text || '')
+      .join('')
+      .trim();
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error('[CI brief/draft] Could not parse JSON from LLM response:', rawText.slice(0, 200));
+      return res.status(502).json({ error: 'Draft generation returned malformed output — try again' });
+    }
+    let draft;
+    try {
+      draft = JSON.parse(jsonMatch[0]);
+    } catch (parseErr) {
+      console.error('[CI brief/draft] JSON.parse failed:', parseErr.message, 'on:', jsonMatch[0].slice(0, 200));
+      return res.status(502).json({ error: 'Draft generation returned malformed output — try again' });
+    }
+
+    // Sanitize the draft shape so the frontend can render without defensive checks.
+    const safeDraft = {
+      title: typeof draft.title === 'string' ? draft.title : '',
+      body: typeof draft.body === 'string' ? draft.body : '',
+      tags: Array.isArray(draft.tags) ? draft.tags.filter(t => typeof t === 'string') : [],
+      image_concept: typeof draft.image_concept === 'string' ? draft.image_concept : '',
+    };
+
+    // 5. If lang=en, run a tiny second call for the English gloss. We keep
+    //    this opt-in (only on en) so the zh-mode hot path stays one LLM call.
+    let enTranslation = null;
+    if (lang === 'en' && safeDraft.title) {
+      try {
+        const glossPrompt = `Translate the following Chinese Xiaohongshu post into natural English so an American reader can grasp the tone and content. Keep emoji as-is. Reply ONLY with JSON: {"title": "...", "body": "...", "image_concept": "..."}.
+
+Title: ${safeDraft.title}
+Body: ${safeDraft.body}
+Image concept: ${safeDraft.image_concept}`;
+        const glossResp = await anthropicClient.messages.create({
+          model: process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001',
+          max_tokens: 800,
+          messages: [{ role: 'user', content: glossPrompt }],
+        });
+        const glossText = (glossResp.content || []).map(b => b.text || '').join('').trim();
+        const glossMatch = glossText.match(/\{[\s\S]*\}/);
+        if (glossMatch) {
+          const parsed = JSON.parse(glossMatch[0]);
+          enTranslation = {
+            title: typeof parsed.title === 'string' ? parsed.title : '',
+            body: typeof parsed.body === 'string' ? parsed.body : '',
+            image_concept: typeof parsed.image_concept === 'string' ? parsed.image_concept : '',
+          };
+        }
+      } catch (glossErr) {
+        // Non-fatal — main draft already generated; gloss is a nice-to-have.
+        console.warn('[CI brief/draft] EN gloss failed (non-fatal):', glossErr.message);
+      }
+    }
+
+    return res.json({
+      channel,
+      based_on: {
+        move_index: safeMoveIndex,
+        move_headline: moveHeadlineZh,
+      },
+      draft: safeDraft,
+      ...(enTranslation ? { en_translation: enTranslation } : {}),
+    });
+  } catch (err) {
+    console.error('[CI] POST brief/draft error:', err.message);
+    return res.status(500).json({ error: 'Draft generation failed' });
+  }
+});
+
 // ─── Analytics + Library + Domain Scores ─────────────────────────────────
 //
 // Static metadata for the 12 metrics rendered on /ci/analytics. Mirrors

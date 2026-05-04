@@ -54,8 +54,10 @@ export default function CIActions() {
           icon: cardIcon(PenLine),
           badge: '小红书',
           title: '小红书内容作战室',
-          description: '当日热点话题驱动的图文笔记草稿——标题、正文、标签、配图建议，复制即可发布。',
+          description: '当日热点话题驱动的图文笔记草稿——标题、正文、标签、配图建议,复制即可发布。',
           status: { label: agentStatusV01, color: 'cyan' as const },
+          route: '/agents/xhs-content',
+          launchLabel: '进入作战室',
         },
         {
           icon: cardIcon(MessageSquare),
@@ -86,6 +88,8 @@ export default function CIActions() {
           title: 'XHS Content Warroom',
           description: "Trend-matched draft note — title, body, tags, image suggestions. Copy-paste to publish.",
           status: { label: agentStatusV01, color: 'cyan' as const },
+          route: '/agents/xhs-content',
+          launchLabel: 'Enter warroom',
         },
         {
           icon: cardIcon(MessageSquare),

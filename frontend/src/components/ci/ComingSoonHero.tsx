@@ -1,4 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
+import { ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 
@@ -26,6 +28,15 @@ interface PreviewCard {
    *  Opportunity to communicate that these are agents-in-progress, not
    *  passive previews. */
   status?: { label: string; color?: 'amber' | 'cyan' | 'gray' };
+  /** Optional in-app route to navigate to when the card is clicked. When
+   *  set, the card becomes interactive (hover lift, "Launch" indicator,
+   *  cursor:pointer) and a click navigates via react-router. Used for
+   *  agents that are actually shippable (XHS Content Warroom v0.1) so
+   *  users can reach them from the Actions tab; cards without `route`
+   *  stay display-only previews. */
+  route?: string;
+  /** Localized "Launch" CTA label for cards with `route`. */
+  launchLabel?: string;
 }
 
 interface ComingSoonHeroProps {
@@ -52,6 +63,7 @@ export default function ComingSoonHero(props: ComingSoonHeroProps) {
   const { colors: C, lang } = useApp();
   const bp = useBreakpoint();
   const isMobile = bp === 'mobile';
+  const navigate = useNavigate();
 
   const heroStyle: CSSProperties = {
     background: `linear-gradient(135deg, ${C.s1} 0%, ${C.s2} 100%)`,
@@ -184,58 +196,99 @@ export default function ComingSoonHero(props: ComingSoonHeroProps) {
       </h3>
 
       <div style={cardGrid}>
-        {props.cards.map((card, i) => (
-          <div key={i} style={cardStyle}>
-            {/* Header row: icon (left) + status pill (right). Together they
-                read as "this agent is currently {status}" — same visual
-                pattern as the existing AgentMonitor cards. */}
-            <div style={{
-              display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-              gap: 8, marginBottom: 10,
-            }}>
+        {props.cards.map((card, i) => {
+          const interactive = !!card.route;
+          const launchLabel = card.launchLabel
+            ?? (lang === 'zh' ? '启动智能体' : 'Launch agent');
+          return (
+            <div
+              key={i}
+              role={interactive ? 'link' : undefined}
+              tabIndex={interactive ? 0 : undefined}
+              onClick={interactive ? () => navigate(card.route!) : undefined}
+              onKeyDown={interactive
+                ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(card.route!); } }
+                : undefined}
+              onMouseEnter={interactive
+                ? (e) => { e.currentTarget.style.borderColor = C.ac; e.currentTarget.style.transform = 'translateY(-2px)'; }
+                : undefined}
+              onMouseLeave={interactive
+                ? (e) => { e.currentTarget.style.borderColor = C.bd; e.currentTarget.style.transform = 'translateY(0)'; }
+                : undefined}
+              style={{
+                ...cardStyle,
+                cursor: interactive ? 'pointer' : 'default',
+                transition: interactive ? 'border-color .15s ease, transform .15s ease' : undefined,
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              {/* Header row: icon (left) + status pill (right). Together they
+                  read as "this agent is currently {status}" — same visual
+                  pattern as the existing AgentMonitor cards. */}
               <div style={{
-                display: 'inline-flex', alignItems: 'center',
-                fontSize: 22, lineHeight: 1, color: C.ac,
-              }}>{card.icon}</div>
-              {card.status && (
-                <span style={statusPillStyle(card.status.color)}>
-                  {card.status.label}
-                </span>
+                display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+                gap: 8, marginBottom: 10,
+              }}>
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center',
+                  fontSize: 22, lineHeight: 1, color: C.ac,
+                }}>{card.icon}</div>
+                {card.status && (
+                  <span style={statusPillStyle(card.status.color)}>
+                    {card.status.label}
+                  </span>
+                )}
+              </div>
+              {card.badge && (
+                <div style={{
+                  display: 'inline-block',
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: C.t2,
+                  padding: '2px 8px',
+                  background: C.s2,
+                  borderRadius: 4,
+                  marginBottom: 8,
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.5,
+                }}>
+                  {card.badge}
+                </div>
+              )}
+              <div style={{
+                fontSize: 15,
+                fontWeight: 600,
+                color: C.tx,
+                marginBottom: 6,
+              }}>
+                {card.title}
+              </div>
+              <div style={{
+                fontSize: 13,
+                color: C.t2,
+                lineHeight: 1.5,
+                flex: 1,
+              }}>
+                {card.description}
+              </div>
+              {interactive && (
+                <div style={{
+                  marginTop: 12,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: C.ac,
+                }}>
+                  {launchLabel}
+                  <ArrowRight size={14} strokeWidth={2.25} />
+                </div>
               )}
             </div>
-            {card.badge && (
-              <div style={{
-                display: 'inline-block',
-                fontSize: 10,
-                fontWeight: 600,
-                color: C.t2,
-                padding: '2px 8px',
-                background: C.s2,
-                borderRadius: 4,
-                marginBottom: 8,
-                textTransform: 'uppercase',
-                letterSpacing: 0.5,
-              }}>
-                {card.badge}
-              </div>
-            )}
-            <div style={{
-              fontSize: 15,
-              fontWeight: 600,
-              color: C.tx,
-              marginBottom: 6,
-            }}>
-              {card.title}
-            </div>
-            <div style={{
-              fontSize: 13,
-              color: C.t2,
-              lineHeight: 1.5,
-            }}>
-              {card.description}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {props.footer && (
