@@ -121,11 +121,11 @@ export default function IndexCard({
               )}
             </span>
           )}
-          {!direction && (
-            <span style={{ fontSize: 11, color: C.t3 }}>
-              {lang === 'zh' ? '基线 (下周显示变化)' : 'baseline (Δ next week)'}
-            </span>
-          )}
+          {/* Baseline subtitle (week-1 state) intentionally suppressed —
+              previously read "baseline (Δ next week)" on every card before
+              week-2 data arrives. That's noise repeated 12 times across
+              the page; the Δ arrow appears organically once history
+              accumulates. */}
         </div>
       )}
 

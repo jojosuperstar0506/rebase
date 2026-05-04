@@ -37,7 +37,6 @@ import {
 import { getBrandInsights } from '../../services/ciApi';
 import { getIndices, type IndicesResponse, type PillarName } from '../../services/ciIndices';
 import PillarSection from '../../components/ci/PillarSection';
-import IndexScatterPlot from '../../components/ci/IndexScatterPlot';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -270,15 +269,15 @@ export default function CIAnalytics() {
         )}
 
         {/* ─── §0b. Composite indices (3 pillars × 12 indices) ──────────
-             The detailed breakdown that backs up the scorecard. Falls through
-             silently when /api/ci/indices returns null. */}
+             The detailed breakdown that backs up the scorecard. Each pillar
+             carries its own description + methodology disclosure. */}
         {indices && Object.keys(indices.indices_by_competitor).length > 0 && (
           <section style={{ marginBottom: 28 }}>
             <SectionHeader
               title={lang === 'zh' ? '12 项指数 · 详细分解' : '12 Indices · Detail'}
               subtitle={lang === 'zh'
-                ? '点击任一卡片查看权重与计算输入。'
-                : 'Click any card to see weights + inputs.'}
+                ? '按 3 大支柱分组 · 点击「如何计算？」展开方法论 · 点击任一卡片查看输入与权重。'
+                : 'Grouped by 3 pillars · click "How is this calculated?" for methodology · click any card for inputs + weights.'}
               count={null}
               C={C}
             />
@@ -290,45 +289,17 @@ export default function CIAnalytics() {
                 data={indices}
               />
             ))}
-
-            {/* Scatter plot — separate header so customers find it. */}
-            <div style={{ marginTop: 28 }}>
-              <SectionHeader
-                title={lang === 'zh' ? '比较视图' : 'Comparison view'}
-                subtitle={lang === 'zh'
-                  ? '任选两项指数作为 X / Y 轴。'
-                  : 'Pick any two indices as X / Y axes.'}
-                count={null}
-                C={C}
-              />
-              <IndexScatterPlot data={indices} />
-            </div>
+            {/* Scatter plot moved to /ci (Brief tab) — visualizing the user's
+                position vs competitors lives next to the verdict that
+                interprets it, not in the deep-dive page. */}
           </section>
         )}
 
-        {/* ─── §A. Priority metrics this week ──────────────────────────── */}
-        <section style={{ marginBottom: 36 }}>
-          <SectionHeader
-            title={lang === 'zh' ? '本周优先指标' : "This week's priority metrics"}
-            subtitle={lang === 'zh'
-              ? '按变化幅度 × 与领先者差距自动排序。'
-              : 'Ranked by |delta| × gap to leader.'}
-            count={data.priority_metrics.length}
-            C={C}
-          />
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: 12 }}>
-            {data.priority_metrics.map((m, i) => (
-              <PriorityMetricCard
-                key={m.metric_key}
-                metric={m}
-                rank={i + 1}
-                onClick={() => setDrill({ kind: 'priority', metric: m })}
-                C={C}
-                lang={lang}
-              />
-            ))}
-          </div>
-        </section>
+        {/* ─── §A. Priority metrics — REMOVED ──────────────────────────────
+             The scorecard's "Watch:" pills cover the same ground (top
+             negative-gap indices) without the duplicate card grid. If we
+             ever bring this back, it should be a tighter inline list, not
+             a 2-column card grid. */}
 
         {/* ─── §A.5 Brand insights (DeepSeek narratives per competitor) ──
             Always render the section when there's a workspace brand_name
@@ -384,29 +355,13 @@ export default function CIAnalytics() {
           </section>
         )}
 
-        {/* ─── §B. White space opportunities ───────────────────────────── */}
-        <section style={{ marginBottom: 36 }}>
-          <SectionHeader
-            title={lang === 'zh' ? '市场空白机会' : 'White space opportunities'}
-            subtitle={lang === 'zh'
-              ? '竞品都没占的维度、价位带、关键词。'
-              : 'Dimensions, price bands, or keywords no competitor has claimed.'}
-            count={data.white_space.length}
-            C={C}
-          />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {data.white_space.map(ws => (
-              <WhiteSpaceCard
-                key={ws.id}
-                item={ws}
-                onClick={() => setDrill({ kind: 'whitespace', item: ws })}
-                C={C}
-                lang={lang}
-                isMobile={isMobile}
-              />
-            ))}
-          </div>
-        </section>
+        {/* ─── §B. White space — REMOVED from Analytics ───────────────────
+             The strategic-opportunity content (channel / dimension / keyword
+             bets) doesn't belong on a metrics-deep-dive page, and the card
+             rendering currently leaks raw bilingual JSON for unresolved
+             title / summary fields. Data still flows from /api/ci/brief —
+             we just don't surface it here anymore. Future home: Library or
+             a dedicated /ci/opportunity tab. */}
 
         {/* ─── §C. All 12 metrics (collapsed) ──────────────────────────── */}
         <section style={{ marginBottom: 40 }}>
@@ -508,18 +463,16 @@ export default function CIAnalytics() {
 // ─── Sub-components ──────────────────────────────────────────────────────
 
 /**
- * IndexScorecard — the "where you stand at a glance" hero at the top of the
- * Analytics page. Mirrors the consultant-grade Brief verdict pattern:
- * answer first, evidence second.
+ * IndexScorecard — compact "where you stand" strip at the top of Analytics.
  *
- * Computes from indices.indices_by_competitor:
- *   - ahead/behind/tied counts (own brand vs best competitor, gap threshold ±2)
- *   - strongest 3 indices (largest positive gap)
- *   - weakest 3 indices (largest negative gap)
+ * Single horizontal band (~80px tall on desktop, stacks on mobile) showing:
+ *   Trend pill · Ahead/Behind/Tied inline counts · Top 3 weakest indices
  *
- * Defensive: if indices is missing the workspace's own brand (e.g. backend
- * hasn't run compute_all_for_workspace with the own-brand fix yet), returns
- * null and the card just doesn't render — Analytics page still works.
+ * Replaces the previous full-card scorecard which took ~600px of vertical
+ * real estate for what is essentially a sentence's worth of information.
+ *
+ * Defensive: returns null if own brand is missing from indices (e.g. backend
+ * hasn't computed indices for own brand yet).
  */
 function IndexScorecard({ indices, C, lang, isMobile }: {
   indices: IndicesResponse; C: ColorSet; lang: string; isMobile: boolean;
@@ -560,8 +513,7 @@ function IndexScorecard({ indices, C, lang, isMobile }: {
 
   if (positions.length === 0) return null;
 
-  // Tied threshold: ±2 points either way is "essentially even" — keeps the
-  // ahead/behind counts meaningful instead of letting tiny noise dominate.
+  // ±2 tie threshold filters out noise so ahead/behind counts mean something.
   const TIE_THRESHOLD = 2;
   let ahead = 0, behind = 0, tied = 0;
   for (const p of positions) {
@@ -571,129 +523,101 @@ function IndexScorecard({ indices, C, lang, isMobile }: {
   }
 
   const sorted = [...positions].sort((a, b) => b.gap - a.gap);
-  const strongest = sorted.filter(p => p.gap > TIE_THRESHOLD).slice(0, 3);
   const weakest = [...sorted].reverse().filter(p => p.gap < -TIE_THRESHOLD).slice(0, 3);
 
   const netDirection = ahead > behind ? 'gaining' : ahead < behind ? 'losing' : 'steady';
   const trendC = netDirection === 'gaining' ? '#22c55e' : netDirection === 'losing' ? '#ef4444' : C.t3;
-  const trendIcon = netDirection === 'gaining' ? <TrendingUp size={12} strokeWidth={2.5} />
-                  : netDirection === 'losing' ? <TrendingDown size={12} strokeWidth={2.5} />
-                  : <Minus size={12} strokeWidth={2.5} />;
+  const trendIcon = netDirection === 'gaining' ? <TrendingUp size={11} strokeWidth={2.5} />
+                  : netDirection === 'losing' ? <TrendingDown size={11} strokeWidth={2.5} />
+                  : <Minus size={11} strokeWidth={2.5} />;
   const trendLabelText = lang === 'zh'
     ? (netDirection === 'gaining' ? '净领先' : netDirection === 'losing' ? '净落后' : '势均力敌')
     : (netDirection === 'gaining' ? 'Net ahead' : netDirection === 'losing' ? 'Net behind' : 'Even');
 
-  const Stat = ({ label, value, color }: { label: string; value: number; color: string }) => (
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{ fontSize: 10, fontWeight: 700, color: C.t3, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
-        {label}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-        <span style={{ fontSize: isMobile ? 26 : 32, fontWeight: 800, color, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
-          {value}
-        </span>
-        <span style={{ fontSize: 13, color: C.t3, fontVariantNumeric: 'tabular-nums' }}>
-          / {positions.length}
-        </span>
-      </div>
-    </div>
-  );
-
-  const ranked = (rows: typeof strongest, accent: string) => (
-    <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {rows.map(r => (
-        <li key={r.idx} style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          gap: 10, padding: '6px 0', borderBottom: `1px dashed ${C.bd}`,
-        }}>
-          <span style={{ fontSize: 13, color: C.tx, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.label}>
-            {r.label}
-          </span>
-          <span style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexShrink: 0 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: C.tx, fontVariantNumeric: 'tabular-nums' }}>
-              {Math.round(r.ownScore)}
-            </span>
-            <span style={{
-              fontSize: 11, fontWeight: 700, color: accent,
-              background: `${accent}1a`, padding: '2px 6px', borderRadius: 8,
-              fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
-            }}>
-              {r.gap > 0 ? '+' : ''}{r.gap}
-            </span>
-          </span>
-        </li>
-      ))}
-    </ul>
-  );
+  const tagStyle = (color: string): CSSProperties => ({
+    display: 'inline-flex', alignItems: 'baseline', gap: 4,
+    fontSize: 12, fontWeight: 600, color: C.t2,
+    fontVariantNumeric: 'tabular-nums',
+  });
+  const numStyle = (color: string): CSSProperties => ({
+    fontSize: 14, fontWeight: 800, color, fontVariantNumeric: 'tabular-nums',
+  });
 
   return (
-    <section style={{ marginBottom: 28 }}>
+    <section style={{ marginBottom: 24 }}>
       <div style={{
         background: `linear-gradient(135deg, ${C.s1} 0%, ${trendC}08 100%)`,
         border: `1px solid ${trendC}44`,
-        borderRadius: 12,
-        padding: isMobile ? 18 : 24,
+        borderRadius: 10,
+        padding: isMobile ? '12px 14px' : '14px 18px',
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        alignItems: isMobile ? 'flex-start' : 'center',
+        gap: isMobile ? 10 : 18,
+        flexWrap: 'wrap',
       }}>
-        {/* Hero band — trend pill + context label */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 5,
-            fontSize: 12, fontWeight: 700, color: trendC,
-            background: `${trendC}18`, padding: '4px 10px', borderRadius: 20,
-            letterSpacing: '0.05em', textTransform: 'uppercase',
-          }}>
-            {trendIcon} {trendLabelText}
+        {/* Trend pill */}
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          fontSize: 11, fontWeight: 700, color: trendC,
+          background: `${trendC}18`, padding: '3px 9px', borderRadius: 16,
+          letterSpacing: '0.05em', textTransform: 'uppercase', flexShrink: 0,
+        }}>
+          {trendIcon} {trendLabelText}
+        </span>
+
+        {/* Inline counts */}
+        <div style={{ display: 'flex', gap: 14, alignItems: 'baseline' }}>
+          <span style={tagStyle(C.t2)}>
+            <span style={numStyle('#22c55e')}>{ahead}</span>
+            <span>{lang === 'zh' ? '领先' : 'ahead'}</span>
           </span>
-          <span style={{ fontSize: 11, color: C.t3 }}>
-            {lang === 'zh' ? '12 项指数 · 与最强竞品对比' : '12 indices · vs best competitor'}
+          <span style={{ color: C.bd }}>·</span>
+          <span style={tagStyle(C.t2)}>
+            <span style={numStyle('#ef4444')}>{behind}</span>
+            <span>{lang === 'zh' ? '落后' : 'behind'}</span>
+          </span>
+          <span style={{ color: C.bd }}>·</span>
+          <span style={tagStyle(C.t2)}>
+            <span style={numStyle(C.t3)}>{tied}</span>
+            <span>{lang === 'zh' ? '势均' : 'tied'}</span>
+          </span>
+          <span style={{ fontSize: 11, color: C.t3, marginLeft: 2 }}>
+            {lang === 'zh' ? `/ ${positions.length} 项` : `/ ${positions.length}`}
           </span>
         </div>
 
-        {/* Stat row */}
-        <div style={{
-          display: 'flex', gap: isMobile ? 18 : 32,
-          padding: isMobile ? '14px 0 18px' : '16px 0 22px',
-          borderBottom: `1px solid ${C.bd}`,
-          marginBottom: 18,
-        }}>
-          <Stat label={lang === 'zh' ? '领先' : 'Ahead'} value={ahead} color="#22c55e" />
-          <Stat label={lang === 'zh' ? '落后' : 'Behind'} value={behind} color="#ef4444" />
-          <Stat label={lang === 'zh' ? '势均' : 'Tied'} value={tied} color={C.t3} />
-        </div>
-
-        {/* Strongest + Weakest two-column */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
-          gap: isMobile ? 18 : 28,
-        }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-              <TrendingUp size={13} strokeWidth={2.5} color="#22c55e" />
-              <span style={{ fontSize: 11, fontWeight: 700, color: C.t2, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                {lang === 'zh' ? '最强 3 项' : 'Strongest 3'}
+        {/* Weakest 3 — inline pills */}
+        {weakest.length > 0 && (
+          <>
+            {!isMobile && <span style={{ color: C.bd, marginLeft: 'auto' }}>·</span>}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+              fontSize: 11, color: C.t3,
+            }}>
+              <span style={{ fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                {lang === 'zh' ? '需关注' : 'Watch'}:
               </span>
+              {weakest.map(w => (
+                <span key={w.idx} style={{
+                  display: 'inline-flex', alignItems: 'baseline', gap: 4,
+                  fontSize: 12, fontWeight: 600, color: C.tx,
+                }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }} title={w.label}>
+                    {w.label}
+                  </span>
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, color: '#ef4444',
+                    background: '#ef44441a', padding: '1px 6px', borderRadius: 8,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    {w.gap}
+                  </span>
+                </span>
+              ))}
             </div>
-            {strongest.length > 0
-              ? ranked(strongest, '#22c55e')
-              : <p style={{ margin: 0, fontSize: 12, color: C.t3, fontStyle: 'italic' }}>
-                  {lang === 'zh' ? '暂无显著领先项。' : 'No clear leads yet.'}
-                </p>}
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-              <TrendingDown size={13} strokeWidth={2.5} color="#ef4444" />
-              <span style={{ fontSize: 11, fontWeight: 700, color: C.t2, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                {lang === 'zh' ? '最弱 3 项' : 'Weakest 3'}
-              </span>
-            </div>
-            {weakest.length > 0
-              ? ranked(weakest, '#ef4444')
-              : <p style={{ margin: 0, fontSize: 12, color: C.t3, fontStyle: 'italic' }}>
-                  {lang === 'zh' ? '暂无显著落后项。' : 'No clear weaknesses yet.'}
-                </p>}
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </section>
   );

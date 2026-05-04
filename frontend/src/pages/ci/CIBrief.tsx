@@ -28,6 +28,7 @@ import type { ColorSet } from '../../theme/colors';
 import CISubNav from '../../components/ci/CISubNav';
 import CIWelcomeBanner from '../../components/ci/CIWelcomeBanner';
 import CIAlertFeed from '../../components/ci/CIAlertFeed';
+import IndexScatterPlot from '../../components/ci/IndexScatterPlot';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useCIData } from '../../hooks/useCIData';
 import {
@@ -37,6 +38,7 @@ import {
   type WeeklyBrief, type ContentDraft, type ProductOpportunity,
   type DomainScores, type TrendDirection,
 } from '../../services/ciMocks';
+import { getIndices, type IndicesResponse } from '../../services/ciIndices';
 import { runAnalysis, getAnalysisStatus, type AnalysisJob } from '../../services/ciApi';
 
 // Show "data is stale" warning if the brief is older than this many days.
@@ -197,6 +199,10 @@ export default function CIBrief() {
   const pollTimerRef = useRef<number | null>(null);
   const [showMetrics, setShowMetrics] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  // Composite indices powering the scatter plot. Fetched in the same
+  // useEffect as brief data; falls through gracefully when the endpoint
+  // returns null (older backend or empty workspace).
+  const [indices, setIndices] = useState<IndicesResponse | null>(null);
 
   // Local state mirror of content / opportunity status so the UI updates
   // instantly on click without refetching.
@@ -239,6 +245,9 @@ export default function CIBrief() {
       setError(true);
       setLoading(false);
     });
+    // Indices fetch is independent of the main brief data — failure here
+    // just hides the scatter section, doesn't break the page.
+    getIndices(workspaceId, lang).then(setIndices).catch(() => setIndices(null));
   }, [workspaceId, lang]);
 
   // Cleanup any in-flight polling when the component unmounts.
@@ -906,6 +915,26 @@ export default function CIBrief() {
             ) : null}
           </div>
         </section>
+
+        {/* ─── SECTION 1.5: Competitive map (scatter) ─────────────────────
+             Visual companion to the verdict — shows where the user sits vs
+             every competitor across any 2 of the 12 indices the user cares
+             about. Lives on Brief (not Analytics) because the verdict
+             interprets competitive position; the scatter shows it. Falls
+             through silently if the indices endpoint returns null. */}
+        {indices && Object.keys(indices.indices_by_competitor).length > 0 && (
+          <section style={{ marginBottom: 40 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 6px' }}>
+              {lang === 'zh' ? '竞争地图' : 'Competitive map'}
+            </h3>
+            <p style={{ fontSize: 12, color: C.t3, margin: '0 0 14px', lineHeight: 1.55 }}>
+              {lang === 'zh'
+                ? '任选 2 项指数作为 X / Y 轴 — 看自己和竞品在矩阵中的相对位置。'
+                : "Pick any 2 indices as X / Y — see where you sit vs every competitor in the matrix."}
+            </p>
+            <IndexScatterPlot data={indices} />
+          </section>
+        )}
 
         {/* ─── SECTION 1b: Three moves ──────────────────────────────── */}
         <section style={{ marginBottom: 40 }}>
