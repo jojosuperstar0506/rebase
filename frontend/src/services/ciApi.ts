@@ -564,6 +564,49 @@ export async function suggestCompetitors(
   };
 }
 
+// ─── Brief draft (execution layer) ────────────────────────────────
+// AI-Native Agency thesis on screen: generate a publish-ready XHS post
+// from this week's top Brief move. Demoed at /agents/xhs-content for
+// is_demo workspaces; backend accepts any workspace so the gate can
+// widen later by removing one frontend conditional.
+
+export interface BriefDraftResponse {
+  channel: string;
+  based_on: { move_index: number; move_headline: string };
+  draft: { title: string; body: string; tags: string[]; image_concept: string };
+  en_translation?: { title: string; body: string; image_concept: string };
+}
+
+export interface BriefDraftResult {
+  ok: boolean;
+  data?: BriefDraftResponse;
+  status: number;
+  message?: string;
+}
+
+export async function generateBriefDraft(
+  workspaceId: string,
+  moveIndex: number = 0,
+  lang: string = 'zh',
+  channel: 'xhs' = 'xhs',
+): Promise<BriefDraftResult> {
+  const result = await tryApiVerbose<BriefDraftResponse>('/brief/draft', {
+    method: 'POST',
+    body: JSON.stringify({ workspace_id: workspaceId, move_index: moveIndex, channel, lang }),
+  });
+  if (!result.ok) {
+    return {
+      ok: false,
+      status: result.status,
+      message: result.message
+        || (result.status === 0
+          ? (lang === 'zh' ? '无法连接服务器,请重试' : 'Could not reach the server, try again')
+          : `Request failed (HTTP ${result.status})`),
+    };
+  }
+  return { ok: true, data: result.data, status: result.status };
+}
+
 export async function searchBrands(query: string): Promise<BrandResolution[]> {
   if (query.length < 1) return [];
   const data = await tryApi<{ brands: BrandResolution[] }>(`/brands/search?q=${encodeURIComponent(query)}`);
