@@ -1545,12 +1545,40 @@ app.get('/api/ci/brief', async (req, res) => {
     }
 
     // ─── Bilingual resolution ──────────────────────────────────────
-    const verdictFields = ['headline', 'sentence', 'top_action'];
+    // verdictFields covers the flat top-level bilingual strings.
+    // pressure_points / at_risk / sources are nested structures handled
+    // immediately after — see comments inline.
+    const verdictFields = ['headline', 'summary', 'sentence', 'top_action'];
     const moveFields = ['headline', 'detail', 'so_what', 'action'];
     const draftFields = ['title', 'hook_3s', 'main_15s', 'cta_3s', 'reasoning', 'why_now'];
     const oppFields = ['concept_name', 'positioning', 'why_now', 'target_price', 'launch_timeline'];
 
     const resolvedVerdict = resolveObj(verdict || {}, lang, verdictFields);
+
+    // Pressure points: each item has a flat brand string (literal — never
+    // translated) + bilingual badge / headline / source, plus an `evidence`
+    // array that's stored as {zh: [...], en: [...]} and resolves to a
+    // single-language string array via resolveLang.
+    if (Array.isArray(resolvedVerdict.pressure_points)) {
+      resolvedVerdict.pressure_points = resolvedVerdict.pressure_points.map(p => {
+        const r = resolveObj(p, lang, ['badge', 'headline', 'source']);
+        if (r.evidence) {
+          const ev = resolveLang(r.evidence, lang);
+          r.evidence = Array.isArray(ev) ? ev : [];
+        }
+        return r;
+      });
+    }
+
+    // At-risk callout: simple bilingual object.
+    if (resolvedVerdict.at_risk && typeof resolvedVerdict.at_risk === 'object') {
+      resolvedVerdict.at_risk = resolveObj(resolvedVerdict.at_risk, lang, ['metric', 'magnitude', 'narrative']);
+    }
+
+    // Sources: array of bilingual citation strings → array of resolved strings.
+    if (Array.isArray(resolvedVerdict.sources)) {
+      resolvedVerdict.sources = resolvedVerdict.sources.map(s => resolveLang(s, lang));
+    }
     const resolvedMoves = (Array.isArray(moves) ? moves : []).map(m => resolveObj(m, lang, moveFields));
     const resolvedDrafts = contentDrafts.map(d => resolveObj(d, lang, draftFields));
     let resolvedOpp = productOpportunity;

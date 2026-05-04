@@ -388,17 +388,150 @@ DEMO_BRIEF = {
     "verdict": {
         "trend": "losing",
         "headline": {
-            "zh": "TORY BURCH 在轻奢女包中场遭双向夹击：COACH 奥莱矩阵下压定价锚点，古良吉吉以 +48% 声量蚕食心智份额",
-            "en": "TORY BURCH squeezed in mid-light-luxury: COACH outlet matrix anchors pricing downward while 古良吉吉's +48% voice surge erodes mindshare",
+            "zh": "TORY BURCH 中场被三向挤压",
+            "en": "TORY BURCH squeezed from three sides in the mid-segment",
         },
+        # Short context line right under the headline. Replaces the long
+        # paragraph for the hero — full evidence lives in pressure_points
+        # below, sources collapse into a disclosure.
+        "summary": {
+            "zh": "COACH 奥莱下压价格锚点，古良吉吉以国潮联名抢心智，Dissona 用回购建忠诚度——三种攻势同时挤入 ¥1,800–2,800 核心客群。",
+            "en": "COACH outlet drops the pricing anchor, 古良吉吉 captures mindshare via guochao collabs, Dissona builds loyalty through rebuy — three different vectors all converging on the ¥1,800–2,800 core cohort.",
+        },
+        # Legacy paragraph kept for backwards compat with LLM-generated briefs
+        # that don't yet emit pressure_points. Frontend prefers structured
+        # rendering when available.
         "sentence": {
-            "zh": "数据支撑（来源：抖音电商罗盘 2026-05-04 排行榜 + 小红书 7 日 UGC 监测）：\n• COACH 奥莱旗舰过去 7 日 GMV ¥1,800 万 (类目第 2)，平均成交价 ¥1,690→¥1,490 下探 12%。其'轻奢入门'心智份额扩张至 31%（vs 上月 26%）。\n• 古良吉吉本周'国潮 IP 联名 vol.3'限量发售触发 +88% UGC 周环比，¥1,000-1,500 价格带心智份额从 9% 升至 14%（三周累计）。'月光宝盒'单 SKU GMV +180% YoY。\n• Dissona 'NPS 类'指标 +28%——'回购/再买'话语密度达 18%（类目均值 6%）。\n相对于 TORY BURCH 当前¥2,400 平均成交价 + 基线声量 (-2% WoW)，竞争位置正在被三向收紧——保守估算 12 个月内若不调整，将损失约¥18-22M GMV（核心¥1,800-2,800 段年轻客群外流）。",
-            "en": "Evidence base (source: Douyin Compass 2026-05-04 leaderboard + 7-day XHS UGC monitoring):\n• COACH 奥莱 旗舰 generated ¥18M GMV in the past 7 days (category #2), avg sale price dropped ¥1,690→¥1,490 (-12%). Their 'light-luxury entry' mindshare share expanded to 31% (vs 26% last month).\n• 古良吉吉's 'guochao IP collab vol.3' limited drop drove +88% UGC WoW, lifting ¥1,000-1,500 mindshare from 9% to 14% over three weeks. 'Moonbox' single-SKU GMV +180% YoY.\n• Dissona 'NPS-style' signals up +28% — rebuy phrase density hit 18% (vs 6% category avg).\nAgainst TORY BURCH's current ¥2,400 avg AOV + baseline voice (-2% WoW), our competitive position is being squeezed three ways. Conservative 12-month projection: ~¥18-22M GMV at risk (younger ¥1,800-2,800 cohort attrition) if no response.",
+            "zh": "COACH 奥莱旗舰周 GMV ¥1,800 万 ASP 下探 12%；古良吉吉 +48% 声量 + 国潮联名 vol.3 售罄；Dissona NPS +28% 回购话语密度 18%。TORY BURCH 当前 ¥2,400 ASP + -2% WoW 声量，12 个月 GMV at risk ~¥18-22M。",
+            "en": "COACH outlet weekly GMV ¥18M, ASP -12%; 古良吉吉 +48% voice + guochao collab vol.3 sold out; Dissona NPS +28%, rebuy density 18%. TORY BURCH at ¥2,400 ASP and -2% WoW voice — 12-mo GMV at risk ~¥18–22M.",
+        },
+        # Three structured pressure cards. Each is one threat vector with
+        # a magnitude badge, headline, 2-3 evidence bullets, and source.
+        # Frontend renders these as a horizontal grid (stacks on mobile).
+        "pressure_points": [
+            {
+                "brand": "COACH",
+                "badge": {
+                    "zh": "ASP -12% / 周",
+                    "en": "ASP -12% / wk",
+                },
+                "headline": {
+                    "zh": "奥莱旗舰把「轻奢入门」锚点下探至 ¥1,490",
+                    "en": "Outlet flagship anchors light-luxury entry at ¥1,490",
+                },
+                "evidence": {
+                    "zh": [
+                        "周 GMV ¥1,800 万（类目第 2）——单店已超 TORY BURCH 中国全月销售 (¥4,200 万)",
+                        "Tabby 26 + Pillow 18 累计转化率 8% (类目均值 2.8%)",
+                        "「轻奢入门」心智份额：COACH 31% (+5pp MoM) | TORY BURCH 12% (-2pp)",
+                    ],
+                    "en": [
+                        "Weekly GMV ¥18M (#2 in category) — outlet alone exceeds TORY BURCH's full-month China sales (¥42M)",
+                        "Tabby 26 + Pillow 18 cumulative conversion 8% (vs 2.8% category avg)",
+                        "'Light-luxury entry' mindshare: COACH 31% (+5pp MoM) | TORY BURCH 12% (-2pp)",
+                    ],
+                },
+                "source": {
+                    "zh": "抖音电商罗盘 · 7d",
+                    "en": "Douyin Compass · 7d",
+                },
+            },
+            {
+                "brand": "古良吉吉",
+                "badge": {
+                    "zh": "+88% UGC / 周",
+                    "en": "+88% UGC / wk",
+                },
+                "headline": {
+                    "zh": "国潮联名 vol.3 售罄触发心智份额跃升",
+                    "en": "Guochao collab vol.3 sells out, triggers mindshare jump",
+                },
+                "evidence": {
+                    "zh": [
+                        "200 件限量 5 分钟内售罄 → 周环比 UGC +88%",
+                        "「月光宝盒」单 SKU GMV ¥23.3M (YoY +180%)，已是 Robinson Mini 同段 4.8x",
+                        "¥1,000–1,500 价格带心智份额：9% → 14%（三周累计）",
+                    ],
+                    "en": [
+                        "200-piece limited drop sold out in 5 min → +88% UGC WoW",
+                        "'Moonbox' single-SKU GMV ¥23.3M (YoY +180%) — already 4.8× Robinson Mini at same tier",
+                        "¥1,000–1,500 mindshare: 9% → 14% (3-week trailing)",
+                    ],
+                },
+                "source": {
+                    "zh": "小红书 UGC 监测 · 14 天",
+                    "en": "XHS UGC monitor · 14d",
+                },
+            },
+            {
+                "brand": "Dissona",
+                "badge": {
+                    "zh": "NPS +28% / 月",
+                    "en": "NPS +28% / mo",
+                },
+                "headline": {
+                    "zh": "「回购/再买」话语密度突破国货=便宜替代认知",
+                    "en": "Rebuy phrase density breaks the 'guochao = cheap substitute' ceiling",
+                },
+                "evidence": {
+                    "zh": [
+                        "「回购/再买/已经第三个」语在品牌讨论中密度 18% (类目均值 6%)",
+                        "9 位中腰部 KOL 老客回购矩阵 → +142 条正面 UGC",
+                        "Loyalty Index：Dissona 67 (+12 MoM) | TORY BURCH 50 (-2)，差距 8 → 17",
+                    ],
+                    "en": [
+                        "Rebuy phrases ('回购' / 'already my third') hit 18% density in brand discussions (vs 6% category avg)",
+                        "9-mid-tier-KOL repeat-customer matrix drove +142 positive UGC",
+                        "Loyalty Index: Dissona 67 (+12 MoM) | TORY BURCH 50 (-2), gap widened 8 → 17 pts",
+                    ],
+                },
+                "source": {
+                    "zh": "小红书 UGC + Loyalty Index 模型",
+                    "en": "XHS UGC + Loyalty Index model",
+                },
+            },
+        ],
+        # Quantified business impact callout. Renders prominently as a
+        # single-stat card below the pressure grid.
+        "at_risk": {
+            "metric": {
+                "zh": "12 个月 GMV at risk",
+                "en": "12-mo GMV at risk",
+            },
+            "magnitude": {
+                "zh": "¥18 – 22M",
+                "en": "¥18 – 22M",
+            },
+            "narrative": {
+                "zh": "保守估算：若 TORY BURCH 不在本季内调整定位，核心 ¥1,800–2,800 段 25–35 岁客群将以 6–9% 速度向 COACH 奥莱 / 古良吉吉 / Dissona 分流。",
+                "en": "Conservative projection: without a Q-end repositioning, the core ¥1,800–2,800 / 25–35 cohort will leak to COACH outlet, 古良吉吉, and Dissona at a 6–9% rate.",
+            },
         },
         "top_action": {
-            "zh": "本周关键动作（owner: 张总 / 张某, 截止 Friday EOD）：在¥1,800-2,800 价格带启动'通勤精选'直播专场——5-7 SKU 集中 T-Monogram + Cube Bag，预算¥150K，目标 GMV¥1.2-1.8M、Brand Heat +6 点。赶在 COACH 5/15 母亲节促销窗口前锁定'轻奢通勤'关键词位次。",
-            "en": "Top action this week (owner: Brand Director, deadline: Friday EOD): launch a ¥1,800-2,800 'commuter capsule' Douyin live — 5-7 SKUs centered on T-Monogram + Cube Bag, ¥150K budget, GMV target ¥1.2-1.8M, Brand Heat lift target +6 pts. Beat COACH's 5/15 Mother's Day promo window to lock the 'light-luxury commuter' keyword position.",
+            "zh": "本周关键动作 (owner: Brand Director · 截止 Friday EOD)：在 ¥1,800–2,800 价格带启动「通勤精选」抖音直播专场——5–7 SKU 集中 T-Monogram + Cube Bag，预算 ¥150K，目标 GMV ¥1.2–1.8M、Brand Heat +6 点。赶在 COACH 5/15 母亲节促销窗口前锁定「轻奢通勤」关键词位次。",
+            "en": "Top action this week (owner: Brand Director · deadline: Friday EOD): launch a ¥1,800–2,800 'commuter capsule' Douyin live — 5–7 SKUs centered on T-Monogram + Cube Bag, ¥150K budget, GMV target ¥1.2–1.8M, Brand Heat lift +6 pts. Beat COACH's 5/15 Mother's Day promo window to lock the 'light-luxury commuter' keyword position.",
         },
+        # Source citations — collapsed under a disclosure on the frontend so
+        # the hero stays clean. Each entry is the full citation as it would
+        # appear in a consultant's footnote.
+        "sources": [
+            {
+                "zh": "抖音电商罗盘 (Douyin Compass) — 女包品类 7 日排行榜 (2026-05-04)",
+                "en": "Douyin Compass — Bag category 7-day leaderboard (2026-05-04)",
+            },
+            {
+                "zh": "小红书 UGC 监测 — 14 个品牌 × 7 天窗口 (2026-04-28 至 2026-05-04)",
+                "en": "XHS UGC monitor — 14 brands × 7-day window (2026-04-28 to 2026-05-04)",
+            },
+            {
+                "zh": "SimilarWeb — 女包品类跨域用户路径 (Q1 2026)",
+                "en": "SimilarWeb — bag-category cross-domain user paths (Q1 2026)",
+            },
+            {
+                "zh": "天猫国际 + 京东国际 — TOP 50 SKU 价格 / 评论密度 (2026-05-04 快照)",
+                "en": "Tmall Global + JD International — TOP 50 SKU price / review density (2026-05-04 snapshot)",
+            },
+        ],
     },
     "moves": [
         {

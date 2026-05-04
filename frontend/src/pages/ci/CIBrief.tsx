@@ -674,12 +674,25 @@ export default function CIBrief() {
         )}
 
         {/* ─── SECTION 1: Verdict ─────────────────────────────────────── */}
+        {/* Layout (when verdict.pressure_points is present — the structured shape):
+              Hero band:    trend pill · context label · headline · 1-line summary
+              Pressure grid: 3 cards (one per threat vector), magnitude badge +
+                             headline + 2-3 evidence bullets + source citation
+              At-risk:      single dramatic stat callout
+              Top action:   accent-bordered card (existing pattern)
+              Sources:      collapsed disclosure at bottom
+
+            When pressure_points is missing (LLM-generated briefs that pre-date
+            the structured shape), we fall back to the legacy single-paragraph
+            sentence rendering — see the `else` branch.
+        */}
         <section style={{ marginBottom: 28 }}>
           <div style={{
             ...card,
             background: `linear-gradient(135deg, ${C.s1} 0%, ${trendColor(brief.verdict.trend)}08 100%)`,
             borderColor: `${trendColor(brief.verdict.trend)}44`,
           }}>
+            {/* Hero band */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
               <span style={{
                 fontSize: 12, fontWeight: 700,
@@ -695,16 +708,107 @@ export default function CIBrief() {
               </span>
             </div>
             <h2 style={{
-              fontSize: isMobile ? 19 : 22, fontWeight: 700, margin: '0 0 12px',
-              lineHeight: 1.4, letterSpacing: -0.2,
+              fontSize: isMobile ? 22 : 28, fontWeight: 800, margin: '0 0 10px',
+              lineHeight: 1.25, letterSpacing: -0.4,
             }}>
               {brief.verdict.headline}
             </h2>
-            <p style={{ fontSize: 14, color: C.t2, margin: 0, lineHeight: 1.7 }}>
-              {brief.verdict.sentence}
-            </p>
+            {brief.verdict.summary ? (
+              <p style={{ fontSize: isMobile ? 14 : 15, color: C.t2, margin: '0 0 22px', lineHeight: 1.65 }}>
+                {brief.verdict.summary}
+              </p>
+            ) : null}
+
+            {/* Structured pressure grid (when present) */}
+            {Array.isArray(brief.verdict.pressure_points) && brief.verdict.pressure_points.length > 0 ? (
+              <>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: isMobile ? '1fr' : `repeat(${Math.min(brief.verdict.pressure_points.length, 3)}, 1fr)`,
+                  gap: 12,
+                  marginBottom: 18,
+                }}>
+                  {brief.verdict.pressure_points.map((p, idx) => (
+                    <div key={`${p.brand}-${idx}`} style={{
+                      background: C.bg,
+                      border: `1px solid ${C.bd}`,
+                      borderRadius: 10,
+                      padding: '14px 16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 10,
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+                        <span style={{
+                          fontSize: 13, fontWeight: 800, color: C.tx, letterSpacing: -0.1,
+                          maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }} title={p.brand}>
+                          {p.brand}
+                        </span>
+                        <span style={{
+                          fontSize: 10, fontWeight: 700,
+                          color: trendColor(brief.verdict.trend),
+                          background: `${trendColor(brief.verdict.trend)}1a`,
+                          padding: '3px 8px', borderRadius: 12,
+                          letterSpacing: '0.05em', whiteSpace: 'nowrap', flexShrink: 0,
+                        }}>
+                          {p.badge}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: C.tx, lineHeight: 1.4 }}>
+                        {p.headline}
+                      </div>
+                      <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: C.t2, lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {(p.evidence || []).map((line, i) => (
+                          <li key={i}>{line}</li>
+                        ))}
+                      </ul>
+                      {p.source ? (
+                        <div style={{ fontSize: 10, color: C.t3, marginTop: 'auto', paddingTop: 4, fontStyle: 'italic' }}>
+                          {lang === 'zh' ? '来源：' : 'Source: '}{p.source}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+
+                {/* At-risk callout */}
+                {brief.verdict.at_risk ? (
+                  <div style={{
+                    background: `${trendColor(brief.verdict.trend)}0d`,
+                    border: `1px solid ${trendColor(brief.verdict.trend)}40`,
+                    borderRadius: 10,
+                    padding: isMobile ? '14px 16px' : '16px 20px',
+                    display: 'flex',
+                    alignItems: isMobile ? 'flex-start' : 'center',
+                    flexDirection: isMobile ? 'column' : 'row',
+                    gap: isMobile ? 10 : 18,
+                    marginBottom: 18,
+                  }}>
+                    <div style={{ flexShrink: 0 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: trendColor(brief.verdict.trend), letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
+                        {brief.verdict.at_risk.metric}
+                      </div>
+                      <div style={{ fontSize: isMobile ? 26 : 30, fontWeight: 800, color: trendColor(brief.verdict.trend), letterSpacing: -0.5, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+                        {brief.verdict.at_risk.magnitude}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.6 }}>
+                      {brief.verdict.at_risk.narrative}
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              /* Legacy fallback: render the single paragraph sentence as before. */
+              <p style={{ fontSize: 14, color: C.t2, margin: '0 0 18px', lineHeight: 1.7, whiteSpace: 'pre-line' }}>
+                {brief.verdict.sentence}
+              </p>
+            )}
+
+            {/* Top action — same accent-bordered card as before */}
             <div style={{
-              marginTop: 18, padding: '14px 16px',
+              padding: '14px 16px',
               background: `${C.ac}10`, borderLeft: `3px solid ${C.ac}`, borderRadius: 6,
             }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: C.ac, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>
@@ -714,6 +818,27 @@ export default function CIBrief() {
                 {brief.verdict.top_action}
               </div>
             </div>
+
+            {/* Sources disclosure (collapsed by default) */}
+            {Array.isArray(brief.verdict.sources) && brief.verdict.sources.length > 0 ? (
+              <details style={{ marginTop: 16 }}>
+                <summary style={{
+                  fontSize: 11, color: C.t3, cursor: 'pointer', userSelect: 'none',
+                  letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600,
+                  outline: 'none',
+                }}>
+                  {lang === 'zh' ? `数据来源 · ${brief.verdict.sources.length} 项` : `Data sources · ${brief.verdict.sources.length}`}
+                </summary>
+                <ul style={{
+                  margin: '8px 0 0', paddingLeft: 18, fontSize: 11, color: C.t3,
+                  lineHeight: 1.7, display: 'flex', flexDirection: 'column', gap: 2,
+                }}>
+                  {brief.verdict.sources.map((s, i) => (
+                    <li key={i}>{s}</li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
           </div>
         </section>
 

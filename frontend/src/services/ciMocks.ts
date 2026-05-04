@@ -20,15 +20,52 @@
 export type TrendDirection = 'gaining' | 'steady' | 'losing';
 export type ImpactLevel = 'high' | 'medium' | 'low';
 
+export interface PressurePoint {
+  /** Brand applying the pressure (literal name, not translated). */
+  brand: string;
+  /** Magnitude pill — 1-3 word badge like "+48% UGC" or "ASP -12%". */
+  badge: string;
+  /** 1-line headline of what this brand is doing. */
+  headline: string;
+  /** 2-3 evidence bullets — actual numbers, not adjectives. */
+  evidence: string[];
+  /** Source citation (rendered small, alongside the card). */
+  source?: string;
+}
+
+export interface AtRisk {
+  /** What's at risk — "12-mo GMV", "Q3 conversion", etc. */
+  metric: string;
+  /** The number itself — "¥18-22M", "-6 to -9 pts", etc. */
+  magnitude: string;
+  /** 1-line context explaining the projection. */
+  narrative: string;
+}
+
 export interface BriefVerdict {
   /** 1-line hook that tops the brief. */
   headline: string;
-  /** 1–2 sentence elaboration. Written in DeepSeek's voice. */
+  /** Optional 1-line summary right under the headline (preferred over `sentence`
+   *  when the structured `pressure_points` array is present — keeps the hero
+   *  area scannable). */
+  summary?: string;
+  /** Legacy single-paragraph fallback. Rendered when `pressure_points` is
+   *  absent (e.g. LLM-generated briefs that pre-date the structured shape). */
   sentence: string;
   /** Green up / yellow flat / red down arrow on the UI. */
   trend: TrendDirection;
   /** The single "if-you-only-do-one-thing" directive. */
   top_action: string;
+  /** Structured competitive pressure cards — each represents one threat
+   *  vector. When present, frontend renders these as a horizontal grid
+   *  instead of inline bullets in `sentence`. */
+  pressure_points?: PressurePoint[];
+  /** Quantified business impact callout — surfaces the "so what" number
+   *  prominently below the pressure cards. */
+  at_risk?: AtRisk;
+  /** Source citations — collapsed under a disclosure at the bottom of the
+   *  verdict card so they don't crowd the hero. */
+  sources?: string[];
 }
 
 export interface BriefMove {
