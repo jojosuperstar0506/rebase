@@ -66,13 +66,28 @@ export interface IndicesResponse {
 
 // ─── Fetch helper (mirrors ciApi.ts pattern) ──────────────────────────────
 
+// Stale-JWT detection — see ciApi.ts isValidAccountSub for rationale.
+function isValidAccountSub(sub: string): boolean {
+  if (!sub) return false;
+  if (sub.includes('@')) return false;
+  if (/^[+\-\s()0-9]+$/.test(sub)) return false;
+  if (sub.startsWith('anon-')) return true;
+  return /^[A-Z0-9_-]{3,}$/.test(sub);
+}
+
 function getHeaders(): Record<string, string> {
   const token = localStorage.getItem('rebase_token');
   let userId = '';
   if (token) {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
-      userId = payload.sub || payload.id || payload.email || '';
+      const candidate = (payload.sub || payload.id || payload.email || '').toString();
+      if (isValidAccountSub(candidate)) {
+        userId = candidate;
+      } else if (candidate) {
+        console.warn('[CI Indices] Stale JWT detected. Clearing token; please log in again.');
+        localStorage.removeItem('rebase_token');
+      }
     } catch {}
   }
   if (!userId) {

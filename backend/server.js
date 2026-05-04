@@ -247,6 +247,20 @@ app.post("/api/onboarding", async (req, res) => {
   }
 });
 
+// HTML-escape user-supplied content before embedding in email templates.
+// Without this, an applicant could submit name="<script>...</script>" or
+// goal containing HTML/event-handler attributes, which would render in
+// our admin inbox (or the applicant's own welcome email).
+function escHtml(s) {
+  if (s == null) return "";
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // Sends a notification email to REPORT_EMAIL when a new application arrives.
 // Uses Resend REST API via Node's built-in https — no extra npm package needed.
 // If RESEND_API_KEY or REPORT_EMAIL is not set, logs a message and skips.
@@ -260,6 +274,9 @@ async function notifyNewApplicant(applicant) {
   }
 
   const https = require("https");
+  // Note: subject lines aren't HTML, but Resend will pass them through to email
+  // clients, some of which interpret entities. Use plain-text fields for the
+  // subject — keep escaping tight in the html body where injection actually matters.
   const body = JSON.stringify({
     from: "Rebase <onboarding@resend.dev>",
     to: [toEmail],
@@ -267,15 +284,15 @@ async function notifyNewApplicant(applicant) {
     html: `
       <h2>New Rebase Application</h2>
       <table style="border-collapse:collapse;font-family:sans-serif;font-size:14px">
-        <tr><td style="padding:6px 12px;color:#666">Name</td><td style="padding:6px 12px"><strong>${applicant.name}</strong></td></tr>
-        <tr><td style="padding:6px 12px;color:#666">Email</td><td style="padding:6px 12px">${applicant.email}</td></tr>
-        <tr><td style="padding:6px 12px;color:#666">Company</td><td style="padding:6px 12px">${applicant.company || "—"}</td></tr>
-        <tr><td style="padding:6px 12px;color:#666">Industry</td><td style="padding:6px 12px">${applicant.industry}</td></tr>
-        <tr><td style="padding:6px 12px;color:#666">Competitors</td><td style="padding:6px 12px">${applicant.competitors || "—"}</td></tr>
-        <tr><td style="padding:6px 12px;color:#666">Goal</td><td style="padding:6px 12px">${applicant.goal || "—"}</td></tr>
-        <tr><td style="padding:6px 12px;color:#666">Submitted</td><td style="padding:6px 12px">${applicant.submittedAt}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Name</td><td style="padding:6px 12px"><strong>${escHtml(applicant.name)}</strong></td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Email</td><td style="padding:6px 12px">${escHtml(applicant.email)}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Company</td><td style="padding:6px 12px">${escHtml(applicant.company) || "—"}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Industry</td><td style="padding:6px 12px">${escHtml(applicant.industry)}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Competitors</td><td style="padding:6px 12px">${escHtml(applicant.competitors) || "—"}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Goal</td><td style="padding:6px 12px">${escHtml(applicant.goal) || "—"}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Submitted</td><td style="padding:6px 12px">${escHtml(applicant.submittedAt)}</td></tr>
       </table>
-      <p style="margin-top:24px;color:#666;font-size:13px">Reply to this applicant directly at <a href="mailto:${applicant.email}">${applicant.email}</a> with their access code to grant them entry to Rebase.</p>
+      <p style="margin-top:24px;color:#666;font-size:13px">Reply to this applicant directly at <a href="mailto:${encodeURIComponent(applicant.email || "")}">${escHtml(applicant.email)}</a> with their access code to grant them entry to Rebase.</p>
     `,
   });
 
@@ -599,9 +616,16 @@ app.post("/api/admin/approve", async (req, res) => {
   // After approval, the user's JWT will carry sub = inviteCode, so the
   // workspace must be rekeyed to match — otherwise their first login lands
   // on an empty dashboard while their old workspace sits orphaned.
+  //
+  // We surface the re-key outcome in the response body so the admin UI can
+  // distinguish three states: rekey ran and updated N rows, rekey ran but
+  // found nothing to update (acceptable — applicant onboarded without
+  // competitors), rekey failed (admin needs to run the backfill script).
   const accountId = inviteCode.toUpperCase();
   const oldKeys = [applicant.phone, applicant.email].filter(Boolean);
+  let rekey = { attempted: false, rekeyedRows: 0, error: null };
   if (oldKeys.length > 0) {
+    rekey.attempted = true;
     try {
       const { rowCount } = await pool.query(
         `UPDATE workspaces
@@ -610,8 +634,10 @@ app.post("/api/admin/approve", async (req, res) => {
             AND user_id NOT LIKE 'RB-%'`,
         [accountId, oldKeys]
       );
+      rekey.rekeyedRows = rowCount;
       if (rowCount > 0) console.log(`[Admin] Re-keyed ${rowCount} workspace(s) → ${accountId}`);
     } catch (e) {
+      rekey.error = e.message;
       console.error("[Admin] Workspace re-key failed (non-fatal):", e.message);
     }
   }
@@ -623,7 +649,14 @@ app.post("/api/admin/approve", async (req, res) => {
     console.error("[Admin] Approval email failed (non-fatal):", e.message)
   );
 
-  res.json({ success: true, inviteCode, user: applicant.name, company: applicant.company, email: applicant.email || "" });
+  res.json({
+    success: true,
+    inviteCode,
+    user: applicant.name,
+    company: applicant.company,
+    email: applicant.email || "",
+    rekey,
+  });
 });
 
 // Send the inviteCode to the applicant's email after admin approval. Skips
@@ -644,7 +677,7 @@ async function notifyApplicantApproved(applicant) {
     <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#222">
       <h2 style="color:#0f766e;margin:0 0 8px">You're in.</h2>
       <p style="font-size:14px;line-height:1.6;color:#444;margin:0 0 16px">
-        Hi ${applicant.name}, your Rebase application has been approved.
+        Hi ${escHtml(applicant.name)}, your Rebase application has been approved.
         Use the invite code below to sign in for the first time.
       </p>
       <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;text-align:center;margin:16px 0">
@@ -652,7 +685,7 @@ async function notifyApplicantApproved(applicant) {
           INVITE CODE
         </div>
         <div style="font-family:monospace;font-size:22px;font-weight:700;color:#16a34a;letter-spacing:3px">
-          ${applicant.inviteCode}
+          ${escHtml(applicant.inviteCode)}
         </div>
       </div>
       <p style="font-size:14px;line-height:1.6;color:#444;margin:16px 0 8px">

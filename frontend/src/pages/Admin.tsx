@@ -176,7 +176,19 @@ export default function Admin() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Approval failed");
-      fetchApplicants();
+      // Surface the workspace re-key outcome to the admin so they know whether
+      // the user will land on a populated dashboard. Three states:
+      //   - rekey.attempted=false: applicant onboarded with no phone/email
+      //     keys; nothing to re-key. Fine.
+      //   - rekey.rekeyedRows>0: success.
+      //   - rekey.error: DB UPDATE failed; admin should run the backfill script.
+      if (data.rekey && data.rekey.error) {
+        console.warn(`[Admin] Workspace re-key failed for ${name}: ${data.rekey.error}`);
+        alert(`Approved, but workspace re-key failed (${data.rekey.error}). Run \`node backend/scripts/migrate_workspaces_to_invitecode.js --apply\` on ECS to fix.`);
+      }
+      // Await the refresh so the UI reflects the new approved state before
+      // returning. Without await, rapid double-clicks could see a stale list.
+      await fetchApplicants();
       return { inviteCode: data.inviteCode };
     } catch (e) {
       alert(e instanceof Error ? e.message : "Approval failed");

@@ -1207,6 +1207,7 @@ function CompetitorList({ C, lang, competitors, onChange, isMobile, readOnly = f
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}
                     title={lang === 'zh' ? '重命名品牌' : 'Rename brand'}
+                    aria-label={lang === 'zh' ? '重命名品牌' : 'Rename brand'}
                   >
                     <Pencil size={14} strokeWidth={1.75} />
                   </button>
@@ -1220,6 +1221,7 @@ function CompetitorList({ C, lang, competitors, onChange, isMobile, readOnly = f
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}
                     title={t(T.ci.removeCompetitor, lang as any)}
+                    aria-label={t(T.ci.removeCompetitor, lang as any)}
                   >
                     ×
                   </button>

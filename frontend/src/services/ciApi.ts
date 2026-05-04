@@ -5,6 +5,24 @@ import {
 
 const API_BASE = '/api/ci';
 
+// JWT.sub for invite-code users is the uppercase invite code (e.g. "RB-TORYBU-841E").
+// Older tokens minted before the auth refactor had sub = phone or email — those are
+// stale: workspaces now key on the invite code, so a phone-keyed sub silently lands
+// on an empty workspace. We treat anything that doesn't look like a valid account
+// identifier as stale and clear the token, falling back to anon (which is the
+// pre-login state). This forces those users to re-login and get a fresh JWT.
+function isValidAccountSub(sub: string): boolean {
+  if (!sub) return false;
+  // Email format → stale
+  if (sub.includes('@')) return false;
+  // Phone-only digits (with optional + and spaces/dashes) → stale
+  if (/^[+\-\s()0-9]+$/.test(sub)) return false;
+  // Anon-prefixed IDs from this same client → valid (anon-keyed workspace path)
+  if (sub.startsWith('anon-')) return true;
+  // Invite-code shape (RB-XXXXX-XXXX) or any uppercase alphanumeric token → valid
+  return /^[A-Z0-9_-]{3,}$/.test(sub);
+}
+
 // Helper: get auth headers from JWT token
 function getHeaders(): Record<string, string> {
   const token = localStorage.getItem('rebase_token');
@@ -12,7 +30,15 @@ function getHeaders(): Record<string, string> {
   if (token) {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
-      userId = payload.sub || payload.id || payload.email || '';
+      const candidate = (payload.sub || payload.id || payload.email || '').toString();
+      if (isValidAccountSub(candidate)) {
+        userId = candidate;
+      } else if (candidate) {
+        // Stale token from before the auth refactor — clear it so next login
+        // mints a fresh JWT with sub = invite code.
+        console.warn('[CI API] Stale JWT detected (sub format invalid). Clearing token; please log in again.');
+        localStorage.removeItem('rebase_token');
+      }
     } catch {}
   }
   // Fallback: generate a stable anonymous ID so workspace creation works without JWT
