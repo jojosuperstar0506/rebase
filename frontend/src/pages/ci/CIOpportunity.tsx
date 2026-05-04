@@ -1,5 +1,8 @@
 import type { CSSProperties } from 'react';
-import { Map as MapIcon } from 'lucide-react';
+import {
+  Map as MapIcon, CalendarDays, Target, Gem, Users,
+  ShoppingBag, BarChart3,
+} from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import CISubNav from '../../components/ci/CISubNav';
 import ComingSoonHero from '../../components/ci/ComingSoonHero';
@@ -34,40 +37,41 @@ export default function CIOpportunity() {
     fontFamily: 'system-ui, -apple-system, sans-serif',
   };
 
+  const cardIcon = (Icon: typeof CalendarDays) => <Icon size={22} strokeWidth={1.75} />;
   const cards = lang === 'zh'
     ? [
         {
-          icon: '📅',
+          icon: cardIcon(CalendarDays),
           badge: '本月',
           title: '本月新品发布日历',
           description: '基于竞品上新节奏 + 行业季节性识别的 3-5 个上新窗口建议，附带每个窗口的差异化定位思路。',
         },
         {
-          icon: '🎯',
+          icon: cardIcon(Target),
           badge: '渠道',
           title: '渠道组合优化',
           description: '过去 30 天每个渠道的 ROI 评估，建议本月增加 / 减少哪个渠道的预算占比，附具体百分比。',
         },
         {
-          icon: '💎',
+          icon: cardIcon(Gem),
           badge: '价位带',
           title: '价格窗口分析',
           description: '识别本月最有切入机会的空白价位带，并给出推荐的产品定位、SKU 和上市策略。',
         },
         {
-          icon: '👥',
+          icon: cardIcon(Users),
           badge: 'KOL',
           title: '本月 KOL 战略',
           description: '该投头部还是中腰部？建议的合作清单、预算分配、内容方向，及与下月 brief 的衔接。',
         },
         {
-          icon: '🛍️',
+          icon: cardIcon(ShoppingBag),
           badge: '产品',
           title: '本月产品概念评估',
           description: '从过去 30 天 brief 累积的产品机会中挑选 1-2 个最具差异化潜力的概念，做完整的可行性 brief。',
         },
         {
-          icon: '📊',
+          icon: cardIcon(BarChart3),
           badge: '复盘',
           title: '上月复盘 + 本月调整',
           description: '上月推出的 GTM 计划实际表现如何？哪些假设被验证 / 推翻？本月的调整建议。',
@@ -75,37 +79,37 @@ export default function CIOpportunity() {
       ]
     : [
         {
-          icon: '📅',
+          icon: cardIcon(CalendarDays),
           badge: 'This month',
           title: "Launch calendar",
           description: '3–5 launch windows recommended based on competitor cadence + category seasonality, each with a differentiation angle.',
         },
         {
-          icon: '🎯',
+          icon: cardIcon(Target),
           badge: 'Channels',
           title: 'Channel mix optimization',
           description: '30-day ROI assessment per channel, with specific budget shift recommendations (e.g. "shift 20% from Douyin → XHS this month").',
         },
         {
-          icon: '💎',
+          icon: cardIcon(Gem),
           badge: 'Pricing',
           title: 'Pricing window analysis',
           description: 'Identifies the most promising whitespace price band this month, with recommended positioning, SKU, and go-to-market plan.',
         },
         {
-          icon: '👥',
+          icon: cardIcon(Users),
           badge: 'KOL',
           title: "This month's KOL strategy",
           description: 'Top-tier or mid-tier? Recommended creator list, budget allocation, content angles, and how it links to next month\'s brief.',
         },
         {
-          icon: '🛍️',
+          icon: cardIcon(ShoppingBag),
           badge: 'Product',
           title: 'Product concept evaluation',
           description: 'Picks 1–2 most differentiated concepts from the past 30 days of briefs and produces a full feasibility brief.',
         },
         {
-          icon: '📊',
+          icon: cardIcon(BarChart3),
           badge: 'Review',
           title: 'Last month review + this month\'s pivot',
           description: 'How did last month\'s GTM plan perform? Which assumptions held / broke? What to adjust this month.',

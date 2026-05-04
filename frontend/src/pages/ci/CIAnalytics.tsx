@@ -22,6 +22,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { CSSProperties } from 'react';
 import { AlertTriangle, BarChart3, ListChecks, Tag } from 'lucide-react';
+import { MetricIcon } from '../../utils/metricIcons';
 import { useApp } from '../../context/AppContext';
 import type { ColorSet } from '../../theme/colors';
 import CISubNav from '../../components/ci/CISubNav';
@@ -451,7 +452,7 @@ export default function CIAnalytics() {
         <CIDrillDownModal
           open={true}
           onClose={() => setDrill(null)}
-          title={`${drill.metric.icon} ${lang === 'zh' ? drill.metric.label.zh : drill.metric.label.en}`}
+          title={lang === 'zh' ? drill.metric.label.zh : drill.metric.label.en}
           subtitle={lang === 'zh' ? drill.metric.description.zh : drill.metric.description.en}
           size="md"
         >
@@ -469,7 +470,7 @@ export default function CIAnalytics() {
         <CIDrillDownModal
           open={true}
           onClose={() => setDrill(null)}
-          title={`${drill.metric.icon} ${lang === 'zh' ? drill.metric.label.zh : drill.metric.label.en}`}
+          title={lang === 'zh' ? drill.metric.label.zh : drill.metric.label.en}
           subtitle={lang === 'zh' ? '本周优先指标 · 深度分析' : "Priority metric · deep dive"}
           size="md"
         >
@@ -486,7 +487,7 @@ export default function CIAnalytics() {
         <CIDrillDownModal
           open={true}
           onClose={() => setDrill(null)}
-          title={`🟩 ${drill.item.title}`}
+          title={drill.item.title}
           subtitle={drill.item.summary}
           size="lg"
         >
@@ -545,7 +546,7 @@ function BrandInsightCard({ brand, isOwn, narrative, C, lang, highlight, cardRef
         transition: 'outline 0.3s, border-color 0.3s',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-        {isOwn && <span style={{ fontSize: 12 }}>🏷️</span>}
+        {isOwn && <Tag size={12} strokeWidth={2} color={C.ac} />}
         <span style={{ fontSize: 14, fontWeight: 700, color: C.tx }}>{brand}</span>
         {isOwn && (
           <span style={{
@@ -583,7 +584,7 @@ function PriorityMetricCard({ metric, rank, onClick, C, lang }: {
         <span style={{ fontSize: 10, fontWeight: 700, color: C.t3, letterSpacing: '0.05em' }}>
           #{rank}
         </span>
-        <span style={{ fontSize: 18 }}>{metric.icon}</span>
+        <MetricIcon name={metric.icon} size={16} color={C.ac} />
         <span style={{ fontSize: 14, fontWeight: 700, color: C.tx, flex: 1 }}>
           {lang === 'zh' ? metric.label.zh : metric.label.en}
         </span>
@@ -672,8 +673,10 @@ function WhiteSpaceCard({ item, onClick, C, lang, isMobile }: {
           fontSize: 10, fontWeight: 700, color: catColor,
           background: `${catColor}18`, padding: '3px 8px', borderRadius: 4,
           letterSpacing: '0.05em', textTransform: 'uppercase',
+          display: 'inline-flex', alignItems: 'center', gap: 5,
         }}>
-          🟩 {lang === 'zh' ? catLabelMap[item.category].zh : catLabelMap[item.category].en}
+          <span style={{ width: 7, height: 7, borderRadius: 2, background: catColor, display: 'inline-block' }} />
+          {lang === 'zh' ? catLabelMap[item.category].zh : catLabelMap[item.category].en}
         </span>
         <span style={{ fontSize: 11, color: C.t3, marginLeft: 'auto' }}>
           {lang === 'zh' ? '机会分' : 'Opportunity'} {item.opportunity_score}/100
@@ -736,7 +739,7 @@ function AllMetricMiniCard({ metric, ownBrand, onClick, C, lang }: {
         <span style={{ fontSize: 11, color: C.t3 }}>{domainLabel(metric.domain, lang)}</span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-        <span style={{ fontSize: 14 }}>{metric.icon}</span>
+        <MetricIcon name={metric.icon} size={13} color={C.ac} />
         <span style={{ fontSize: 13, fontWeight: 600, color: C.tx }}>
           {lang === 'zh' ? metric.label.zh : metric.label.en}
         </span>
@@ -801,8 +804,10 @@ function MetricDetailView({ metric, ownBrand, trends, C, lang }: {
               <span style={{
                 width: 84, color: isOwn ? C.tx : C.t2,
                 fontWeight: isOwn ? 700 : 400, flexShrink: 0,
+                display: 'inline-flex', alignItems: 'center', gap: 4,
               }}>
-                {isOwn && '🏷️ '}{name}
+                {isOwn && <Tag size={11} strokeWidth={2} color={C.ac} />}
+                {name}
               </span>
               <div style={{ flex: 1, height: 10, background: C.s2, borderRadius: 5, overflow: 'hidden' }}>
                 <div style={{
@@ -905,7 +910,10 @@ function WhyThisScore({ metric, ownBrand, C, lang }: {
                   fontSize: 12, color: C.tx, fontWeight: isOwn ? 700 : 500,
                 }}
               >
-                <span>{isOwn && '🏷️ '}{brand}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  {isOwn && <Tag size={11} strokeWidth={2} color={C.ac} />}
+                  {brand}
+                </span>
                 <span style={{ fontSize: 10, color: C.t3 }}>
                   {entries.length} {lang === 'zh' ? '项输入' : 'inputs'} {isExpanded ? '▾' : '▸'}
                 </span>

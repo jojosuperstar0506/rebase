@@ -17,6 +17,7 @@ import {
   AlertTriangle, Library as LibraryIcon, Newspaper, Smartphone,
   Lightbulb, ClipboardCopy,
 } from 'lucide-react';
+import { MetricIcon } from '../../utils/metricIcons';
 import { useApp } from '../../context/AppContext';
 import type { ColorSet } from '../../theme/colors';
 import CISubNav from '../../components/ci/CISubNav';
@@ -410,7 +411,7 @@ export default function CILibrary() {
         <CIDrillDownModal
           open={true}
           onClose={() => setDrill(null)}
-          title={`💡 ${drill.product.concept_name}`}
+          title={drill.product.concept_name}
           subtitle={drill.product.week_of ? formatWeek(drill.product.week_of, lang) : undefined}
           size="md"
         >
@@ -457,7 +458,7 @@ function BriefFullView({ brief, C, lang }: {
             padding: '10px 12px', background: C.s2, borderRadius: 6,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <span>{m.icon}</span>
+              <MetricIcon name={m.icon} size={13} color={C.ac} />
               <span style={{ fontSize: 11, color: C.t3 }}>#{i + 1} · {m.brand}</span>
             </div>
             <div style={{ fontSize: 13, fontWeight: 600, color: C.tx, marginBottom: 4 }}>{m.headline}</div>
@@ -492,8 +493,9 @@ function BriefFullView({ brief, C, lang }: {
             {lang === 'zh' ? '产品机会' : 'Product opportunity'}
           </div>
           <div style={{ padding: '12px 14px', background: C.s2, borderRadius: 6 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.tx, marginBottom: 6 }}>
-              💡 {brief.product_opportunity.concept_name}
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.tx, marginBottom: 6, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Lightbulb size={14} strokeWidth={2} color={C.ac} />
+              {brief.product_opportunity.concept_name}
             </div>
             <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.6 }}>
               {brief.product_opportunity.positioning}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useCIData } from '../../hooks/useCIData';
 import {
@@ -198,9 +199,12 @@ export default function WorkspaceSwitcher() {
               padding: '8px 10px',
               fontSize: 11, color: C.t3, lineHeight: 1.5,
             }}>
-              {lang === 'zh'
-                ? '⚠️ 无法从服务器获取工作区列表，显示的是本地缓存。'
-                : '⚠️ Could not load workspaces from server — showing locally cached list.'}
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <AlertTriangle size={11} strokeWidth={2} color="#f59e0b" />
+                {lang === 'zh'
+                  ? '无法从服务器获取工作区列表，显示的是本地缓存。'
+                  : 'Could not load workspaces from server — showing locally cached list.'}
+              </span>
             </div>
           )}
           <div style={{

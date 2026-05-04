@@ -22,6 +22,7 @@ import {
   Newspaper, AlertTriangle, RefreshCw, Hourglass,
   Lightbulb, ClipboardCopy, BarChart3,
 } from 'lucide-react';
+import { MetricIcon } from '../../utils/metricIcons';
 import { useApp } from '../../context/AppContext';
 import type { ColorSet } from '../../theme/colors';
 import CISubNav from '../../components/ci/CISubNav';
@@ -753,7 +754,9 @@ export default function CIBrief() {
                 borderLeft: `4px solid ${impactBg(m.impact)}`,
               }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                  <div style={{ fontSize: 24, lineHeight: 1, flexShrink: 0 }}>{m.icon}</div>
+                  <div style={{ flexShrink: 0, marginTop: 2 }}>
+                    <MetricIcon name={m.icon} size={22} color={impactBg(m.impact)} />
+                  </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 10, fontWeight: 700, color: C.t3, letterSpacing: '0.05em' }}>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { Inbox } from "lucide-react";
 import { useApp } from "../context/AppContext";
 
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || "rebase-admin-2026";
@@ -302,7 +303,7 @@ export default function Admin() {
 
         {!loading && !error && shown.length === 0 && (
           <div style={{ color: C.t2, textAlign: "center", padding: 40, background: C.s1, borderRadius: 10, border: `1px solid ${C.bd}` }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>📭</div>
+            <Inbox size={32} strokeWidth={1.5} color={C.t3} style={{ marginBottom: 12 }} />
             <div style={{ fontSize: 15, fontWeight: 600, color: C.tx, marginBottom: 8 }}>
               {filter === "pending" ? "No pending applicants right now." : filter === "approved" ? "No approved users yet." : "No applicants yet."}
             </div>

@@ -16,8 +16,9 @@ interface PreviewCard {
   title: string;
   /** 1–2 sentence preview of what the card will contain when launched. */
   description: string;
-  /** Emoji icon at the top of the card. */
-  icon: string;
+  /** Icon at the top of the card. Accepts a React node (lucide icon)
+   *  or a string (legacy emoji). */
+  icon: ReactNode;
   /** Optional small label above title (e.g. "Douyin", "Monthly", "Q4"). */
   badge?: string;
 }
@@ -146,7 +147,7 @@ export default function ComingSoonHero(props: ComingSoonHeroProps) {
       <div style={cardGrid}>
         {props.cards.map((card, i) => (
           <div key={i} style={cardStyle}>
-            <div style={{ fontSize: 24, marginBottom: 8 }}>{card.icon}</div>
+            <div style={{ marginBottom: 8, display: 'inline-flex', alignItems: 'center', fontSize: 24, lineHeight: 1, color: C.ac }}>{card.icon}</div>
             {card.badge && (
               <div style={{
                 display: 'inline-block',

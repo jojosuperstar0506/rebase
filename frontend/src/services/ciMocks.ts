@@ -131,7 +131,7 @@ export const MOCK_BRIEF_NIKE: WeeklyBrief = {
     {
       id: 'm1',
       brand: 'Adidas',
-      icon: '🚀',
+      icon: 'Momentum',
       headline: 'Adidas发布Samba OG限量款',
       detail: '4天前发布，抖音48小时内获得420万点赞，#Samba话题播放量1.2亿。',
       so_what: '限量复古系列正在蚕食¥700-1000价位的潮流用户流量。',
@@ -141,7 +141,7 @@ export const MOCK_BRIEF_NIKE: WeeklyBrief = {
     {
       id: 'm2',
       brand: '李宁',
-      icon: '⚠️',
+      icon: 'Threat',
       headline: '李宁KOL投放激增 +43%',
       detail: '过去两周新增28名中腰部创作者（5-50万粉丝），覆盖运动、潮流、校园三个赛道。',
       so_what: '他们在构建一个自下而上的达人网络，这是目前你矩阵中较薄弱的环节。',
@@ -151,7 +151,7 @@ export const MOCK_BRIEF_NIKE: WeeklyBrief = {
     {
       id: 'm3',
       brand: 'Nike',
-      icon: '📉',
+      icon: 'VoiceVolume',
       headline: '你的品牌声量 −3分',
       detail: '本周抖音视频发布量环比下降40%，总曝光量较上周下降约12%。',
       so_what: '内容节奏放缓正在让你损失日常心智曝光，竞品正好在此时加码。',
@@ -551,14 +551,14 @@ export const MOCK_ALL_METRICS_NIKE: FullMetric[] = [
   // ── Consumer domain ────────────────────────────────────────────────
   {
     metric_key: 'consumer_mindshare', domain: 'consumer',
-    label: { en: 'Mindshare', zh: '消费心智' }, icon: '🧠',
+    label: { en: 'Mindshare', zh: '消费心智' }, icon: 'Mindshare',
     description: { en: 'Share of consumer conversation', zh: '消费者对话份额' },
     scores: { Nike: 68, Adidas: 77, '安踏': 54, '李宁': 62 },
     delta: -2,
   },
   {
     metric_key: 'keywords', domain: 'consumer',
-    label: { en: 'Keywords', zh: '关键词' }, icon: '🔍',
+    label: { en: 'Keywords', zh: '关键词' }, icon: 'Keywords',
     description: { en: 'Brand keyword strength vs category', zh: '品牌关键词强度' },
     scores: { Nike: 72, Adidas: 81, '安踏': 58, '李宁': 65 },
     delta: 1,
@@ -566,28 +566,28 @@ export const MOCK_ALL_METRICS_NIKE: FullMetric[] = [
   // ── Product domain ─────────────────────────────────────────────────
   {
     metric_key: 'trending_products', domain: 'product',
-    label: { en: 'Hot Products', zh: '热门商品' }, icon: '🔥',
+    label: { en: 'Hot Products', zh: '热门商品' }, icon: 'HotProducts',
     description: { en: 'Top-selling + new launch momentum', zh: '畅销品与新品势能' },
     scores: { Nike: 78, Adidas: 85, '安踏': 60, '李宁': 68 },
     delta: -1,
   },
   {
     metric_key: 'design_profile', domain: 'product',
-    label: { en: 'Design DNA', zh: '设计分析' }, icon: '🎨',
+    label: { en: 'Design DNA', zh: '设计分析' }, icon: 'DesignDNA',
     description: { en: 'Visual style + material innovation signals', zh: '视觉风格与材质创新信号' },
     scores: { Nike: 41, Adidas: 38, '安踏': 32, '李宁': 35 },
     delta: 0,
   },
   {
     metric_key: 'price_positioning', domain: 'product',
-    label: { en: 'Pricing', zh: '价格定位' }, icon: '💰',
+    label: { en: 'Pricing', zh: '价格定位' }, icon: 'Pricing',
     description: { en: 'Price band coverage and premium power', zh: '价格带覆盖与溢价能力' },
     scores: { Nike: 82, Adidas: 79, '安踏': 55, '李宁': 63 },
     delta: 0,
   },
   {
     metric_key: 'launch_frequency', domain: 'product',
-    label: { en: 'Launch Pace', zh: '新品频率' }, icon: '📦',
+    label: { en: 'Launch Pace', zh: '新品频率' }, icon: 'LaunchPace',
     description: { en: 'New SKU cadence over 90 days', zh: '90天新品上架节奏' },
     scores: { Nike: 64, Adidas: 74, '安踏': 71, '李宁': 69 },
     delta: -3,
@@ -595,21 +595,21 @@ export const MOCK_ALL_METRICS_NIKE: FullMetric[] = [
   // ── Marketing domain ───────────────────────────────────────────────
   {
     metric_key: 'voice_volume', domain: 'marketing',
-    label: { en: 'Voice Volume', zh: '品牌声量' }, icon: '📢',
+    label: { en: 'Voice Volume', zh: '品牌声量' }, icon: 'VoiceVolume',
     description: { en: 'Total social reach + growth rate', zh: '社交总曝光与增长率' },
     scores: { Nike: 68, Adidas: 81, '安踏': 64, '李宁': 71 },
     delta: -3,
   },
   {
     metric_key: 'content_strategy', domain: 'marketing',
-    label: { en: 'Content', zh: '内容策略' }, icon: '📝',
+    label: { en: 'Content', zh: '内容策略' }, icon: 'Content',
     description: { en: 'Post cadence + engagement efficiency', zh: '发布节奏与互动效率' },
     scores: { Nike: 62, Adidas: 70, '安踏': 58, '李宁': 65 },
     delta: -4,
   },
   {
     metric_key: 'kol_strategy', domain: 'marketing',
-    label: { en: 'KOL Strategy', zh: 'KOL策略' }, icon: '👥',
+    label: { en: 'KOL Strategy', zh: 'KOL策略' }, icon: 'KOL',
     description: { en: 'Creator partnership depth and breadth', zh: '创作者合作的深度与广度' },
     scores: { Nike: 52, Adidas: 68, '安踏': 59, '李宁': 71 },
     delta: -9,   // This is the one the brief called out — 李宁 surge
@@ -617,21 +617,21 @@ export const MOCK_ALL_METRICS_NIKE: FullMetric[] = [
   // ── Core composites (momentum / threat / wtp) ──────────────────────
   {
     metric_key: 'momentum', domain: 'marketing',
-    label: { en: 'Momentum', zh: '增长势能' }, icon: '🚀',
+    label: { en: 'Momentum', zh: '增长势能' }, icon: 'Momentum',
     description: { en: 'Composite growth indicator', zh: '综合增长指标' },
     scores: { Nike: 71, Adidas: 78, '安踏': 62, '李宁': 66 },
     delta: -2,
   },
   {
     metric_key: 'threat', domain: 'consumer',
-    label: { en: 'Threat Index', zh: '威胁指数' }, icon: '⚡',
+    label: { en: 'Threat Index', zh: '威胁指数' }, icon: 'Threat',
     description: { en: 'How much pressure competitors put on you', zh: '竞品施压程度' },
     scores: { Nike: 0, Adidas: 72, '安踏': 58, '李宁': 64 },  // threat doesn't apply to self
     delta: null,
   },
   {
     metric_key: 'wtp', domain: 'product',
-    label: { en: 'Price Power', zh: '溢价能力' }, icon: '💎',
+    label: { en: 'Price Power', zh: '溢价能力' }, icon: 'PricePower',
     description: { en: 'Willingness-to-pay above category avg', zh: '超越品类均价的意愿' },
     scores: { Nike: 74, Adidas: 78, '安踏': 52, '李宁': 58 },
     delta: 0,
@@ -641,7 +641,7 @@ export const MOCK_ALL_METRICS_NIKE: FullMetric[] = [
 export const MOCK_PRIORITY_METRICS_NIKE: PriorityMetric[] = [
   {
     metric_key: 'kol_strategy', domain: 'marketing',
-    label: { en: 'KOL Strategy', zh: 'KOL策略' }, icon: '👥',
+    label: { en: 'KOL Strategy', zh: 'KOL策略' }, icon: 'KOL',
     your_score: 52,
     best_competitor: { name: '李宁', score: 71 },
     delta: -9,
@@ -650,7 +650,7 @@ export const MOCK_PRIORITY_METRICS_NIKE: PriorityMetric[] = [
   },
   {
     metric_key: 'voice_volume', domain: 'marketing',
-    label: { en: 'Voice Volume', zh: '品牌声量' }, icon: '📢',
+    label: { en: 'Voice Volume', zh: '品牌声量' }, icon: 'VoiceVolume',
     your_score: 68,
     best_competitor: { name: 'Adidas', score: 81 },
     delta: -3,
@@ -668,7 +668,7 @@ export const MOCK_PRIORITY_METRICS_NIKE: PriorityMetric[] = [
   },
   {
     metric_key: 'launch_frequency', domain: 'product',
-    label: { en: 'Launch Pace', zh: '新品频率' }, icon: '📦',
+    label: { en: 'Launch Pace', zh: '新品频率' }, icon: 'LaunchPace',
     your_score: 64,
     best_competitor: { name: 'Adidas', score: 74 },
     delta: -3,

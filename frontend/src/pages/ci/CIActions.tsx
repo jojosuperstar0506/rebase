@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { Target } from 'lucide-react';
+import { Target, Smartphone, PenLine, MessageSquare } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import CISubNav from '../../components/ci/CISubNav';
 import ComingSoonHero from '../../components/ci/ComingSoonHero';
@@ -31,28 +31,29 @@ export default function CIActions() {
     fontFamily: 'system-ui, -apple-system, sans-serif',
   };
 
+  const cardIcon = (Icon: typeof Smartphone) => <Icon size={22} strokeWidth={1.75} />;
   const cards = lang === 'zh'
     ? [
         {
-          icon: '📱',
+          icon: cardIcon(Smartphone),
           badge: '抖音',
           title: '今日抖音脚本',
           description: '基于昨天竞品动态自动生成的 15 秒短视频脚本，包含开场钩子、主体内容、CTA 和话题标签。',
         },
         {
-          icon: '📝',
+          icon: cardIcon(PenLine),
           badge: '小红书',
           title: '今日小红书种草',
           description: '匹配今日热点的图文笔记草稿，标题 + 正文 + 标签 + 配图建议，复制即可发布。',
         },
         {
-          icon: '💬',
+          icon: cardIcon(MessageSquare),
           badge: '互动',
           title: '热评回复建议',
           description: '当日热门评论的智能回复模板，帮你在 5 分钟内完成评论区运营。',
         },
         {
-          icon: '🎯',
+          icon: cardIcon(Target),
           badge: '主动出击',
           title: '今日主动评论目标',
           description: '推荐 3-5 个值得评论的竞品账号 / 创作者帖子，帮你借势曝光。',
@@ -60,25 +61,25 @@ export default function CIActions() {
       ]
     : [
         {
-          icon: '📱',
+          icon: cardIcon(Smartphone),
           badge: 'Douyin',
           title: "Today's Douyin script",
           description: 'A ready-to-shoot 15-sec short video script — hook, body, CTA, and hashtags — based on yesterday\'s competitive moves.',
         },
         {
-          icon: '📝',
+          icon: cardIcon(PenLine),
           badge: 'XHS',
           title: "Today's Xiaohongshu post",
           description: 'A draft note matched to today\'s trending topics: title, body, tags, image suggestions. Copy-paste to publish.',
         },
         {
-          icon: '💬',
+          icon: cardIcon(MessageSquare),
           badge: 'Engagement',
           title: 'Top-comment reply templates',
           description: 'Smart reply templates for today\'s hot comments — finish your comment-section ops in 5 minutes.',
         },
         {
-          icon: '🎯',
+          icon: cardIcon(Target),
           badge: 'Outbound',
           title: 'Today\'s outbound targets',
           description: '3–5 competitor accounts / creator posts worth commenting on today, to ride their reach.',
