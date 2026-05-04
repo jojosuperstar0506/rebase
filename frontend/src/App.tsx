@@ -59,7 +59,7 @@ function NavLink({ to, label, highlight }: { to: string; label: string; highligh
 }
 
 function Nav() {
-  const { colors: C, theme, lang, setTheme, setLang } = useApp();
+  const { colors: C, theme, lang, setTheme, setLang, langSwitching } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
   function checkAuth() {
@@ -145,22 +145,29 @@ function Nav() {
       background: C.navBg, borderBottom: `1px solid ${C.navBd}`,
       fontFamily: "system-ui, sans-serif", position: "sticky", top: 0, zIndex: 100,
     }}>
+      {/* Spinner keyframes — used by the language toggle's loading indicator. */}
+      <style>{`@keyframes rebase-spin { to { transform: rotate(360deg); } }`}</style>
+
       {/* Logo */}
       <Link to="/" style={{ textDecoration: "none", fontSize: 18, fontWeight: 800, color: C.ac, marginRight: 28, letterSpacing: -0.5, flexShrink: 0 }}>
         Rebase
       </Link>
 
-      {/* Left nav links */}
+      {/* Left nav links — slimmed 2026-05-04. The platform now centers on
+          one product surface (Intelligence / 竞品情报). The previous tabs
+          (Diagnostics calculator, Agents, Workflow Discovery, Costs) were
+          earlier-iteration ideas that confuse new users — they still
+          route at /calculator, /agents, /workflows, /costs for testing,
+          but no longer surface in the public nav. Admin/Will/Joanna can
+          re-add them later if needed. */}
       <div style={{ display: "flex", gap: 22, alignItems: "center", overflow: "hidden" }}>
-        <NavLink to="/calculator" label={t(nav.diagnostics, lang)} />
-
         {!isLoggedIn && (
           <NavLink to="/onboarding" label={t(nav.requestAccess, lang)} highlight />
         )}
 
         {isLoggedIn && (
           <>
-            {/* CI nav link with alert badge (real count) or dot fallback */}
+            {/* Intelligence nav link with alert badge (real count) or dot fallback */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <NavLink to="/ci" label={t(nav.ciVfinal, lang)} />
               {alertCount > 0 ? (
@@ -186,11 +193,21 @@ function Nav() {
                 }} />
               )}
             </div>
-            <NavLink to="/agents" label={t(nav.agents, lang)} />
-            <NavLink to="/workflows" label={t(nav.workflows, lang)} />
-            <NavLink to="/costs" label={t(nav.costs, lang)} />
           </>
         )}
+
+        {/* Contact link — opens default mail client. Visible to logged-out
+            visitors (so prospects can reach out) and logged-in users (so
+            existing customers can give feedback without leaving the app). */}
+        <a
+          href="mailto:hello@rebase.io?subject=Rebase%20feedback"
+          style={{
+            textDecoration: "none", fontSize: 14, fontWeight: 400,
+            color: C.t2, padding: "6px 2px", whiteSpace: "nowrap",
+          }}
+        >
+          {t(nav.contact, lang)}
+        </a>
       </div>
 
       {/* Right controls */}
@@ -203,8 +220,29 @@ function Nav() {
         </button>
 
         {/* Language toggle */}
-        <button onClick={() => setLang(lang === "en" ? "zh" : "en")} style={btnStyle} title="Switch language">
-          {lang === "en" ? "中文" : "EN"}
+        <button
+          onClick={() => setLang(lang === "en" ? "zh" : "en")}
+          style={{
+            ...btnStyle,
+            opacity: langSwitching ? 0.6 : 1,
+            cursor: langSwitching ? "wait" : "pointer",
+            display: "inline-flex", alignItems: "center", gap: 6,
+          }}
+          title="Switch language"
+          disabled={langSwitching}
+        >
+          {langSwitching && (
+            <span
+              aria-hidden
+              style={{
+                width: 10, height: 10, borderRadius: "50%",
+                border: `2px solid ${C.t2}`, borderTopColor: "transparent",
+                display: "inline-block",
+                animation: "rebase-spin 0.7s linear infinite",
+              }}
+            />
+          )}
+          <span>{lang === "en" ? "中文" : "EN"}</span>
         </button>
 
         {/* Admin — visible when logged out (for Will/Joanna) or when logged in as admin; hidden for regular users */}
@@ -228,11 +266,47 @@ function Nav() {
   );
 }
 
+function LangSwitchingToast() {
+  const { colors: C, lang, langSwitching } = useApp();
+  if (!langSwitching) return null;
+  return (
+    <div style={{
+      position: "fixed", top: 70, right: 20, zIndex: 200,
+      background: C.s1, border: `1px solid ${C.bd}`,
+      borderRadius: 8, padding: "10px 16px",
+      display: "flex", alignItems: "center", gap: 10,
+      fontSize: 13, color: C.tx, fontFamily: "system-ui, sans-serif",
+      boxShadow: "0 4px 16px rgba(0,0,0,0.18)",
+      animation: "rebase-toast-in 0.18s ease-out",
+    }}>
+      <style>{`
+        @keyframes rebase-toast-in {
+          from { opacity: 0; transform: translateY(-6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+      <span
+        aria-hidden
+        style={{
+          width: 12, height: 12, borderRadius: "50%",
+          border: `2px solid ${C.ac}`, borderTopColor: "transparent",
+          display: "inline-block",
+          animation: "rebase-spin 0.7s linear infinite",
+        }}
+      />
+      <span>
+        {lang === "zh" ? "正在切换为中文…" : "Switching to English…"}
+      </span>
+    </div>
+  );
+}
+
 function AppRoutes() {
   const { colors: C } = useApp();
   return (
     <div style={{ background: C.bg, minHeight: "100vh" }}>
       <Nav />
+      <LangSwitchingToast />
       <Routes>
         {/* Public */}
         <Route path="/" element={<Home />} />

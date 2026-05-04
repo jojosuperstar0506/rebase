@@ -13,7 +13,8 @@ export const T = {
     logout: { en: "Log out", zh: "退出" },
     darkMode: { en: "Dark", zh: "深色" },
     lightMode: { en: "Light", zh: "浅色" },
-    ciVfinal: { en: "CI vFinal", zh: "竞品情报" },
+    ciVfinal: { en: "Intelligence", zh: "竞品情报" },
+    contact: { en: "Contact", zh: "联系我们" },
   },
 
   // ── CI vFinal ───────────────────────────────────────────────────
