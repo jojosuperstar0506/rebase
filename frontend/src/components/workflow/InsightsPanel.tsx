@@ -1,4 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  ClipboardList, AlertCircle, Lightbulb, DollarSign,
+  Building2, Wrench, User, Zap, Bookmark,
+} from "lucide-react";
 import type { GapAnalysis, WorkflowGraph, WorkflowNode, ComparisonData, AutomationOpp, Bottleneck, OptimizedWorkflowNode, Difficulty, Severity } from "../../types/workflow";
 import { useApp } from "../../context/AppContext";
 
@@ -148,7 +152,10 @@ function OverviewMode({ analysis, graph, bottleneckMap, onNodeSelect }: { analys
       {/* Node list */}
       <section>
         <div style={{ fontSize: 16, fontWeight: 700, color: C.tx, marginBottom: 10 }}>
-          📋 流程步骤 <span style={{ fontSize: 13, fontWeight: 400, color: C.t2 }}>Process Steps</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <ClipboardList size={14} strokeWidth={2} />
+            流程步骤 <span style={{ fontSize: 13, fontWeight: 400, color: C.t2 }}>Process Steps</span>
+          </span>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {graph.nodes.map((node) => {
@@ -175,9 +182,18 @@ function OverviewMode({ analysis, graph, bottleneckMap, onNodeSelect }: { analys
 
       {/* Quick stats */}
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", paddingTop: 12, borderTop: `1px solid ${C.bd}` }}>
-        <span style={{ fontSize: 13, color: C.t2 }}>🔴 <span style={{ color: RED, fontWeight: 600 }}>{analysis.bottlenecks.length}</span> 个瓶颈</span>
-        <span style={{ fontSize: 13, color: C.t2 }}>💡 <span style={{ color: C.ac, fontWeight: 600 }}>{analysis.opportunities.length}</span> 个优化机会</span>
-        {totalSavings > 0 && <span style={{ fontSize: 13, color: C.t2 }}>💰 月节省潜力 <span style={{ color: GREEN, fontWeight: 600 }}>{formatCost(totalSavings)}</span></span>}
+        <span style={{ fontSize: 13, color: C.t2, display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <AlertCircle size={13} strokeWidth={2} color={RED} />
+          <span style={{ color: RED, fontWeight: 600 }}>{analysis.bottlenecks.length}</span> 个瓶颈
+        </span>
+        <span style={{ fontSize: 13, color: C.t2, display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <Lightbulb size={13} strokeWidth={2} color={C.ac} />
+          <span style={{ color: C.ac, fontWeight: 600 }}>{analysis.opportunities.length}</span> 个优化机会
+        </span>
+        {totalSavings > 0 && <span style={{ fontSize: 13, color: C.t2, display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <DollarSign size={13} strokeWidth={2} color={GREEN} />
+          月节省潜力 <span style={{ color: GREEN, fontWeight: 600 }}>{formatCost(totalSavings)}</span>
+        </span>}
       </div>
     </div>
   );
@@ -220,10 +236,12 @@ function DetailMode({ node, analysis, comparison, currentView, onBack, onShowCon
           </div>
         </div>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 13, color: C.t2, paddingLeft: 20 }}>
-          {node.department && <span>🏢 {node.department}</span>}
-          {node.tool_used  && <span>🔧 {node.tool_used}</span>}
+          {node.department && <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Building2 size={12} strokeWidth={1.75} />{node.department}</span>}
+          {node.tool_used  && <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Wrench size={12} strokeWidth={1.75} />{node.tool_used}</span>}
           {node.avg_time_minutes != null && <span>⏱ {node.avg_time_minutes}分钟</span>}
-          <span>{node.is_manual ? "👤 人工" : "⚡ 自动"}</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+            {node.is_manual ? <><User size={12} strokeWidth={1.75} />人工</> : <><Zap size={12} strokeWidth={1.75} />自动</>}
+          </span>
         </div>
       </div>
 
@@ -243,7 +261,10 @@ function DetailMode({ node, analysis, comparison, currentView, onBack, onShowCon
 
       {currentView === "original" && opportunity && (
         <section>
-          <div style={{ fontSize: 14, fontWeight: 700, color: C.tx, marginBottom: 10 }}>📌 行业参考</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.tx, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+            <Bookmark size={14} strokeWidth={2} />
+            行业参考
+          </div>
           <div style={{ background: C.s1, borderLeft: `3px solid ${C.ac}`, borderRadius: 8, padding: "14px 16px" }}>
             <p style={{ fontSize: 13, color: C.tx, lineHeight: 1.7, margin: "0 0 8px", wordBreak: "break-word", overflowWrap: "break-word" }}>{opportunity.best_practice_reference}</p>
             <div style={{ fontSize: 12, color: C.t2 }}>来源：行业最佳实践案例</div>
@@ -262,7 +283,10 @@ function DetailMode({ node, analysis, comparison, currentView, onBack, onShowCon
 
       {currentView === "original" && bottleneck && !opportunity && (
         <section>
-          <div style={{ fontSize: 14, fontWeight: 700, color: C.tx, marginBottom: 10 }}>🔴 瓶颈原因</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.tx, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+            <AlertCircle size={14} strokeWidth={2} color={RED} />
+            瓶颈原因
+          </div>
           <div style={{ background: C.s1, borderLeft: `3px solid ${severityColor(bottleneck.severity)}`, borderRadius: 8, padding: "14px 16px" }}>
             <p style={{ fontSize: 13, color: C.tx, lineHeight: 1.7, margin: "0 0 10px", wordBreak: "break-word", overflowWrap: "break-word" }}>{bottleneck.reason}</p>
             <div style={{ fontSize: 12, color: C.t2 }}>⏱ 每日浪费 <span style={{ color: severityColor(bottleneck.severity), fontWeight: 600 }}>{bottleneck.time_waste_minutes}</span> 分钟</div>

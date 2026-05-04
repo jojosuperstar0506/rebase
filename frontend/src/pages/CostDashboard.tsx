@@ -1,32 +1,34 @@
+import { Wallet, TrendingUp, Trophy, Bell, Wrench } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useApp } from "../context/AppContext";
 
 export default function CostDashboard() {
   const { colors: C, lang } = useApp();
 
-  const features = [
+  const features: Array<{ Icon: LucideIcon; title: string; desc: string }> = [
     {
-      icon: "💸",
+      Icon: Wallet,
       title: lang === "zh" ? "实时 AI 成本追踪" : "Real-time AI Cost Tracking",
       desc: lang === "zh"
         ? "按智能体、按任务追踪每月 AI API 消耗，精确到每次调用。"
         : "Track monthly AI API spend by agent and task, down to every API call.",
     },
     {
-      icon: "📈",
+      Icon: TrendingUp,
       title: lang === "zh" ? "ROI 仪表盘" : "ROI Dashboard",
       desc: lang === "zh"
         ? "节省工时 × 城市薪资 = 每月量化节省额，一眼看清 AI 的真实回报。"
         : "Hours saved × salary benchmark = monthly savings — see the real return on your AI investment.",
     },
     {
-      icon: "🏆",
+      Icon: Trophy,
       title: lang === "zh" ? "行业对标" : "Industry Benchmarking",
       desc: lang === "zh"
         ? "与同行业企业的 AI 支出效率对比，找到优化空间。"
         : "Compare your AI spend efficiency against peers in the same industry.",
     },
     {
-      icon: "🔔",
+      Icon: Bell,
       title: lang === "zh" ? "预算预警" : "Budget Alerts",
       desc: lang === "zh"
         ? "自定义每月预算上限，超阈值自动推送告警通知。"
@@ -57,7 +59,7 @@ export default function CostDashboard() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 16, marginBottom: 40 }}>
           {features.map((f) => (
             <div key={f.title} style={{ background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 12, padding: 24, opacity: 0.85 }}>
-              <div style={{ fontSize: 28, marginBottom: 12 }}>{f.icon}</div>
+              <f.Icon size={26} strokeWidth={1.75} color={C.ac} style={{ marginBottom: 12 }} />
               <div style={{ fontSize: 15, fontWeight: 700, color: C.tx, marginBottom: 6 }}>{f.title}</div>
               <p style={{ fontSize: 13, color: C.t2, lineHeight: 1.65, margin: 0 }}>{f.desc}</p>
             </div>
@@ -66,7 +68,7 @@ export default function CostDashboard() {
 
         {/* ETA note */}
         <div style={{ background: C.s2, border: `1px solid ${C.bd}`, borderRadius: 12, padding: "24px 28px", textAlign: "center" }}>
-          <div style={{ fontSize: 22, marginBottom: 10 }}>🛠️</div>
+          <Wrench size={22} strokeWidth={1.75} color={C.t2} style={{ marginBottom: 10 }} />
           <div style={{ fontSize: 15, fontWeight: 600, color: C.tx, marginBottom: 6 }}>
             {lang === "zh" ? "正在开发中" : "Under Active Development"}
           </div>

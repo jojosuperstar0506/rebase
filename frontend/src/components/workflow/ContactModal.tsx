@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { CheckCircle2, AlertTriangle } from "lucide-react";
 import { useApp } from "../../context/AppContext";
 
 interface ContactModalProps {
@@ -94,7 +95,7 @@ export default function ContactModal({ isOpen, onClose, workflowName }: ContactM
 
         {submitStatus === "success" ? (
           <div style={{ textAlign: "center", padding: "32px 0" }}>
-            <div style={{ fontSize: 40, marginBottom: 16 }}>✅</div>
+            <CheckCircle2 size={40} strokeWidth={1.75} color="#22c55e" style={{ marginBottom: 16 }} />
             <div style={{ fontSize: 18, fontWeight: 700, color: C.tx, marginBottom: 8 }}>提交成功！</div>
             <div style={{ fontSize: 14, color: C.t2, lineHeight: 1.6 }}>我们的顾问将在24小时内联系您。<br />Our consultant will contact you within 24 hours.</div>
           </div>
@@ -123,7 +124,10 @@ export default function ContactModal({ isOpen, onClose, workflowName }: ContactM
             </div>
 
             {submitStatus === "error" && submitError && (
-              <div style={{ color: C.danger, fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>⚠ {submitError}</div>
+              <div style={{ color: C.danger, fontSize: 13, marginBottom: 12, lineHeight: 1.5, display: "flex", alignItems: "center", gap: 6 }}>
+                <AlertTriangle size={13} strokeWidth={2} />
+                {submitError}
+              </div>
             )}
 
             <button type="submit" disabled={submitStatus === "submitting"} style={{ width: "100%", minHeight: 44, padding: "12px 24px", background: submitStatus === "submitting" ? `${C.ac}80` : C.ac, border: "none", borderRadius: 8, color: "#000", fontSize: 15, fontWeight: 700, cursor: submitStatus === "submitting" ? "not-allowed" : "pointer", fontFamily: "system-ui, sans-serif", transition: "background 0.2s" }}>

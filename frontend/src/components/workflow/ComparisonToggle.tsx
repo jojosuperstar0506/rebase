@@ -1,3 +1,4 @@
+import { Trophy } from "lucide-react";
 import { useApp } from "../../context/AppContext";
 
 interface ComparisonToggleProps {
@@ -39,8 +40,9 @@ export default function ComparisonToggle({ view, onViewChange }: ComparisonToggl
         <button onClick={() => onViewChange("original")} style={view === "original" ? activeStyle : inactiveStyle}>
           ● 当前流程 Current
         </button>
-        <button onClick={() => onViewChange("optimized")} style={view === "optimized" ? activeStyle : inactiveStyle}>
-          🏆 行业标杆 Best-in-Class
+        <button onClick={() => onViewChange("optimized")} style={{ ...(view === "optimized" ? activeStyle : inactiveStyle), display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Trophy size={13} strokeWidth={2} />
+          行业标杆 Best-in-Class
         </button>
       </div>
     </div>

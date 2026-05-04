@@ -153,7 +153,7 @@ function NodeShape({ ln, isSelected, onClick, isOptimized, acColor }: { ln: Layo
 
       {lines.map((line, i) => (
         <text key={i} x={0} y={textStartY + i * lineHeight + 4} textAnchor="middle" fill="#fff" fontSize={i === 0 ? 12 : 10} fontWeight={i === 0 ? 600 : 400} fontFamily="system-ui, sans-serif" opacity={i === 0 ? 1 : 0.8} style={{ pointerEvents: "none" }}>
-          {i === 1 && toolText ? `📊 ${line}` : i === 2 ? `⏱ ${line}` : line}
+          {line}
         </text>
       ))}
 
@@ -165,7 +165,7 @@ function NodeShape({ ln, isSelected, onClick, isOptimized, acColor }: { ln: Layo
       )}
 
       {isOptimized && (node as { optimization_note?: string }).optimization_note && (
-        <text x={NODE_W / 2 - 4} y={-NODE_H / 2 + 12} textAnchor="end" fontSize={11} style={{ pointerEvents: "none", userSelect: "none" }}>✨</text>
+        <circle cx={NODE_W / 2 - 8} cy={-NODE_H / 2 + 8} r={3} fill={GREEN} />
       )}
     </g>
   );
@@ -201,7 +201,7 @@ function Legend({ isOptimized, t2Color }: { isOptimized?: boolean; t2Color: stri
     { color: AMBER, label: "手动步骤 Manual" },
     { color: GREEN, label: "已自动化 Automated" },
     { color: GRAY,  label: "决策/交接 Decision" },
-    ...(isOptimized ? [{ color: GREEN, label: "✨ 已优化 Optimized" }] : []),
+    ...(isOptimized ? [{ color: GREEN, label: "已优化 Optimized" }] : []),
   ];
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 16, padding: "12px 0", justifyContent: "center" }}>

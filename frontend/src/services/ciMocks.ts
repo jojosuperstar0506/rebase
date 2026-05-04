@@ -659,7 +659,7 @@ export const MOCK_PRIORITY_METRICS_NIKE: PriorityMetric[] = [
   },
   {
     metric_key: 'content_strategy', domain: 'marketing',
-    label: { en: 'Content Strategy', zh: '内容策略' }, icon: '📝',
+    label: { en: 'Content Strategy', zh: '内容策略' }, icon: 'Content',
     your_score: 62,
     best_competitor: { name: 'Adidas', score: 70 },
     delta: -4,
