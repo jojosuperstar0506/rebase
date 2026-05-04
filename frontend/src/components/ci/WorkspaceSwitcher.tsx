@@ -8,6 +8,7 @@ import {
   type KnownWorkspace,
 } from '../../utils/ciStorage';
 import { listWorkspaces } from '../../services/ciApi';
+import { categoryLabel } from '../../utils/categoryLabels';
 
 /**
  * Workspace switcher pill — sits at the top of CISubNav so the user always
@@ -175,7 +176,7 @@ export default function WorkspaceSwitcher() {
                   </span>
                   {ws.brand_category && (
                     <span style={{ fontSize: 10, color: C.t3, flexShrink: 0 }}>
-                      {ws.brand_category}
+                      {categoryLabel(ws.brand_category, lang)}
                     </span>
                   )}
                   {!isActive && (

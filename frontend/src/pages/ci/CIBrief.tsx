@@ -40,6 +40,7 @@ import {
 } from '../../services/ciMocks';
 import { getIndices, type IndicesResponse } from '../../services/ciIndices';
 import { runAnalysis, getAnalysisStatus, type AnalysisJob } from '../../services/ciApi';
+import { categoryLabel } from '../../utils/categoryLabels';
 
 // Show "data is stale" warning if the brief is older than this many days.
 const STALE_DAYS_THRESHOLD = 7;
@@ -607,7 +608,7 @@ export default function CIBrief() {
               <span>
                 {lang === 'zh' ? '对比' : 'Tracking'}{' '}
                 <strong style={{ color: C.t2 }}>{workspace.brand_name}</strong>
-                {workspace.brand_category ? ` (${workspace.brand_category})` : ''}{' '}
+                {workspace.brand_category ? ` (${categoryLabel(workspace.brand_category, lang)})` : ''}{' '}
                 {lang === 'zh' ? '对比于' : 'vs'}
               </span>
               {competitors.map(c => {

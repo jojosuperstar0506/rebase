@@ -525,7 +525,8 @@ export interface SuggestCompetitorsResult {
 export async function suggestCompetitors(
   brandName: string,
   category: string,
-  priceRange?: { min: number; max: number }
+  priceRange?: { min: number; max: number },
+  lang: string = 'zh'
 ): Promise<SuggestCompetitorsResult> {
   const result = await tryApiVerbose<{
     suggestions: CompetitorSuggestion[];
@@ -533,7 +534,12 @@ export async function suggestCompetitors(
     message?: string;
   }>('/suggest-competitors', {
     method: 'POST',
-    body: JSON.stringify({ brand_name: brandName, brand_category: category, brand_price_range: priceRange }),
+    body: JSON.stringify({
+      brand_name: brandName,
+      brand_category: category,
+      brand_price_range: priceRange,
+      lang,
+    }),
   });
 
   if (!result.ok) {

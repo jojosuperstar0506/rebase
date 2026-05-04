@@ -1059,13 +1059,20 @@ def _load_brand_data(cur, brand_name):
     the Analytics dashboard renders "Coverage pending" for every card
     (IndexCard renders `ownValue` from composite_indices, not from
     analysis_results directly).
+
+    Lookups use LOWER(...) = LOWER(%s) because the brand_name on
+    workspaces is whatever the user typed in Settings ("Tory Burch"),
+    while analysis_results / scraped_* may have been written with a
+    different casing ("TORY BURCH" from the seeder, etc.). A case-
+    sensitive match silently returns zero rows and renders "Coverage
+    pending" everywhere.
     """
     metrics = {}
     cur.execute(
         """
         SELECT DISTINCT ON (metric_type) metric_type, score, raw_inputs
           FROM analysis_results
-         WHERE competitor_name = %s
+         WHERE LOWER(competitor_name) = LOWER(%s)
          ORDER BY metric_type, analyzed_at DESC
         """,
         (brand_name,),
@@ -1085,7 +1092,7 @@ def _load_brand_data(cur, brand_name):
     cur.execute(
         f"""
         SELECT * FROM scraped_brand_profiles
-         WHERE brand_name = %s AND {VALID_PROFILE_FILTER}
+         WHERE LOWER(brand_name) = LOWER(%s) AND {VALID_PROFILE_FILTER}
          ORDER BY scraped_at DESC LIMIT 1
         """,
         (brand_name,),
@@ -1097,7 +1104,7 @@ def _load_brand_data(cur, brand_name):
         SELECT brand_name, product_name, price, original_price,
                sales_volume, scraped_at, material_tags, category
           FROM scraped_products
-         WHERE brand_name = %s
+         WHERE LOWER(brand_name) = LOWER(%s)
            AND scraped_at > NOW() - INTERVAL '90 days'
          ORDER BY scraped_at DESC
         """,

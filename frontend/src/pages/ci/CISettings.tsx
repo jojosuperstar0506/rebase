@@ -21,9 +21,26 @@ import {
   addCompetitor, removeCompetitor, getCompetitors,
   type BrandResolution, type CompetitorSuggestion,
 } from '../../services/ciApi';
+import { categoryLabel } from '../../utils/categoryLabels';
 
-const CATEGORIES = ['女包', '男包', '箱包配件', '鞋类', '服饰', '其他'];
-const PLATFORM_OPTIONS = ['淘宝/天猫', '京东', '小红书', '抖音'];
+// Category + platform values stay Chinese — they're foreign keys into the
+// pipeline's INDEX_HIERARCHY weighting + scraper routing. The label is the
+// only thing that switches with lang. The value never gets translated, or
+// the backend's category-keyed lookups silently return zero rows.
+const CATEGORIES: { value: string; label: { en: string; zh: string } }[] = [
+  { value: '女包',     label: { en: "Women's bags",         zh: '女包' } },
+  { value: '男包',     label: { en: "Men's bags",           zh: '男包' } },
+  { value: '箱包配件', label: { en: 'Bags & accessories',   zh: '箱包配件' } },
+  { value: '鞋类',     label: { en: 'Footwear',             zh: '鞋类' } },
+  { value: '服饰',     label: { en: 'Apparel',              zh: '服饰' } },
+  { value: '其他',     label: { en: 'Other',                zh: '其他' } },
+];
+const PLATFORM_OPTIONS: { value: string; label: { en: string; zh: string } }[] = [
+  { value: '淘宝/天猫', label: { en: 'Taobao / Tmall', zh: '淘宝/天猫' } },
+  { value: '京东',      label: { en: 'JD',             zh: '京东' } },
+  { value: '小红书',    label: { en: 'Xiaohongshu',    zh: '小红书' } },
+  { value: '抖音',      label: { en: 'Douyin',         zh: '抖音' } },
+];
 const MAX_WATCHLIST = 10;
 
 // Reject inputs that aren't a real brand name. We saw production rows with
@@ -185,7 +202,11 @@ function BrandProfileSection({ C, lang, isMobile }: { C: ReturnType<typeof useAp
             onChange={e => setForm(f => ({ ...f, brand_category: e.target.value }))}
           >
             <option value="">-- select --</option>
-            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            {CATEGORIES.map(c => (
+              <option key={c.value} value={c.value}>
+                {c.label[lang as 'en' | 'zh'] ?? c.label.en}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -218,16 +239,16 @@ function BrandProfileSection({ C, lang, isMobile }: { C: ReturnType<typeof useAp
           <label style={labelStyle}>{t(T.ci.platforms, lang as any)}</label>
           <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 8 }}>
             {PLATFORM_OPTIONS.map(p => {
-              const checked = form.platforms.includes(p);
+              const checked = form.platforms.includes(p.value);
               return (
-                <label key={p} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+                <label key={p.value} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
                   <input
                     type="checkbox"
                     checked={checked}
-                    onChange={() => togglePlatform(p)}
+                    onChange={() => togglePlatform(p.value)}
                     style={{ accentColor: C.ac }}
                   />
-                  {p}
+                  {p.label[lang as 'en' | 'zh'] ?? p.label.en}
                 </label>
               );
             })}
@@ -457,7 +478,7 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
     setAiLoading(true);
     setAiError('');
     try {
-      const result = await suggestCompetitors(ws.brand_name, ws.brand_category, ws.price_range);
+      const result = await suggestCompetitors(ws.brand_name, ws.brand_category, ws.price_range, lang);
       setAiSuggestions(result.suggestions);
 
       // Show actual cause to the user instead of a generic "unavailable"
@@ -808,7 +829,7 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
               <div style={{ fontSize: 13, color: C.t2, marginBottom: 12 }}>
                 {t(T.ci.aiRecommends, lang as any)}{' '}
                 <strong style={{ color: C.tx }}>{workspace.brand_name}</strong>
-                {workspace.brand_category && ` (${workspace.brand_category}`}
+                {workspace.brand_category && ` (${categoryLabel(workspace.brand_category, lang)}`}
                 {workspace.price_range?.min ? `, ¥${workspace.price_range.min}–${workspace.price_range.max})` : workspace.brand_category ? ')' : ''}
               </div>
 
@@ -1576,7 +1597,7 @@ function StartAnalysisCard({ C, lang, competitorCount, workspaceName, isMobile }
   const priceMin = workspace?.price_range?.min;
   const priceMax = workspace?.price_range?.max;
   const priceLabel = priceMin && priceMax ? `, ¥${priceMin}–${priceMax}` : '';
-  const catLabel = workspace?.brand_category ? `, ${workspace.brand_category}` : '';
+  const catLabel = workspace?.brand_category ? `, ${categoryLabel(workspace.brand_category, lang)}` : '';
 
   return (
     <div style={{

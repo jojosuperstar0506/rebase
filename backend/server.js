@@ -874,12 +874,29 @@ app.patch('/api/ci/workspace/:id', async (req, res) => {
     if (!userId) return res.status(401).json({ error: 'Missing user ID' });
 
     // Confirm the workspace belongs to this user before letting them edit.
+    // Pull is_demo + the canonical brand_name in the same query so the
+    // demo guard below can reuse them without a second round-trip.
     const owned = await pool.query(
-      'SELECT id FROM workspaces WHERE id = $1 AND user_id = $2',
+      'SELECT id, is_demo, brand_name FROM workspaces WHERE id = $1 AND user_id = $2',
       [id, userId]
     );
     if (owned.rows.length === 0) {
       return res.status(404).json({ error: 'Workspace not found or not owned by this user' });
+    }
+    const isDemo = owned.rows[0].is_demo === true;
+    const canonicalBrandName = owned.rows[0].brand_name;
+
+    // Demo workspace guard: silently drop brand_name edits. The Analytics
+    // tab keys composite_indices rows by (workspace_id, competitor_name),
+    // and renames break the own-brand lookup until the next compute job
+    // runs. For the YC demo invite workspace we'd rather YC reviewers
+    // exercise the rest of Settings (category, price, platforms, add/
+    // remove competitors) without one stray brand-name keystroke wiping
+    // the curated Analytics page. is_demo is only ever set by the
+    // seeder, so this never affects a real customer workspace.
+    if (isDemo && Object.prototype.hasOwnProperty.call(req.body, 'brand_name')
+        && req.body.brand_name !== canonicalBrandName) {
+      delete req.body.brand_name;
     }
 
     // Build dynamic SET clause from whichever editable fields are present.
@@ -2066,6 +2083,27 @@ app.get('/api/ci/indices', async (req, res) => {
       };
       if (!latestComputedAt || r.computed_at > latestComputedAt) {
         latestComputedAt = r.computed_at;
+      }
+    }
+
+    // Re-key the own brand under the workspace's current brand_name casing.
+    // composite_indices rows were written with whatever casing existed when
+    // the compute job ran ("TORY BURCH" from the seeder). If the user later
+    // edited the brand profile via Settings ("Tory Burch"), the workspace
+    // row diverges from the indices rows and the frontend's lookup
+    // `indices_by_competitor[workspaceBrandName]` returns undefined → every
+    // card renders "Coverage pending" until the next pipeline run.
+    //
+    // Normalize here so brand-profile edits don't break Analytics. Cheaper
+    // than triggering a recompute on every brand_name update, and applies
+    // to all workspaces (real customers will hit this too).
+    const ownBrandLower = workspaceBrandName.toLowerCase();
+    if (ownBrandLower) {
+      for (const key of Object.keys(indicesByCompetitor)) {
+        if (key !== workspaceBrandName && key.toLowerCase() === ownBrandLower) {
+          indicesByCompetitor[workspaceBrandName] = indicesByCompetitor[key];
+          delete indicesByCompetitor[key];
+        }
       }
     }
 
@@ -3517,6 +3555,10 @@ app.post('/api/ci/parse-link', async (req, res) => {
 // POST /api/ci/suggest-competitors — AI-powered competitor suggestions
 app.post('/api/ci/suggest-competitors', async (req, res) => {
   const { brand_name, brand_category, brand_price_range, brand_platforms } = req.body;
+  // Match the UI language. Default zh because the demo + the bulk of users
+  // are in zh-CN; English-mode YC reviewers need EN reasons or the AI
+  // suggestions card looks broken (English UI, Chinese reasons).
+  const lang = req.body.lang === 'en' ? 'en' : 'zh';
 
   if (!brand_name || !brand_category) {
     return res.status(400).json({ error: 'Missing brand_name or brand_category' });
@@ -3559,7 +3601,7 @@ IMPORTANT RULES:
 2. You are NOT limited to our database — suggest any real, well-known brand that competes in "${brand_category}" within the ${priceStr} price range in the Chinese market.
 3. All suggested brands must be real brands that actually exist and sell products on Chinese e-commerce platforms.
 
-Suggest 5-8 competitors they should track. For each, explain in one sentence WHY they should track this competitor (in Chinese/简体中文).
+Suggest 5-8 competitors they should track. For each, explain in one sentence WHY they should track this competitor ${lang === 'en' ? 'in English' : 'in Chinese/简体中文'}.
 
 Prioritize:
 1. Direct price-range competitors (same category, similar pricing)
@@ -3569,7 +3611,7 @@ Prioritize:
 Respond in this exact JSON format, no markdown:
 {
   "suggestions": [
-    {"brand_name": "...", "reason": "...理由...", "priority": "high|medium|low", "group": "direct|aspirational|emerging"}
+    {"brand_name": "...", "reason": "${lang === 'en' ? '...reason...' : '...理由...'}", "priority": "high|medium|low", "group": "direct|aspirational|emerging"}
   ]
 }`;
 
