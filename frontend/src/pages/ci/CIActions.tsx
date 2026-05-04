@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { Target } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import CISubNav from '../../components/ci/CISubNav';
 import ComingSoonHero from '../../components/ci/ComingSoonHero';
@@ -101,7 +102,7 @@ export default function CIActions() {
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         <CISubNav />
         <ComingSoonHero
-          pageIcon="🎯"
+          pageIcon={<Target size={isMobile ? 36 : 52} strokeWidth={1.5} color={C.ac} />}
           headline={headline}
           tagline={tagline}
           valueProp={valueProp}

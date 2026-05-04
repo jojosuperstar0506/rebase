@@ -18,6 +18,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { CSSProperties } from 'react';
+import {
+  Newspaper, AlertTriangle, RefreshCw, Hourglass,
+  Lightbulb, ClipboardCopy, BarChart3,
+} from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import type { ColorSet } from '../../theme/colors';
 import CISubNav from '../../components/ci/CISubNav';
@@ -454,7 +458,7 @@ export default function CIBrief() {
         <div style={container}>
           <CISubNav />
           <div style={{ ...card, textAlign: 'center', padding: 60, marginTop: 20 }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>📰</div>
+            <Newspaper size={32} strokeWidth={1.5} color={C.t2} style={{ marginBottom: 12 }} />
             <div style={{ fontSize: 15, color: C.t2 }}>
               {lang === 'zh' ? '正在生成本周简报…' : 'Generating this week\'s brief…'}
             </div>
@@ -470,7 +474,7 @@ export default function CIBrief() {
         <div style={container}>
           <CISubNav />
           <div style={{ ...card, textAlign: 'center', padding: 60, marginTop: 20 }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
+            <AlertTriangle size={32} strokeWidth={1.75} color="#ef4444" style={{ marginBottom: 12 }} />
             <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px' }}>
               {lang === 'zh' ? '加载失败' : 'Something went wrong'}
             </h3>
@@ -507,7 +511,7 @@ export default function CIBrief() {
             <CIWelcomeBanner />
           </div>
           <div style={{ ...card, textAlign: 'center', padding: 60, marginTop: 20 }}>
-            <div style={{ fontSize: 40, marginBottom: 16 }}>📰</div>
+            <Newspaper size={40} strokeWidth={1.5} color={C.t2} style={{ marginBottom: 16 }} />
             <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 10px' }}>
               {lang === 'zh' ? '简报即将出炉' : 'Your brief is on its way'}
             </h3>
@@ -618,7 +622,9 @@ export default function CIBrief() {
               justifyContent: 'center',
             }}
           >
-            <span>{regenerating ? '⏳' : '🔄'}</span>
+            {regenerating
+              ? <Hourglass size={14} strokeWidth={2} />
+              : <RefreshCw size={14} strokeWidth={2} />}
             <span>{regenerating
               ? jobStageLabel(jobStatus, lang)
               : (lang === 'zh' ? '更新本周简报' : "Refresh This Week's Brief")}</span>
@@ -918,9 +924,11 @@ export default function CIBrief() {
                         opacity: isPosted ? 0.5 : 1,
                       }}
                     >
-                      {copiedId === c.id
-                        ? (lang === 'zh' ? '✓ 已复制' : '✓ Copied')
-                        : (lang === 'zh' ? '📋 复制脚本' : '📋 Copy Script')}
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        {copiedId === c.id
+                          ? <>{lang === 'zh' ? '✓ 已复制' : '✓ Copied'}</>
+                          : <><ClipboardCopy size={12} strokeWidth={2} />{lang === 'zh' ? '复制脚本' : 'Copy Script'}</>}
+                      </span>
                     </button>
                     {!isPosted && (
                       <button
@@ -989,8 +997,9 @@ export default function CIBrief() {
               cursor: 'pointer',
             }}
           >
-            <span>
-              {lang === 'zh' ? '📊 查看全部12项指标分数（分析师视图）' : '📊 See all 12 metric scores (analyst view)'}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <BarChart3 size={14} strokeWidth={2} />
+              {lang === 'zh' ? '查看全部12项指标分数（分析师视图）' : 'See all 12 metric scores (analyst view)'}
             </span>
             <span style={{ fontSize: 11, color: C.t3, transform: showMetrics ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
               ▼
@@ -1058,7 +1067,7 @@ function ProductOpportunityCard({ opp, accepted, onAccept, onDismiss, C, lang, i
       padding: isMobile ? 16 : 22,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-        <span style={{ fontSize: 28, lineHeight: 1 }}>💡</span>
+        <Lightbulb size={26} strokeWidth={1.75} color={C.ac} />
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 11, color: C.t3, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
             {lang === 'zh' ? '产品概念' : 'Product Concept'}

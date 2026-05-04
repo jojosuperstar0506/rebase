@@ -1,5 +1,11 @@
 import { useApp } from '../../context/AppContext';
 import { Link, useLocation } from 'react-router-dom';
+import {
+  Newspaper, BarChart3, Library, Tag,
+  Target, Map as MapIcon,
+  Settings as SettingsIcon, HelpCircle,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
 
 /**
@@ -17,7 +23,7 @@ import WorkspaceSwitcher from './WorkspaceSwitcher';
 interface CITab {
   path: string;
   label: { en: string; zh: string };
-  icon: string;
+  Icon: LucideIcon;
   /** When true, render a thin vertical divider AFTER this tab to separate
    *  conceptual groups (current state | recommend next | admin). */
   groupBreakAfter?: boolean;
@@ -36,16 +42,16 @@ interface CITab {
 // "first half is what's happening, second half is what to do."
 const CI_TABS: CITab[] = [
   // ── Current state
-  { path: '/ci',             label: { en: 'Brief',       zh: '简报'    }, icon: '📰' },
-  { path: '/ci/analytics',   label: { en: 'Analytics',   zh: '分析'    }, icon: '📊' },
-  { path: '/ci/library',     label: { en: 'Library',     zh: '资料库'  }, icon: '📚' },
-  { path: '/ci/competitors', label: { en: 'Brands',      zh: '品牌'    }, icon: '🏷️', groupBreakAfter: true },
+  { path: '/ci',             label: { en: 'Brief',       zh: '简报'    }, Icon: Newspaper },
+  { path: '/ci/analytics',   label: { en: 'Analytics',   zh: '分析'    }, Icon: BarChart3 },
+  { path: '/ci/library',     label: { en: 'Library',     zh: '资料库'  }, Icon: Library },
+  { path: '/ci/competitors', label: { en: 'Brands',      zh: '品牌'    }, Icon: Tag, groupBreakAfter: true },
   // ── Recommended next
-  { path: '/ci/actions',     label: { en: 'Actions',     zh: '今日'    }, icon: '🎯' },
-  { path: '/ci/opportunity', label: { en: 'Opportunity', zh: '本月机会' }, icon: '🗺️', groupBreakAfter: true },
+  { path: '/ci/actions',     label: { en: 'Actions',     zh: '今日'    }, Icon: Target },
+  { path: '/ci/opportunity', label: { en: 'Opportunity', zh: '本月机会' }, Icon: MapIcon, groupBreakAfter: true },
   // ── Admin
-  { path: '/ci/settings',    label: { en: 'Settings',    zh: '设置'    }, icon: '⚙️' },
-  { path: '/ci/help',        label: { en: 'Help',        zh: '帮助'    }, icon: '💡' },
+  { path: '/ci/settings',    label: { en: 'Settings',    zh: '设置'    }, Icon: SettingsIcon },
+  { path: '/ci/help',        label: { en: 'Help',        zh: '帮助'    }, Icon: HelpCircle },
 ];
 
 export default function CISubNav() {
@@ -95,7 +101,7 @@ export default function CISubNav() {
                   gap: 6,
                 }}
               >
-                <span style={{ fontSize: 14 }}>{tab.icon}</span>
+                <tab.Icon size={14} strokeWidth={1.75} />
                 <span>{lang === 'zh' ? tab.label.zh : tab.label.en}</span>
               </Link>
               {tab.groupBreakAfter && (

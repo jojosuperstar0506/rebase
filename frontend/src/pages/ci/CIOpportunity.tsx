@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { Map as MapIcon } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import CISubNav from '../../components/ci/CISubNav';
 import ComingSoonHero from '../../components/ci/ComingSoonHero';
@@ -128,7 +129,7 @@ export default function CIOpportunity() {
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         <CISubNav />
         <ComingSoonHero
-          pageIcon="🗺️"
+          pageIcon={<MapIcon size={isMobile ? 36 : 52} strokeWidth={1.5} color={C.ac} />}
           headline={headline}
           tagline={tagline}
           valueProp={valueProp}

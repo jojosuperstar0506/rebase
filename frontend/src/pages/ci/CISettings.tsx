@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
+import {
+  MousePointerClick, Bot, Sparkles, Pencil,
+  CheckCircle2, Circle,
+} from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { t, T } from '../../i18n';
 import CISubNav from '../../components/ci/CISubNav';
@@ -762,8 +766,8 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
               padding: '28px 20px', background: C.s2, borderRadius: 10, fontSize: 13,
               color: C.t3, textAlign: 'center', border: `1px solid ${C.bd}`,
             }}>
-              <div style={{ fontSize: 22, marginBottom: 8 }}>👆</div>
-              {t(T.ci.setupBrandFirst, lang as any)}
+              <MousePointerClick size={22} strokeWidth={1.75} color={C.t2} style={{ marginBottom: 8 }} />
+              <div>{t(T.ci.setupBrandFirst, lang as any)}</div>
             </div>
           ) : aiLoading ? (
             <div>
@@ -888,7 +892,7 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
               padding: '32px 20px', textAlign: 'center',
               background: C.s2, borderRadius: 12, border: `1px solid ${C.bd}`,
             }}>
-              <div style={{ fontSize: 28, marginBottom: 12 }}>🤖</div>
+              <Bot size={28} strokeWidth={1.5} color={C.ac} style={{ marginBottom: 12 }} />
               <div style={{ fontSize: 14, fontWeight: 600, color: C.tx, marginBottom: 6 }}>
                 {lang === 'zh' ? 'AI竞品推荐' : 'AI Competitor Suggestions'}
               </div>
@@ -905,7 +909,8 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
                   display: 'inline-flex', alignItems: 'center', gap: 8,
                 }}
               >
-                ✨ {t(T.ci.generateSuggestions, lang as any)}
+                <Sparkles size={14} strokeWidth={2} />
+                {t(T.ci.generateSuggestions, lang as any)}
               </button>
               <div style={{ fontSize: 11, color: C.t3, marginTop: 10 }}>
                 {t(T.ci.generatingTakes, lang as any)}
@@ -1070,7 +1075,10 @@ function CompetitorList({ C, lang, competitors, onChange, isMobile, readOnly = f
               )}
               {resolving
                 ? (lang === 'zh' ? '正在解析…' : 'Resolving…')
-                : (lang === 'zh' ? `✨ 自动解析 ${badRows.length} 个名称` : `✨ Auto-resolve ${badRows.length} name${badRows.length === 1 ? '' : 's'}`)}
+                : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    <Sparkles size={11} strokeWidth={2} />
+                    {lang === 'zh' ? `自动解析 ${badRows.length} 个名称` : `Auto-resolve ${badRows.length} name${badRows.length === 1 ? '' : 's'}`}
+                  </span>}
             </button>
             {resolveResult && (
               <span style={{
@@ -1194,13 +1202,13 @@ function CompetitorList({ C, lang, competitors, onChange, isMobile, readOnly = f
                     onClick={() => startEdit(c)}
                     style={{
                       background: 'none', border: 'none', color: isBad ? C.danger : C.t3,
-                      cursor: 'pointer', fontSize: 14, padding: '0 6px', lineHeight: 1,
+                      cursor: 'pointer', padding: '0 6px',
                       minWidth: isMobile ? 44 : undefined, minHeight: isMobile ? 44 : undefined,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}
                     title={lang === 'zh' ? '重命名品牌' : 'Rename brand'}
                   >
-                    ✎
+                    <Pencil size={14} strokeWidth={1.75} />
                   </button>
 
                   <button
@@ -1270,7 +1278,11 @@ function ConnectionsSection({ C, lang, isMobile }: { C: ReturnType<typeof useApp
               border: `1px solid ${isConnected ? C.success : C.bd}`,
             }}>
               {/* Status dot */}
-              <span style={{ fontSize: 18, flexShrink: 0 }}>{isConnected ? '✅' : '⬜'}</span>
+              <span style={{ flexShrink: 0, display: 'inline-flex' }}>
+                {isConnected
+                  ? <CheckCircle2 size={18} strokeWidth={2} color={C.success} />
+                  : <Circle size={18} strokeWidth={1.5} color={C.t3} />}
+              </span>
 
               {/* Info */}
               <div style={{ flex: 1 }}>

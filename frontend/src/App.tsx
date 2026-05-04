@@ -1,6 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from "react";
 import type { CSSProperties } from "react";
 import { Routes, Route, Link, useNavigate, useLocation } from "react-router-dom";
+import { Sun, Moon } from "lucide-react";
 
 import { AppProvider, useApp } from "./context/AppContext";
 import { getWorkspace } from "./services/ciApi";
@@ -196,8 +197,9 @@ function Nav() {
       <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
 
         {/* Theme toggle */}
-        <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} style={btnStyle} title="Toggle theme">
-          {theme === "dark" ? "☀️ " + t(nav.lightMode, lang) : "🌙 " + t(nav.darkMode, lang)}
+        <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} style={{ ...btnStyle, display: "inline-flex", alignItems: "center", gap: 6 }} title="Toggle theme">
+          {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+          <span>{theme === "dark" ? t(nav.lightMode, lang) : t(nav.darkMode, lang)}</span>
         </button>
 
         {/* Language toggle */}

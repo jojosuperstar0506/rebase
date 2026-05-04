@@ -21,6 +21,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { CSSProperties } from 'react';
+import { AlertTriangle, BarChart3, ListChecks, Tag } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import type { ColorSet } from '../../theme/colors';
 import CISubNav from '../../components/ci/CISubNav';
@@ -166,7 +167,7 @@ export default function CIAnalytics() {
         <div style={container}>
           <CISubNav />
           <div style={{ ...card, textAlign: 'center', padding: 50, marginTop: 20 }}>
-            <div style={{ fontSize: 28, marginBottom: 10 }}>⚠️</div>
+            <AlertTriangle size={28} strokeWidth={1.75} color="#ef4444" style={{ marginBottom: 10 }} />
             <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 8px' }}>
               {lang === 'zh' ? '加载失败' : 'Could not load analytics'}
             </h3>
@@ -185,7 +186,7 @@ export default function CIAnalytics() {
         <div style={container}>
           <CISubNav />
           <div style={{ ...card, textAlign: 'center', padding: 50, marginTop: 20 }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>📊</div>
+            <BarChart3 size={32} strokeWidth={1.5} color={C.t2} style={{ marginBottom: 12 }} />
             <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 8px' }}>
               {lang === 'zh' ? '暂无分析数据' : 'No analytics yet'}
             </h3>
@@ -410,9 +411,10 @@ export default function CIAnalytics() {
               cursor: 'pointer', marginBottom: showAllMetrics ? 14 : 0,
             }}
           >
-            <span>
-              📋 {lang === 'zh' ? `查看全部12项指标详情` : `See all 12 metrics`}
-              <span style={{ color: C.t3, marginLeft: 8 }}>· {data.all_metrics.length}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <ListChecks size={14} strokeWidth={2} />
+              {lang === 'zh' ? `查看全部12项指标详情` : `See all 12 metrics`}
+              <span style={{ color: C.t3, marginLeft: 4 }}>· {data.all_metrics.length}</span>
             </span>
             <span style={{
               fontSize: 11, color: C.t3,

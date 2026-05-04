@@ -23,8 +23,9 @@ interface PreviewCard {
 }
 
 interface ComingSoonHeroProps {
-  /** Page-level emoji shown next to the headline. */
-  pageIcon: string;
+  /** Page-level icon shown above the headline. Accepts a React node (lucide icon)
+   *  or a string (legacy emoji). */
+  pageIcon: ReactNode;
   /** Big headline at the top. ≤ ~10 words. */
   headline: string;
   /** 1-line tagline under the headline explaining what this tab will do. */
@@ -92,7 +93,9 @@ export default function ComingSoonHero(props: ComingSoonHeroProps) {
     <div>
       <div style={heroStyle}>
         <div style={badgeStyle}>{props.badgeText}</div>
-        <div style={{ fontSize: isMobile ? 36 : 56, marginBottom: 12 }}>{props.pageIcon}</div>
+        <div style={{ marginBottom: 12, display: 'inline-flex', justifyContent: 'center', alignItems: 'center', fontSize: isMobile ? 36 : 56, lineHeight: 1 }}>
+          {props.pageIcon}
+        </div>
         <h1 style={{
           fontSize: isMobile ? 24 : 32,
           fontWeight: 700,

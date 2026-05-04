@@ -13,6 +13,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
+import {
+  AlertTriangle, Library as LibraryIcon, Newspaper, Smartphone,
+  Lightbulb, ClipboardCopy,
+} from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import type { ColorSet } from '../../theme/colors';
 import CISubNav from '../../components/ci/CISubNav';
@@ -157,7 +161,7 @@ export default function CILibrary() {
         <div style={container}>
           <CISubNav />
           <div style={{ ...card, textAlign: 'center', padding: 40, marginTop: 20 }}>
-            <div style={{ fontSize: 28, marginBottom: 10 }}>⚠️</div>
+            <AlertTriangle size={28} strokeWidth={1.75} color="#ef4444" style={{ marginBottom: 10 }} />
             <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 8px' }}>
               {lang === 'zh' ? '加载失败' : 'Could not load library'}
             </h3>
@@ -192,14 +196,17 @@ export default function CILibrary() {
         <div style={{
           display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center',
         }}>
-          <button onClick={() => setView('briefs')} style={tabBtn(view === 'briefs')}>
-            📰 {lang === 'zh' ? '历史简报' : 'Past Briefs'} · {entries.length}
+          <button onClick={() => setView('briefs')} style={{ ...tabBtn(view === 'briefs'), display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Newspaper size={13} strokeWidth={2} />
+            {lang === 'zh' ? '历史简报' : 'Past Briefs'} · {entries.length}
           </button>
-          <button onClick={() => setView('content')} style={tabBtn(view === 'content')}>
-            📱 {lang === 'zh' ? '所有内容' : 'All Content'} · {allContent.length}
+          <button onClick={() => setView('content')} style={{ ...tabBtn(view === 'content'), display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Smartphone size={13} strokeWidth={2} />
+            {lang === 'zh' ? '所有内容' : 'All Content'} · {allContent.length}
           </button>
-          <button onClick={() => setView('products')} style={tabBtn(view === 'products')}>
-            💡 {lang === 'zh' ? '产品概念' : 'Product Concepts'} · {allProducts.length}
+          <button onClick={() => setView('products')} style={{ ...tabBtn(view === 'products'), display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Lightbulb size={13} strokeWidth={2} />
+            {lang === 'zh' ? '产品概念' : 'Product Concepts'} · {allProducts.length}
           </button>
           <input
             value={search}
@@ -217,7 +224,7 @@ export default function CILibrary() {
         {/* Empty state */}
         {entries.length === 0 && (
           <div style={{ ...card, textAlign: 'center', padding: 60 }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>📚</div>
+            <LibraryIcon size={32} strokeWidth={1.5} color={C.t2} style={{ marginBottom: 12 }} />
             <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px' }}>
               {lang === 'zh' ? '还没有历史记录' : 'Nothing archived yet'}
             </h3>
@@ -325,7 +332,7 @@ export default function CILibrary() {
                 onMouseLeave={ev => (ev.currentTarget.style.borderColor = C.bd)}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                  <span style={{ fontSize: 20 }}>💡</span>
+                  <Lightbulb size={18} strokeWidth={1.75} color={C.ac} />
                   <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, flex: 1 }}>{p.concept_name}</h3>
                   <span style={{
                     fontSize: 10, fontWeight: 600,
@@ -559,9 +566,11 @@ function ContentFullView({ content, C, lang }: {
         style={{
           background: C.ac, color: '#fff', border: 'none', borderRadius: 6,
           padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+          display: 'inline-flex', alignItems: 'center', gap: 6,
         }}
       >
-        {lang === 'zh' ? '📋 复制完整脚本' : '📋 Copy full script'}
+        <ClipboardCopy size={13} strokeWidth={2} />
+        {lang === 'zh' ? '复制完整脚本' : 'Copy full script'}
       </button>
     </div>
   );

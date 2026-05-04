@@ -11,6 +11,8 @@
  */
 
 import type { CSSProperties } from 'react';
+import { Crosshair, Megaphone, ShoppingBag } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import IndexCard from './IndexCard';
@@ -22,10 +24,10 @@ interface PillarSectionProps {
   data: IndicesResponse;
 }
 
-const PILLAR_ICONS: Record<PillarName, string> = {
-  brand_equity: '🎯',
-  marketing_engine: '📣',
-  commerce_engine: '🚀',
+const PILLAR_ICONS: Record<PillarName, LucideIcon> = {
+  brand_equity: Crosshair,
+  marketing_engine: Megaphone,
+  commerce_engine: ShoppingBag,
 };
 
 const PILLAR_SUBTITLES: Record<PillarName, { zh: string; en: string }> = {
@@ -66,8 +68,8 @@ export default function PillarSection({ pillarName, pillarConfig, data }: Pillar
   return (
     <section style={containerStyle}>
       {/* Header */}
-      <header style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 14 }}>
-        <span style={{ fontSize: 20 }}>{PILLAR_ICONS[pillarName]}</span>
+      <header style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+        {(() => { const PillarIcon = PILLAR_ICONS[pillarName]; return <PillarIcon size={18} strokeWidth={1.75} color={pillarColor} />; })()}
         <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: C.tx, letterSpacing: -0.2 }}>
           {pillarLabel}
         </h3>
