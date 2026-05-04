@@ -9,6 +9,7 @@ import { useCIAlertCount } from "./hooks/useCIAlertCount";
 import { T, t } from "./i18n";
 
 import Home from "./pages/Home";
+import Contact from "./pages/Contact";
 import DiagnosticDashboard from "./pages/DiagnosticDashboard";
 import WorkflowScout from "./pages/WorkflowScout";
 import AgentMonitor from "./pages/AgentMonitor";
@@ -196,18 +197,11 @@ function Nav() {
           </>
         )}
 
-        {/* Contact link — opens default mail client. Visible to logged-out
-            visitors (so prospects can reach out) and logged-in users (so
-            existing customers can give feedback without leaving the app). */}
-        <a
-          href="mailto:hello@rebase.io?subject=Rebase%20feedback"
-          style={{
-            textDecoration: "none", fontSize: 14, fontWeight: 400,
-            color: C.t2, padding: "6px 2px", whiteSpace: "nowrap",
-          }}
-        >
-          {t(nav.contact, lang)}
-        </a>
+        {/* Contact link — routes to the in-app /contact page (was a
+            mailto:; replaced with a real page so users see the team,
+            response time, and data-handling info before deciding to
+            email). */}
+        <NavLink to="/contact" label={t(nav.contact, lang)} />
       </div>
 
       {/* Right controls */}
@@ -310,6 +304,7 @@ function AppRoutes() {
       <Routes>
         {/* Public */}
         <Route path="/" element={<Home />} />
+        <Route path="/contact" element={<Contact />} />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/success" element={<Success />} />
         <Route path="/login" element={<Login />} />

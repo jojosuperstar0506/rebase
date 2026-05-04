@@ -626,24 +626,64 @@ DEMO_BRIEF = {
 DEMO_CONTENT_DRAFTS = [
     {
         "platform": "douyin",
-        "title": "通勤包之争：Tory Burch vs COACH 怎么选",
-        "hook_3s": "你以为通勤包就是 COACH？让我告诉你 2026 年的另一个答案",
-        "main_15s": "新一代轻奢通勤包，意大利头层牛皮，14 寸笔电完美收纳，可调节肩带。Tory Burch Robinson Mini 售价¥2,890——比 COACH Tabby 26 少 ¥800，工艺一样精致，T-Monogram 设计更有辨识度。三色可选，今晚直播间下单送同色丝巾。",
-        "cta_3s": "评论区留言'通勤'即可领取直播专属优惠券",
+        # All user-facing fields are bilingual {zh, en} so the backend's
+        # resolveLang resolves them to the requested language. The seeder
+        # previously wrote flat zh-only strings, which leaked Chinese into
+        # the EN side of the dashboard.
+        "title": {
+            "zh": "通勤包之争：Tory Burch vs COACH 怎么选",
+            "en": "Commuter bag showdown: Tory Burch vs COACH — which one wins",
+        },
+        "hook_3s": {
+            "zh": "你以为通勤包就是 COACH？让我告诉你 2026 年的另一个答案",
+            "en": "Think 'commuter bag' = COACH? Here's the 2026 alternative nobody's talking about.",
+        },
+        "main_15s": {
+            "zh": "新一代轻奢通勤包，意大利头层牛皮，14 寸笔电完美收纳，可调节肩带。Tory Burch Robinson Mini 售价¥2,890——比 COACH Tabby 26 少 ¥800，工艺一样精致，T-Monogram 设计更有辨识度。三色可选，今晚直播间下单送同色丝巾。",
+            "en": "Next-gen light-luxury commuter — Italian top-grain leather, fits a 14\" laptop, adjustable strap. Tory Burch Robinson Mini at ¥2,890 — that's ¥800 less than COACH Tabby 26, same craftsmanship tier, with the T-Monogram giving you a more recognizable silhouette. Three colorways. Tonight's livestream: matching silk scarf gift with order.",
+        },
+        "cta_3s": {
+            "zh": "评论区留言'通勤'即可领取直播专属优惠券",
+            "en": "Comment 'commute' for the livestream-exclusive coupon.",
+        },
         "hashtags": ["通勤包", "轻奢女包", "上班穿搭", "Tory Burch", "托特包推荐", "意大利牛皮"],
-        "reasoning": "对标 COACH Tabby 26 (¥2,890 vs Tabby ¥2,890)，建立直接对比锚点。强调差价 ¥800 + 工艺等价的价值主张。",
-        "why_now": "本周 COACH 奥莱降价 12% 拉低消费者预期锚，需要在主力价格带通过价值教育而非降价应对。",
+        "reasoning": {
+            "zh": "对标 COACH Tabby 26 (¥2,890 vs Tabby ¥2,890)，建立直接对比锚点。强调差价 ¥800 + 工艺等价的价值主张。",
+            "en": "Anchor directly against COACH Tabby 26 (¥2,890 vs Tabby ¥2,890) so the comparison is unmissable. Lead with the ¥800 delta + craftsmanship parity as the value claim.",
+        },
+        "why_now": {
+            "zh": "本周 COACH 奥莱降价 12% 拉低消费者预期锚，需要在主力价格带通过价值教育而非降价应对。",
+            "en": "COACH outlet's 12% discount this week reset the consumer price anchor — we respond on the core price band with value education, not by chasing the discount.",
+        },
         "based_on": "Move #2 — COACH outlet pricing pressure",
     },
     {
         "platform": "douyin",
-        "title": "为什么我从国潮包又回到 Tory Burch",
-        "hook_3s": "买过 5 个国潮包，最后还是回到 T 字 logo——为什么？",
-        "main_15s": "国潮联名很惊艳，但通勤场景里它们都败给一个细节：拎着开会客户认不出。Tory Burch T-Monogram Cube Bag，¥1,990，可装满月报告 + iPad，logo 醒目但克制，会议室职业感拉满。买 1 包用 5 年的安全感，不是限量款能给的。",
-        "cta_3s": "想看更多通勤场景测评点赞过 5 千更新",
+        "title": {
+            "zh": "为什么我从国潮包又回到 Tory Burch",
+            "en": "Why I went back to Tory Burch after five guochao bags",
+        },
+        "hook_3s": {
+            "zh": "买过 5 个国潮包，最后还是回到 T 字 logo——为什么？",
+            "en": "I owned five guochao bags. I'm back on the T-logo. Here's why.",
+        },
+        "main_15s": {
+            "zh": "国潮联名很惊艳，但通勤场景里它们都败给一个细节：拎着开会客户认不出。Tory Burch T-Monogram Cube Bag，¥1,990，可装满月报告 + iPad，logo 醒目但克制，会议室职业感拉满。买 1 包用 5 年的安全感，不是限量款能给的。",
+            "en": "Guochao collabs are stunning, but in a workplace context they all fail one detail — you walk into a client meeting and nobody recognizes the brand. Tory Burch T-Monogram Cube Bag at ¥1,990 fits a monthly report deck + iPad, with a logo that's confident but restrained — the conference-room credibility limited drops can't deliver. The five-year-payback feel that drops just don't give you.",
+        },
+        "cta_3s": {
+            "zh": "想看更多通勤场景测评点赞过 5 千更新",
+            "en": "5K likes and I'll do a full workplace-context review series.",
+        },
         "hashtags": ["TMonogram", "Cube Bag", "通勤场景", "职业女性", "Tory Burch", "轻奢通勤"],
-        "reasoning": "用'回流叙事'(从国潮回到主流轻奢) 化解古良吉吉国潮势能威胁。强调'职业场景'差异化，避开纯设计 vs 纯设计的硬碰硬。",
-        "why_now": "Move #1 — 古良吉吉 momentum surge in mid-segment. We can't out-collab them, so we differentiate on context (workplace credibility).",
+        "reasoning": {
+            "zh": "用'回流叙事'(从国潮回到主流轻奢) 化解古良吉吉国潮势能威胁。强调'职业场景'差异化，避开纯设计 vs 纯设计的硬碰硬。",
+            "en": "Use the 'return narrative' (guochao back to mainstream light-luxury) to defuse 古良吉吉's guochao momentum. Differentiate on workplace context, avoiding a head-to-head design-vs-design fight.",
+        },
+        "why_now": {
+            "zh": "Move #1 — 古良吉吉 在中端段持续上扬，我们没法在联名速度上赢，那就在场景叙事 (职场可信度) 上拉开差距。",
+            "en": "Move #1 — 古良吉吉 momentum surge in mid-segment. We can't out-collab them, so we differentiate on context (workplace credibility).",
+        },
         "based_on": "Move #1 — 古良吉吉 mid-segment offensive",
     },
 ]

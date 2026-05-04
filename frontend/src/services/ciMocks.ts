@@ -913,9 +913,19 @@ export async function getSignalSource(key: string): Promise<SignalSource | null>
   return new Promise(resolve => setTimeout(() => resolve(MOCK_SIGNAL_SOURCES[key] || null), 100));
 }
 
-/** Lookup the full brief by week_of (for Library drill-down). */
-export async function getBriefByWeek(_workspaceId: string, _weekOf: string): Promise<WeeklyBrief | null> {
-  if (!USE_MOCKS) return null;
-  // For mocks, we only return the current week's brief if it matches
-  return new Promise(resolve => setTimeout(() => resolve(MOCK_BRIEF_NIKE), 150));
+/** Lookup the full brief by week_of (for Library drill-down).
+ *
+ * Production fallback: GET /api/ci/brief returns the *current* week's brief.
+ * For the V1 demo there's only one brief in the DB so the lookup-by-week
+ * is effectively the current brief — we fetch it and return iff its
+ * week_of matches what was requested. Multi-week support requires a
+ * `?week_of=` query param on the brief route — queued for when the cron
+ * has accumulated more than 1 week of history. */
+export async function getBriefByWeek(workspaceId: string, weekOf: string): Promise<WeeklyBrief | null> {
+  if (USE_MOCKS) {
+    return new Promise(resolve => setTimeout(() => resolve(MOCK_BRIEF_NIKE), 150));
+  }
+  const current = await getBrief(workspaceId);
+  if (current && current.week_of === weekOf) return current;
+  return null;
 }

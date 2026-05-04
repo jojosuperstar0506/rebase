@@ -21,6 +21,11 @@ interface PreviewCard {
   icon: ReactNode;
   /** Optional small label above title (e.g. "Douyin", "Monthly", "Q4"). */
   badge?: string;
+  /** Optional status pill rendered on the right side of the card header
+   *  (e.g. "In development" / "Beta" / "Coming soon"). Used by Actions /
+   *  Opportunity to communicate that these are agents-in-progress, not
+   *  passive previews. */
+  status?: { label: string; color?: 'amber' | 'cyan' | 'gray' };
 }
 
 interface ComingSoonHeroProps {
@@ -59,6 +64,13 @@ export default function ComingSoonHero(props: ComingSoonHeroProps) {
     overflow: 'hidden',
   };
 
+  const badgeRowStyle: CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 20,
+  };
+
   const badgeStyle: CSSProperties = {
     display: 'inline-block',
     padding: '4px 12px',
@@ -70,32 +82,59 @@ export default function ComingSoonHero(props: ComingSoonHeroProps) {
     background: C.s1,
     border: `1px solid ${C.ac}`,
     borderRadius: 999,
-    marginBottom: 20,
   };
 
+  // Cards are agent previews — keep them readable (no greyed-out
+  // pointer-events:none anymore) so the status pill on each card reads
+  // as authoritative, not decorative. They're still non-interactive
+  // (no onClick) but visually "alive".
   const cardGrid: CSSProperties = {
     display: 'grid',
     gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(260px, 1fr))',
     gap: 16,
     marginBottom: 24,
-    opacity: 0.55, // greyed-out — these are previews, not active features
-    pointerEvents: 'none',
   };
 
   const cardStyle: CSSProperties = {
     background: C.s1,
-    border: `1px dashed ${C.bd}`,
+    border: `1px solid ${C.bd}`,
     borderRadius: 12,
-    padding: '20px 18px',
-    minHeight: 120,
+    padding: '18px 18px',
+    minHeight: 130,
+  };
+
+  const statusPillStyle = (color: 'amber' | 'cyan' | 'gray' = 'amber'): CSSProperties => {
+    const accent = color === 'cyan' ? C.ac : color === 'gray' ? C.t3 : '#f59e0b';
+    return {
+      display: 'inline-block',
+      fontSize: 9,
+      fontWeight: 700,
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+      color: accent,
+      background: `${accent}1a`,
+      padding: '2px 7px',
+      borderRadius: 999,
+      whiteSpace: 'nowrap',
+    };
   };
 
   return (
     <div>
       <div style={heroStyle}>
-        <div style={badgeStyle}>{props.badgeText}</div>
-        <div style={{ marginBottom: 12, display: 'inline-flex', justifyContent: 'center', alignItems: 'center', fontSize: isMobile ? 36 : 56, lineHeight: 1 }}>
-          {props.pageIcon}
+        {/* Icon-then-badge in a single row. Previously the icon rendered on
+            its own line below the badge with `display: inline-flex` and
+            `text-align: center`, which on wider viewports threw the icon
+            off to the right of the badge — read awkwardly. Putting both in
+            a flex row with the icon left of the badge fixes that. */}
+        <div style={badgeRowStyle}>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center',
+            fontSize: isMobile ? 22 : 26, lineHeight: 1, color: C.ac,
+          }}>
+            {props.pageIcon}
+          </span>
+          <span style={badgeStyle}>{props.badgeText}</span>
         </div>
         <h1 style={{
           fontSize: isMobile ? 24 : 32,
@@ -147,7 +186,23 @@ export default function ComingSoonHero(props: ComingSoonHeroProps) {
       <div style={cardGrid}>
         {props.cards.map((card, i) => (
           <div key={i} style={cardStyle}>
-            <div style={{ marginBottom: 8, display: 'inline-flex', alignItems: 'center', fontSize: 24, lineHeight: 1, color: C.ac }}>{card.icon}</div>
+            {/* Header row: icon (left) + status pill (right). Together they
+                read as "this agent is currently {status}" — same visual
+                pattern as the existing AgentMonitor cards. */}
+            <div style={{
+              display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+              gap: 8, marginBottom: 10,
+            }}>
+              <div style={{
+                display: 'inline-flex', alignItems: 'center',
+                fontSize: 22, lineHeight: 1, color: C.ac,
+              }}>{card.icon}</div>
+              {card.status && (
+                <span style={statusPillStyle(card.status.color)}>
+                  {card.status.label}
+                </span>
+              )}
+            </div>
             {card.badge && (
               <div style={{
                 display: 'inline-block',
@@ -198,8 +253,8 @@ export default function ComingSoonHero(props: ComingSoonHeroProps) {
         textAlign: 'center',
       }}>
         {lang === 'zh'
-          ? '我们正在打造这个功能。当前的 Brief、Analytics 和 Library 仍是核心 — 这只是路线图的一瞥。'
-          : 'We\'re building this now. The current Brief, Analytics, and Library tabs remain core — this is just a preview of what\'s next.'}
+          ? '这些智能体正在开发中。Brief、Analytics、Library 是当前已上线的核心模块。'
+          : 'These agents are in active development. The Brief, Analytics, and Library tabs are the live product surface today.'}
       </div>
     </div>
   );
