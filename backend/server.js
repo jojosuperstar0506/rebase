@@ -200,12 +200,10 @@ app.post("/api/onboarding", async (req, res) => {
     // Auto-create CI workspace if competitors field is present (non-fatal side effect)
     if (competitors && competitors.trim()) {
       try {
-        // user_id precedence MUST match POST /api/auth/verify-code's JWT.sub
-        // construction (line ~487): phone first, email second. Phone is a
-        // required field so this always resolves; if we used email-first here
-        // and a user supplied both, the JWT's sub (=phone) wouldn't match the
-        // workspace's user_id (=email) on first login → "no workspace found"
-        // on the very first /ci visit. Same precedence both places.
+        // At onboarding the applicant has no inviteCode yet (admin hasn't
+        // approved). Workspace gets phone-keyed user_id as a placeholder; the
+        // /api/admin/approve route re-keys it to inviteCode once the code is
+        // generated, so subsequent logins (whose JWT.sub = inviteCode) find it.
         const userId = phone || email || `applicant-${Date.now()}`;
 
         // Create workspace
@@ -515,6 +513,12 @@ app.get("/api/admin/applicants", (req, res) => {
 
 // POST /api/auth/verify-code — user enters their invite code
 // Returns a JWT containing their full profile (name, company, industry, competitors, goal)
+//
+// JWT.sub = inviteCode (uppercase). The invite code IS the account identifier:
+// any device, any colleague using the same code resolves to the same workspace
+// set (same model as email+password — log in from anywhere, see your data).
+// Pre-fix this used phone||email which fragmented one customer across multiple
+// workspaces depending on which login they came in through.
 app.post("/api/auth/verify-code", (req, res) => {
   const { code } = req.body;
   if (!code) return res.status(400).json({ error: "Invite code is required" });
@@ -528,9 +532,14 @@ app.post("/api/auth/verify-code", (req, res) => {
     return res.status(401).json({ error: "Invalid or unrecognised invite code. Check your code and try again." });
   }
 
+  const accountId = (user.inviteCode || "").toUpperCase();
   const secret = process.env.JWT_SECRET || "rebase-dev-secret";
   const payload = {
-    sub: user.phone || user.email,
+    sub: accountId,
+    // Person-level fields kept alongside the account ID for personalization
+    // hooks (greeting copy, contact email) — never used for workspace lookup.
+    phone: user.phone || "",
+    email: user.email || "",
     name: user.name,
     company: user.company || "",
     industry: user.industry || "",
@@ -538,7 +547,7 @@ app.post("/api/auth/verify-code", (req, res) => {
     goal: user.goal || "",
   };
   const token = jwt.sign(payload, secret, { expiresIn: "30d" });
-  console.log(`[Auth] ${user.name} (${user.company}) logged in with invite code`);
+  console.log(`[Auth] ${user.name} (${user.company}) logged in → account ${accountId}`);
   res.json({ success: true, token, user: { name: user.name, company: user.company } });
 });
 
@@ -546,7 +555,7 @@ app.post("/api/auth/verify-code", (req, res) => {
 // Protected by x-rebase-secret header (only Will/Joanna can call this)
 // Body: { "phone": "+86 138 0000 0000" }  OR  { "name": "John Doe" }
 // Returns the generated invite code so you can share it with the user
-app.post("/api/admin/approve", (req, res) => {
+app.post("/api/admin/approve", async (req, res) => {
   const { phone, name } = req.body;
   if (!phone && !name) return res.status(400).json({ error: "Provide phone or name to identify the applicant" });
 
@@ -583,6 +592,29 @@ app.post("/api/admin/approve", (req, res) => {
   fs.writeFileSync(path.join(dir, matchFile), JSON.stringify(applicant, null, 2));
 
   console.log(`[Admin] Approved ${applicant.name} → invite code: ${inviteCode}`);
+
+  // Re-key any pre-created workspaces from phone/email keying to invite-code
+  // keying. The onboarding route auto-creates a workspace with user_id =
+  // phone||email (because the invite code doesn't exist yet at that point).
+  // After approval, the user's JWT will carry sub = inviteCode, so the
+  // workspace must be rekeyed to match — otherwise their first login lands
+  // on an empty dashboard while their old workspace sits orphaned.
+  const accountId = inviteCode.toUpperCase();
+  const oldKeys = [applicant.phone, applicant.email].filter(Boolean);
+  if (oldKeys.length > 0) {
+    try {
+      const { rowCount } = await pool.query(
+        `UPDATE workspaces
+            SET user_id = $1
+          WHERE user_id = ANY($2::text[])
+            AND user_id NOT LIKE 'RB-%'`,
+        [accountId, oldKeys]
+      );
+      if (rowCount > 0) console.log(`[Admin] Re-keyed ${rowCount} workspace(s) → ${accountId}`);
+    } catch (e) {
+      console.error("[Admin] Workspace re-key failed (non-fatal):", e.message);
+    }
+  }
 
   // Auto-email the invite code to the applicant if RESEND_API_KEY is set
   // and they provided an email. Non-fatal — admin response still returns
