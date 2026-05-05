@@ -572,9 +572,21 @@ export async function suggestCompetitors(
 
 export interface BriefDraftResponse {
   channel: string;
-  based_on: { move_index: number; move_headline: string };
+  based_on: {
+    move_index: number;
+    move_headline: string;
+    /** Optional EN version of the move headline. Lets the panel subtitle
+     *  flip when the operator toggles content language. */
+    move_headline_en?: string;
+  };
   draft: { title: string; body: string; tags: string[]; image_concept: string };
   en_translation?: { title: string; body: string; image_concept: string };
+  /** Optional bilingual chain-of-reasoning callout: WHY this draft exists.
+   *  Surfaces the connection from competitive intel → playbook → content.
+   *  Currently set on the prebaked demo draft; live LLM path can populate
+   *  this in a future iteration to make the AI-Native Agency thesis
+   *  legible in the UI. */
+  rationale?: { zh: string; en: string };
 }
 
 export interface BriefDraftResult {

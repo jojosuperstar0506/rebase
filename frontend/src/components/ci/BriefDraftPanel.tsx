@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { Copy, CheckCircle2, AlertTriangle, Sparkles, Camera, Hash, RefreshCw } from 'lucide-react';
+import { Copy, CheckCircle2, AlertTriangle, Sparkles, Camera, Hash, RefreshCw, Layers } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { generateBriefDraft, type BriefDraftResponse } from '../../services/ciApi';
 
@@ -37,6 +37,11 @@ const DEMO_DRAFT_TORY_BURCH: DraftResponse = {
   based_on: {
     move_index: 0,
     move_headline: '应对 Dissona 老客复购阵地战 — 用「时间证据」反守为攻',
+    move_headline_en: 'Counter Dissona\'s loyalty offensive — lead with time-as-evidence',
+  },
+  rationale: {
+    zh: '本周简报识别 Dissona 老客复购阵地为最高竞争压力(声量 +48%,回购话语密度 18% vs 类目均值 6%)。Tory Burch 最强反制角度是「时间证据」——本草稿据此切入,以三年磨损细节作为社交证据,绕开正面促销战。',
+    en: 'This week\'s Brief flagged Dissona\'s loyalty push as the highest competitive pressure (+48% voice, 18% rebuy-density vs 6% category avg). Tory Burch\'s strongest counter is time-as-evidence — this draft leads with three years of patina as social proof, sidestepping the discount war.',
   },
   draft: {
     title: '买包 = 投资？我用 Tory Burch 三年的真实账单',
@@ -74,6 +79,19 @@ export default function BriefDraftPanel({
   const [copied, setCopied] = useState(false);
   const fetchedFor = useRef<string | null>(null);
 
+  // Panel-local content-language toggle. Independent from the global UI
+  // `lang` switch in the nav. Default = Chinese because the actual XHS
+  // post is published in Chinese; the English view is a readable preview
+  // for non-Chinese reviewers (YC partners, English-mode operators) and
+  // never gets posted as-is.
+  //
+  // Why panel-local instead of following global lang: showing English
+  // content in EN UI would imply "the operator publishes English on
+  // Xiaohongshu" — which would be product malpractice (XHS is a Chinese
+  // platform). Splitting them lets the operator review in their language
+  // without misrepresenting what gets posted.
+  const [contentLang, setContentLang] = useState<'zh' | 'en'>('zh');
+
   // Demo mode: serve the prebaked Tory Burch draft directly. No API call,
   // no loading state, no quality variance — deterministic for screen
   // recordings. Live API path is preserved for non-demo workspaces (and
@@ -104,10 +122,15 @@ export default function BriefDraftPanel({
 
   function handleCopy() {
     if (!data?.draft) return;
+    // What the user sees is what gets copied. When the panel is in English
+    // view, copy the English title+body (preview/review). When in Chinese
+    // view, copy the publishable Chinese version. Tags are always
+    // Chinese — they're the actual platform hashtags either way.
+    const useEn = contentLang === 'en' && !!data.en_translation;
     const composed = [
-      data.draft.title,
+      useEn ? data.en_translation!.title : data.draft.title,
       '',
-      data.draft.body,
+      useEn ? data.en_translation!.body : data.draft.body,
       '',
       data.draft.tags.join(' '),
     ].join('\n');
@@ -151,7 +174,7 @@ export default function BriefDraftPanel({
     <div style={panelStyle}>
       {/* Header */}
       <div style={headerStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
           <div style={{
             width: 36, height: 36, borderRadius: 10,
             background: `${C.ac}22`, color: C.ac,
@@ -160,17 +183,62 @@ export default function BriefDraftPanel({
           }}>
             <Sparkles size={18} strokeWidth={1.75} />
           </div>
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: C.tx }}>
               {t('本周响应草稿', "This week's response draft")}
             </div>
             <div style={{ fontSize: 11, color: C.t3, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {data?.based_on?.move_headline
-                ? `${t('响应:', 'Responding to:')} ${data.based_on.move_headline}`
-                : t('基于本周简报最高优先级动作自动生成', 'Auto-generated from this week\'s top-pressure move')}
+              {(() => {
+                if (!data?.based_on?.move_headline) {
+                  return t('基于本周简报最高优先级动作自动生成', 'Auto-generated from this week\'s top-pressure move');
+                }
+                // Subtitle follows the panel's content toggle, not the global
+                // lang — when the operator flips to English, the source-move
+                // line should flip with it so subtitle and body always speak
+                // the same language.
+                const headline = (contentLang === 'en' && data.based_on.move_headline_en)
+                  ? data.based_on.move_headline_en
+                  : data.based_on.move_headline;
+                return `${t('响应:', 'Responding to:')} ${headline}`;
+              })()}
             </div>
           </div>
         </div>
+        {/* Content-language toggle — switches title/body/image_concept/
+            rationale between zh and en. Tags stay in Chinese (XHS hashtags
+            are inherently the platform's language). */}
+        {data && data.en_translation && (
+          <div style={{
+            display: 'inline-flex',
+            background: C.bg,
+            border: `1px solid ${C.bd}`,
+            borderRadius: 999,
+            padding: 2,
+            flexShrink: 0,
+          }}>
+            {(['zh', 'en'] as const).map(opt => (
+              <button
+                key={opt}
+                onClick={() => setContentLang(opt)}
+                aria-pressed={contentLang === opt}
+                style={{
+                  background: contentLang === opt ? C.ac : 'transparent',
+                  color: contentLang === opt ? '#fff' : C.t2,
+                  border: 'none',
+                  borderRadius: 999,
+                  padding: '4px 12px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  letterSpacing: opt === 'en' ? 0.5 : 0,
+                  fontFamily: 'inherit',
+                }}
+              >
+                {opt === 'zh' ? '中文' : 'EN'}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Body */}
@@ -219,94 +287,118 @@ export default function BriefDraftPanel({
           </div>
         )}
 
-        {data && !loading && !error && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-            {/* Title */}
-            <div>
-              <div style={{ fontSize: 11, color: C.t3, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 6 }}>
-                {t('标题', 'Title')}
-              </div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: C.tx, lineHeight: 1.4 }}>
-                {data.draft.title}
-              </div>
-            </div>
-
-            {/* Body */}
-            <div>
-              <div style={{ fontSize: 11, color: C.t3, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 6 }}>
-                {t('正文', 'Body')}
-              </div>
-              <div style={{
-                fontSize: 14, color: C.tx, lineHeight: 1.7, whiteSpace: 'pre-wrap',
-                background: C.bg, border: `1px solid ${C.bd}`,
-                borderRadius: 8, padding: '14px 16px',
-              }}>
-                {data.draft.body}
-              </div>
-            </div>
-
-            {/* Tags */}
-            {data.draft.tags.length > 0 && (
-              <div>
-                <div style={{ fontSize: 11, color: C.t3, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Hash size={11} strokeWidth={2.25} />
-                  {t('话题标签', 'Tags')}
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {data.draft.tags.map((tag, i) => (
-                    <span key={i} style={{
-                      fontSize: 12, color: C.ac, background: `${C.ac}1a`,
-                      padding: '4px 10px', borderRadius: 999, border: `1px solid ${C.ac}55`,
-                    }}>
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Image concept */}
-            {data.draft.image_concept && (
-              <div>
-                <div style={{ fontSize: 11, color: C.t3, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Camera size={11} strokeWidth={2.25} />
-                  {t('配图建议', 'Image concept')}
-                </div>
+        {data && !loading && !error && (() => {
+          // Resolve displayed fields against the panel-local content toggle.
+          // Title / body / image_concept switch; tags stay Chinese because
+          // XHS hashtags are inherently the platform's language. If the
+          // operator flips to English without an en_translation present
+          // (live API path before EN gloss generation), we fall back to
+          // the Chinese content rather than render blanks.
+          const useEn = contentLang === 'en' && !!data.en_translation;
+          const dispTitle = useEn ? data.en_translation!.title : data.draft.title;
+          const dispBody = useEn ? data.en_translation!.body : data.draft.body;
+          const dispImageConcept = useEn
+            ? (data.en_translation!.image_concept || data.draft.image_concept)
+            : data.draft.image_concept;
+          const dispRationale = data.rationale
+            ? (contentLang === 'en' ? data.rationale.en : data.rationale.zh)
+            : null;
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+              {/* Source callout — chain of reasoning from competitive intel
+                  to this draft. Makes the AI-Native Agency thesis visible
+                  on screen: the AI isn't generating arbitrary content, it's
+                  responding to a specific competitive move flagged by the
+                  weekly Brief. Optional — only renders when rationale is
+                  provided (set by demo seed; live API can populate later). */}
+              {dispRationale && (
                 <div style={{
-                  fontSize: 13, color: C.t2, lineHeight: 1.6, fontStyle: 'italic',
-                  padding: '10px 14px', background: C.bg, borderRadius: 8,
+                  padding: '12px 16px',
+                  background: `${C.ac}0d`,
+                  border: `1px solid ${C.ac}33`,
+                  borderRadius: 8,
                   borderLeft: `3px solid ${C.ac}`,
                 }}>
-                  {data.draft.image_concept}
-                </div>
-              </div>
-            )}
-
-            {/* English gloss — only when lang=en. Demos to YC partners read
-                this; Chinese operators ignore it. */}
-            {data.en_translation && lang === 'en' && (
-              <div style={{
-                marginTop: 4, padding: 14,
-                background: C.bg, border: `1px dashed ${C.bd}`, borderRadius: 8,
-              }}>
-                <div style={{ fontSize: 10, color: C.t3, fontWeight: 700, letterSpacing: 1.4, textTransform: 'uppercase', marginBottom: 8 }}>
-                  English gloss · for review only — XHS posts in Chinese
-                </div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.tx, marginBottom: 6 }}>
-                  {data.en_translation.title}
-                </div>
-                <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.6, whiteSpace: 'pre-wrap', marginBottom: 8 }}>
-                  {data.en_translation.body}
-                </div>
-                {data.en_translation.image_concept && (
-                  <div style={{ fontSize: 11, color: C.t3, fontStyle: 'italic' }}>
-                    Image: {data.en_translation.image_concept}
+                  <div style={{
+                    fontSize: 10, color: C.ac, fontWeight: 700,
+                    letterSpacing: 1.4, textTransform: 'uppercase',
+                    marginBottom: 6,
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}>
+                    <Layers size={11} strokeWidth={2.25} />
+                    {t('数据来源 · 推理链路', 'Source · Reasoning chain')}
                   </div>
-                )}
+                  <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.6 }}>
+                    {dispRationale}
+                  </div>
+                </div>
+              )}
+
+              {/* Title */}
+              <div>
+                <div style={{ fontSize: 11, color: C.t3, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 6 }}>
+                  {t('标题', 'Title')}
+                </div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: C.tx, lineHeight: 1.4 }}>
+                  {dispTitle}
+                </div>
               </div>
-            )}
-          </div>
-        )}
+
+              {/* Body */}
+              <div>
+                <div style={{ fontSize: 11, color: C.t3, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 6 }}>
+                  {t('正文', 'Body')}
+                </div>
+                <div style={{
+                  fontSize: 14, color: C.tx, lineHeight: 1.7, whiteSpace: 'pre-wrap',
+                  background: C.bg, border: `1px solid ${C.bd}`,
+                  borderRadius: 8, padding: '14px 16px',
+                }}>
+                  {dispBody}
+                </div>
+              </div>
+
+              {/* Tags — always Chinese; XHS hashtags are platform-native and
+                  switching them would imply we're publishing English-tagged
+                  posts, which doesn't reflect actual XHS workflow. */}
+              {data.draft.tags.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 11, color: C.t3, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Hash size={11} strokeWidth={2.25} />
+                    {t('话题标签', 'Tags')}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {data.draft.tags.map((tag, i) => (
+                      <span key={i} style={{
+                        fontSize: 12, color: C.ac, background: `${C.ac}1a`,
+                        padding: '4px 10px', borderRadius: 999, border: `1px solid ${C.ac}55`,
+                      }}>
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Image concept */}
+              {dispImageConcept && (
+                <div>
+                  <div style={{ fontSize: 11, color: C.t3, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Camera size={11} strokeWidth={2.25} />
+                    {t('配图建议', 'Image concept')}
+                  </div>
+                  <div style={{
+                    fontSize: 13, color: C.t2, lineHeight: 1.6, fontStyle: 'italic',
+                    padding: '10px 14px', background: C.bg, borderRadius: 8,
+                    borderLeft: `3px solid ${C.ac}`,
+                  }}>
+                    {dispImageConcept}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Footer */}
