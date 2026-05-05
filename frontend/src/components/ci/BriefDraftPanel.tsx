@@ -21,26 +21,71 @@ import { generateBriefDraft, type BriefDraftResponse } from '../../services/ciAp
 // DraftResponse type re-exported from ciApi as BriefDraftResponse — same shape.
 type DraftResponse = BriefDraftResponse;
 
+// Hardcoded demo draft for the Tory Burch invite-code workspace. Used
+// instead of a live LLM call so the YC demo recording is deterministic —
+// no latency variance, no quality variance, no API dependency at record
+// time. Hand-tightened by the founders to read like a real Tory Burch
+// brand-team operator post (specific patina detail, mid-density emoji,
+// CTA, tag mix that matches XHS conventions). The English gloss alongside
+// is for English-mode YC reviewers; the Chinese draft is the actual XHS
+// post a real operator would publish.
+//
+// When the gate widens to real customers, this constant goes away and
+// the live API path takes over (already shipped — see ciApi.generateBriefDraft).
+const DEMO_DRAFT_TORY_BURCH: DraftResponse = {
+  channel: 'xhs',
+  based_on: {
+    move_index: 0,
+    move_headline: '应对 Dissona 老客复购阵地战 — 用「时间证据」反守为攻',
+  },
+  draft: {
+    title: '买包 = 投资？我用 Tory Burch 三年的真实账单',
+    body: '前阵子身边好几个朋友讨论买包到底是不是投资品 🤔\n\n我的答案不在某条 KOL 的种草里。就在我背了三年的这只 Tory Burch Robinson 上 ✨\n\n金属配件已经从亮金色磨成了温润的玫瑰金,皮革变软不松垮,反而更服帖肩膀。每天挂上车钥匙、塞进咖啡杯——它从没怨言,反而像一位老朋友。\n\n设计强的包不是新鲜事,但能陪你三年还在变好的,越来越少了。这一点比任何一篇爆款笔记都值得信任 💛\n\n你包包里最久的那只是哪只?评论区分享 👇',
+    tags: ['#ToryBurch', '#真皮包', '#通勤包', '#包包测评', '#包包心得', '#耐用主义', '#投资型消费'],
+    image_concept: '一张顺光环境下的近距离特写——Robinson 包的金属配件磨损细节占主导,背景虚化为柔和米色,光线偏向上午十点的金黄色,营造出"使用过的物品有温度"的视觉。',
+  },
+  en_translation: {
+    title: 'Bags = investment? My real Tory Burch ledger after three years.',
+    body: 'A few friends debated lately whether designer bags count as investment. 🤔\n\nMy answer wasn\'t in any influencer\'s pitch — it\'s on the Tory Burch Robinson I\'ve carried for three years. ✨\n\nThe metal hardware aged from bright gold to warm rose gold; the leather softened without slumping, settling into my shoulder instead. Coffee cups, car keys, no complaints — more like an old friend than an accessory.\n\nBags with strong design aren\'t rare. Bags that get better over three years are. That\'s worth more than any viral post. 💛\n\nWhat\'s the oldest bag in your closet? Drop it below 👇',
+    image_concept: 'Tight close-up shot in soft morning light — focus on the worn metal hardware of a Robinson bag, rose-gold patina front and center. Background blurred to warm beige tones at 10am golden hour, evoking "objects that age into character".',
+  },
+};
+
 interface BriefDraftPanelProps {
   workspaceId: string;
   /** Index of the move to draft against. Defaults to 0 (top-pressure). */
   moveIndex?: number;
+  /** When true, render the prebaked DEMO_DRAFT_TORY_BURCH instead of
+   *  hitting the live LLM endpoint. Used for the YC demo recording so
+   *  the experience is deterministic — no latency, no quality variance,
+   *  no API dependency at record time. */
+  isDemo?: boolean;
 }
 
 export default function BriefDraftPanel({
-  workspaceId, moveIndex = 0,
+  workspaceId, moveIndex = 0, isDemo = false,
 }: BriefDraftPanelProps) {
   const { colors: C, lang } = useApp();
+  // Initialize directly with the prebaked draft when in demo mode so the
+  // first render shows content (no empty-body flash before useEffect fires).
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<DraftResponse | null>(null);
+  const [data, setData] = useState<DraftResponse | null>(isDemo ? DEMO_DRAFT_TORY_BURCH : null);
   const [copied, setCopied] = useState(false);
   const fetchedFor = useRef<string | null>(null);
 
-  // Auto-generate on mount + on dependency change. Dedupe with a ref so a
-  // re-render with the same key doesn't re-fire (saves an LLM call).
+  // Demo mode: serve the prebaked Tory Burch draft directly. No API call,
+  // no loading state, no quality variance — deterministic for screen
+  // recordings. Live API path is preserved for non-demo workspaces (and
+  // for when we widen the gate later).
   useEffect(() => {
     if (!workspaceId) return;
+    if (isDemo) {
+      setData(DEMO_DRAFT_TORY_BURCH);
+      setLoading(false);
+      setError(null);
+      return;
+    }
     const key = `${workspaceId}::${moveIndex}::${lang}`;
     if (fetchedFor.current === key && data) return;
     fetchedFor.current = key;
@@ -55,7 +100,7 @@ export default function BriefDraftPanel({
       }
       setLoading(false);
     });
-  }, [workspaceId, moveIndex, lang, data]);
+  }, [workspaceId, moveIndex, lang, data, isDemo]);
 
   function handleCopy() {
     if (!data?.draft) return;
@@ -73,6 +118,13 @@ export default function BriefDraftPanel({
   }
 
   function handleRegenerate() {
+    // Demo mode has no live API to regenerate against — just re-show the
+    // prebaked draft. (The button could be hidden in demo mode, but
+    // leaving it visible keeps the UI consistent for the recording.)
+    if (isDemo) {
+      setData(DEMO_DRAFT_TORY_BURCH);
+      return;
+    }
     fetchedFor.current = null;
     setData(null);
   }
@@ -260,17 +312,21 @@ export default function BriefDraftPanel({
       {/* Footer */}
       {data && !loading && !error && (
         <div style={footerStyle}>
-          <button
-            onClick={handleRegenerate}
-            style={{
-              background: 'transparent', border: `1px solid ${C.bd}`, color: C.t2,
-              padding: '9px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-              cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
-            }}
-          >
-            <RefreshCw size={13} strokeWidth={2} />
-            {t('重新生成', 'Regenerate')}
-          </button>
+          {/* Hide Regenerate in demo mode — there's no live API to retry
+              against, and a no-op button on a recording reads as broken. */}
+          {!isDemo && (
+            <button
+              onClick={handleRegenerate}
+              style={{
+                background: 'transparent', border: `1px solid ${C.bd}`, color: C.t2,
+                padding: '9px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              <RefreshCw size={13} strokeWidth={2} />
+              {t('重新生成', 'Regenerate')}
+            </button>
+          )}
           <button
             onClick={handleCopy}
             style={{
