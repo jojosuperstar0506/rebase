@@ -580,7 +580,17 @@ export interface BriefDraftResponse {
     move_headline_en?: string;
   };
   draft: { title: string; body: string; tags: string[]; image_concept: string };
-  en_translation?: { title: string; body: string; image_concept: string };
+  en_translation?: {
+    title: string;
+    body: string;
+    image_concept: string;
+    /** Optional EN-translated tags. Used for the Warroom's panel-local
+     *  content toggle so YC reviewers see English everywhere when they
+     *  flip the panel. NOTE: when widening to real customers, copy-to-
+     *  clipboard should still emit the Chinese tags from `draft.tags`
+     *  for actual publish — XHS hashtags are platform-native. */
+    tags?: string[];
+  };
   /** Optional bilingual chain-of-reasoning callout: WHY this draft exists.
    *  Surfaces the connection from competitive intel → playbook → content.
    *  Currently set on the prebaked demo draft; live LLM path can populate

@@ -53,6 +53,7 @@ const DEMO_DRAFT_TORY_BURCH: DraftResponse = {
     title: 'Bags = investment? My real Tory Burch ledger after three years.',
     body: 'A few friends debated lately whether designer bags count as investment. 🤔\n\nMy answer wasn\'t in any influencer\'s pitch — it\'s on the Tory Burch Robinson I\'ve carried for three years. ✨\n\nThe metal hardware aged from bright gold to warm rose gold; the leather softened without slumping, settling into my shoulder instead. Coffee cups, car keys, no complaints — more like an old friend than an accessory.\n\nBags with strong design aren\'t rare. Bags that get better over three years are. That\'s worth more than any viral post. 💛\n\nWhat\'s the oldest bag in your closet? Drop it below 👇',
     image_concept: 'Tight close-up shot in soft morning light — focus on the worn metal hardware of a Robinson bag, rose-gold patina front and center. Background blurred to warm beige tones at 10am golden hour, evoking "objects that age into character".',
+    tags: ['#ToryBurch', '#GenuineLeather', '#WorkBag', '#BagReview', '#BagInsights', '#BuiltToLast', '#InvestmentBuy'],
   },
 };
 
@@ -123,16 +124,22 @@ export default function BriefDraftPanel({
   function handleCopy() {
     if (!data?.draft) return;
     // What the user sees is what gets copied. When the panel is in English
-    // view, copy the English title+body (preview/review). When in Chinese
-    // view, copy the publishable Chinese version. Tags are always
-    // Chinese — they're the actual platform hashtags either way.
+    // view, copy the English title + body + tags (review preview). When in
+    // Chinese view, copy the publishable Chinese version. For real
+    // customers in production, copy-to-clipboard should always emit the
+    // Chinese tags from `draft.tags` — XHS hashtags are platform-native.
+    // For the YC demo, the operator isn't actually publishing, so "what
+    // I see is what I copy" is the right UX.
     const useEn = contentLang === 'en' && !!data.en_translation;
+    const composedTags = useEn && data.en_translation!.tags
+      ? data.en_translation!.tags
+      : data.draft.tags;
     const composed = [
       useEn ? data.en_translation!.title : data.draft.title,
       '',
       useEn ? data.en_translation!.body : data.draft.body,
       '',
-      data.draft.tags.join(' '),
+      composedTags.join(' '),
     ].join('\n');
     navigator.clipboard.writeText(composed).then(
       () => { setCopied(true); setTimeout(() => setCopied(false), 2000); },
@@ -289,17 +296,26 @@ export default function BriefDraftPanel({
 
         {data && !loading && !error && (() => {
           // Resolve displayed fields against the panel-local content toggle.
-          // Title / body / image_concept switch; tags stay Chinese because
-          // XHS hashtags are inherently the platform's language. If the
+          // Title / body / image_concept / tags / rationale all switch in
+          // lockstep so the panel speaks one language end-to-end. If the
           // operator flips to English without an en_translation present
           // (live API path before EN gloss generation), we fall back to
           // the Chinese content rather than render blanks.
+          //
+          // NOTE on tags: the EN tag set is for review only. When this
+          // surface ships to real customers, copy-to-clipboard should emit
+          // `draft.tags` (Chinese) regardless of view, because XHS hashtags
+          // are platform-native. For the YC demo, the toggle is purely a
+          // reviewer-readability tool.
           const useEn = contentLang === 'en' && !!data.en_translation;
           const dispTitle = useEn ? data.en_translation!.title : data.draft.title;
           const dispBody = useEn ? data.en_translation!.body : data.draft.body;
           const dispImageConcept = useEn
             ? (data.en_translation!.image_concept || data.draft.image_concept)
             : data.draft.image_concept;
+          const dispTags = useEn && data.en_translation!.tags
+            ? data.en_translation!.tags
+            : data.draft.tags;
           const dispRationale = data.rationale
             ? (contentLang === 'en' ? data.rationale.en : data.rationale.zh)
             : null;
@@ -358,17 +374,18 @@ export default function BriefDraftPanel({
                 </div>
               </div>
 
-              {/* Tags — always Chinese; XHS hashtags are platform-native and
-                  switching them would imply we're publishing English-tagged
-                  posts, which doesn't reflect actual XHS workflow. */}
-              {data.draft.tags.length > 0 && (
+              {/* Tags — switch with the toggle so the panel reads as a
+                  single coherent language for the review experience.
+                  Production caveat: real customers should still publish
+                  Chinese tags; copy-to-clipboard re-keying happens above. */}
+              {dispTags.length > 0 && (
                 <div>
                   <div style={{ fontSize: 11, color: C.t3, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
                     <Hash size={11} strokeWidth={2.25} />
                     {t('话题标签', 'Tags')}
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {data.draft.tags.map((tag, i) => (
+                    {dispTags.map((tag, i) => (
                       <span key={i} style={{
                         fontSize: 12, color: C.ac, background: `${C.ac}1a`,
                         padding: '4px 10px', borderRadius: 999, border: `1px solid ${C.ac}55`,
