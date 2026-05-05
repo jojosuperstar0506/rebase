@@ -473,9 +473,12 @@ export default function XhsWarroom() {
 
       <div style={{ padding: "20px 24px 40px", maxWidth: 880 }}>
         {isDemo && workspaceId ? (
-          // Demo path: auto-generate from this week's top Brief move.
-          // The panel handles its own loading, error, and copy states.
-          <BriefDraftPanel workspaceId={workspaceId} moveIndex={0} />
+          // Demo path: prebaked Tory Burch draft, deterministic — no live
+          // LLM call. The panel renders the hardcoded JSON instantly so
+          // screen recordings have zero latency or quality variance.
+          // Live LLM endpoint is preserved for non-demo workspaces and
+          // for when the gate widens later.
+          <BriefDraftPanel workspaceId={workspaceId} moveIndex={0} isDemo />
         ) : (
           // Power-user path: existing 4-tab paste-in workflow unchanged.
           <>
