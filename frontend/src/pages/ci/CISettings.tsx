@@ -130,6 +130,32 @@ function BrandProfileSection({ C, lang, isMobile }: { C: ReturnType<typeof useAp
   const [savedOk, setSavedOk] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Hydrate from the API on mount. The onboarding wizard writes the brand
+  // profile to the DB (workspaces table), not localStorage — so a freshly-
+  // onboarded user would otherwise see this form blank. localStorage stays
+  // the synchronous initial value; the API result overrides it when present.
+  useEffect(() => {
+    getWorkspace()
+      .then((ws) => {
+        if (ws.source !== 'api' || !ws.data) return;
+        const d = ws.data as Record<string, any>;
+        setForm({
+          brand_name: d.brand_name ?? '',
+          brand_category: d.brand_category ?? '',
+          price_range: d.brand_price_range ?? { min: 0, max: 0 },
+          platforms: d.brand_platforms ? Object.keys(d.brand_platforms) : [],
+        });
+        // Keep localStorage in sync so other synchronous readers agree.
+        saveCIWorkspace({
+          brand_name: d.brand_name ?? '',
+          brand_category: d.brand_category ?? '',
+          price_range: d.brand_price_range ?? { min: 0, max: 0 },
+          platforms: d.brand_platforms ? Object.keys(d.brand_platforms) : [],
+        });
+      })
+      .catch(() => {});
+  }, []);
+
   function togglePlatform(p: string) {
     setForm(f => ({
       ...f,
@@ -1800,6 +1826,22 @@ export default function CISettings() {
     };
     window.addEventListener('ci-data-updated', handler);
     return () => window.removeEventListener('ci-data-updated', handler);
+  }, []);
+
+  // Hydrate competitors from the API on mount. The onboarding wizard writes
+  // competitors to the DB (workspace_competitors), NOT localStorage — so
+  // without this a freshly-onboarded user sees an empty list here.
+  useEffect(() => {
+    (async () => {
+      const ws = await getWorkspace();
+      const wsId = ws.data?.id;
+      if (!wsId || wsId === 'local') return;
+      const comps = await getCompetitors(wsId);
+      if (comps.source === 'api' && comps.data.length > 0) {
+        setCompetitors(comps.data as CICompetitor[]);
+        saveCICompetitors(comps.data as CICompetitor[]);
+      }
+    })().catch(() => {});
   }, []);
 
   if (!ready) return <CISettingsSkeleton />;

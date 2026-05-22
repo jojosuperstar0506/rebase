@@ -29,11 +29,12 @@ export interface OnboardingState {
 
 export interface CompetitorSuggestion {
   brand_name: string;
-  brand_name_en: string | null;
-  category: string;
-  badge: string | null;
-  platform_ids: Record<string, string> | null;
-  tier: "watchlist" | "landscape";
+  reason?: string;
+  priority?: "high" | "medium" | "low";
+  group?: string;
+  badge?: string | null;
+  platform_ids?: Record<string, string> | null;
+  tier?: string;
 }
 
 export interface Goals {
@@ -118,7 +119,8 @@ export async function getOnboardingState(): Promise<OnboardingState> {
 
 export async function saveBrandStep(input: {
   brand_name?: string;
-  brand_category: string;
+  brand_category_l1: string;
+  brand_subcategories: string[];
   brand_price_range?: { min?: number; max?: number; tier?: string } | null;
   brand_platforms?: Record<string, string> | null;
 }): Promise<{ workspace: Workspace }> {
@@ -150,15 +152,19 @@ export async function saveGoalsStep(goals: Goals): Promise<{ workspace: Workspac
   return jsonOrThrow(res);
 }
 
-export async function suggestCompetitors(params: {
-  category?: string;
-  brand_name?: string;
-}): Promise<{ suggestions: CompetitorSuggestion[] }> {
-  const q = new URLSearchParams();
-  if (params.category) q.set("category", params.category);
-  if (params.brand_name) q.set("brand_name", params.brand_name);
-  const res = await fetch(`/api/v2/onboarding/suggest-competitors?${q}`, {
+/**
+ * AI-generated competitor suggestions. The backend reads brand name +
+ * category + price range from the workspace and asks the LLM — works for
+ * any vertical. Returns `source: 'error'` + a `message` if the LLM is down,
+ * in which case the caller should fall back to manual entry.
+ */
+export async function suggestCompetitors(
+  lang: "en" | "zh" = "en"
+): Promise<{ suggestions: CompetitorSuggestion[]; source?: string; message?: string }> {
+  const res = await fetch("/api/v2/onboarding/suggest-competitors", {
+    method: "POST",
     headers: authHeaders(),
+    body: JSON.stringify({ lang }),
   });
   return jsonOrThrow(res);
 }

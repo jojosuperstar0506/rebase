@@ -4187,28 +4187,58 @@ app.get('/api/v2/onboarding/state', async (req, res) => {
   }
 });
 
-// PATCH /api/v2/onboarding/brand — { brand_category, brand_price_range?, brand_platforms? }
+// PATCH /api/v2/onboarding/brand
+//   { brand_category_l1, brand_subcategories: string[],
+//     brand_price_range?, brand_platforms?, brand_name? }
+//
+// Two-level category (migration 011). brand_subcategories is the array of
+// level-2 category strings; the legacy single-string brand_category column
+// is kept in sync (= first sub-category) so the bag-tuned pipeline keeps
+// working. See TODO.md F10 for the multi-vertical pipeline plan.
 app.patch('/api/v2/onboarding/brand', async (req, res) => {
   try {
     const workspace = await findCallerWorkspace(req);
     if (!workspace) return res.status(401).json({ error: 'Not authenticated' });
 
-    const { brand_category, brand_price_range, brand_platforms, brand_name } = req.body || {};
-    if (!brand_category) {
-      return res.status(400).json({ error: 'brand_category is required' });
+    const {
+      brand_category_l1,
+      brand_subcategories,
+      brand_price_range,
+      brand_platforms,
+      brand_name,
+    } = req.body || {};
+
+    if (!brand_category_l1) {
+      return res.status(400).json({ error: 'brand_category_l1 is required' });
     }
+    if (!Array.isArray(brand_subcategories) || brand_subcategories.length === 0) {
+      return res.status(400).json({ error: 'At least one sub-category is required' });
+    }
+
+    // Legacy column: first sub-category keeps the existing pipeline happy.
+    const legacyCategory = brand_subcategories[0];
 
     const { rows } = await pool.query(
       `UPDATE workspaces
          SET brand_name = COALESCE($1, brand_name),
              brand_category = $2,
-             brand_price_range = COALESCE($3, brand_price_range),
-             brand_platforms = COALESCE($4, brand_platforms),
+             brand_category_l1 = $3,
+             brand_subcategories = $4,
+             brand_price_range = COALESCE($5, brand_price_range),
+             brand_platforms = COALESCE($6, brand_platforms),
              onboarding_step = 'competitors',
              updated_at = NOW()
-       WHERE id = $5
+       WHERE id = $7
        RETURNING *`,
-      [brand_name, brand_category, brand_price_range, brand_platforms, workspace.id]
+      [
+        brand_name,
+        legacyCategory,
+        brand_category_l1,
+        JSON.stringify(brand_subcategories),
+        brand_price_range,
+        brand_platforms,
+        workspace.id,
+      ]
     );
 
     res.json({ workspace: rows[0] });
@@ -4313,48 +4343,97 @@ app.post('/api/v2/onboarding/goals', async (req, res) => {
   }
 });
 
-// GET /api/v2/onboarding/suggest-competitors?category=<x>&brand_name=<x>
-// Thin wrapper around the existing /api/ci/suggest-competitors so the wizard
-// has a clean URL surface. Forwards to the same handler logic.
-app.get('/api/v2/onboarding/suggest-competitors', async (req, res) => {
+// POST /api/v2/onboarding/suggest-competitors  body: { lang? }
+//
+// AI-generated competitor suggestions for the wizard's Step 3. Unlike the
+// old registry filter (bags-only), this uses the LLM so it works for any
+// vertical — footwear, apparel, beauty — where no pre-built list exists.
+// Brand name + category + price range are read from the caller's workspace.
+app.post('/api/v2/onboarding/suggest-competitors', async (req, res) => {
   try {
     const workspace = await findCallerWorkspace(req);
     if (!workspace) return res.status(401).json({ error: 'Not authenticated' });
 
-    const category = (req.query.category || workspace.brand_category || '').toString();
-    const brand_name = (req.query.brand_name || workspace.brand_name || '').toString();
+    const lang = (req.body && req.body.lang) === 'en' ? 'en' : 'zh';
+    const brand_name = workspace.brand_name || '';
 
-    if (!category) {
-      return res.status(400).json({ error: 'category is required (in query or workspace)' });
+    // Category context — prefer the structured L2 list (migration 011),
+    // fall back to the legacy single string.
+    let subcats = [];
+    try {
+      subcats = Array.isArray(workspace.brand_subcategories)
+        ? workspace.brand_subcategories
+        : JSON.parse(workspace.brand_subcategories || '[]');
+    } catch { subcats = []; }
+    const categoryStr =
+      (subcats.length ? subcats.join(', ') : workspace.brand_category) || '';
+
+    if (!brand_name || !categoryStr) {
+      return res.status(400).json({
+        error: 'Workspace needs a brand name and category before AI can suggest competitors.',
+      });
     }
 
-    // Filter the static KNOWN_BRANDS registry by category — gives the wizard
-    // an instant suggestion list without burning an LLM call on every step load.
-    // Registry shape (see backend/brand_registry.js): { name, name_en, category,
-    // xhs_keyword, douyin_keyword, tmall_store, badge }.
-    const known = getKnownBrands ? getKnownBrands() : KNOWN_BRANDS;
-    const lc = (s) => String(s || '').toLowerCase();
-    const catLc = lc(category);
-    const suggestions = (known || [])
-      .filter((b) => lc(b.category).includes(catLc) || catLc.includes(lc(b.category)))
-      .filter((b) => lc(b.name) !== lc(brand_name) && lc(b.name_en) !== lc(brand_name))
-      .slice(0, 12)
-      .map((b) => {
-        const platform_ids = {};
-        if (b.xhs_keyword) platform_ids.xhs = b.xhs_keyword;
-        if (b.douyin_keyword) platform_ids.douyin = b.douyin_keyword;
-        if (b.tmall_store) platform_ids.taobao = b.tmall_store;
-        return {
-          brand_name: b.name,
-          brand_name_en: b.name_en || null,
-          category: b.category,
-          badge: b.badge || null,
-          platform_ids: Object.keys(platform_ids).length ? platform_ids : null,
-          tier: 'watchlist',
-        };
-      });
+    const pr = workspace.brand_price_range;
+    const priceStr = pr && (pr.min != null || pr.max != null)
+      ? `¥${pr.min ?? '?'}-${pr.max ?? '?'}`
+      : 'unknown';
 
-    res.json({ suggestions });
+    const prompt = `You are a competitive intelligence analyst for the Chinese consumer goods market.
+
+A brand is setting up competitive tracking:
+- Brand name: ${brand_name}
+- Category: ${categoryStr}
+- Price range: ${priceStr}
+
+RULES:
+1. Suggest competitors in the "${categoryStr}" category ONLY.
+2. Suggest any real, well-known brand competing in "${categoryStr}" within the ${priceStr} range on Chinese e-commerce platforms (Tmall, Douyin, XHS). You are NOT limited to any preset list.
+3. Every brand must be real and currently selling in China.
+
+Suggest 6-8 competitors. For each, one sentence on WHY to track them ${lang === 'en' ? 'in English' : 'in Chinese/简体中文'}.
+Prioritize: (1) direct price-range rivals, (2) aspirational higher-tier, (3) fast-growing emerging threats.
+
+Respond as JSON, no markdown:
+{"suggestions":[{"brand_name":"...","reason":"...","priority":"high|medium|low","group":"direct|aspirational|emerging"}]}`;
+
+    let suggestions = [];
+    try {
+      const llmResponse = await callLLM(prompt);
+      const raw = llmResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      suggestions = JSON.parse(raw).suggestions || [];
+    } catch (llmErr) {
+      console.error('[v2 suggest-competitors] LLM failed:', llmErr.message);
+      return res.json({
+        suggestions: [],
+        source: 'error',
+        message: lang === 'en'
+          ? 'AI suggestions are unavailable right now — add competitors manually below.'
+          : 'AI 推荐暂时不可用——请在下方手动添加竞品。',
+      });
+    }
+
+    // Enrich with platform_ids from the registry where the brand is known.
+    const registry = getKnownBrands ? getKnownBrands() : KNOWN_BRANDS;
+    for (const s of suggestions) {
+      const match = (registry || []).find(
+        (b) => b.name === s.brand_name || b.name_en === s.brand_name
+      );
+      if (match) {
+        const ids = {};
+        if (match.xhs_keyword) ids.xhs = match.xhs_keyword;
+        if (match.douyin_keyword) ids.douyin = match.douyin_keyword;
+        if (match.tmall_store) ids.taobao = match.tmall_store;
+        s.platform_ids = Object.keys(ids).length ? ids : null;
+        s.badge = match.badge || null;
+      } else {
+        s.platform_ids = s.platform_ids || null;
+        s.badge = s.badge || null;
+      }
+      s.tier = 'watchlist';
+    }
+
+    res.json({ suggestions, source: 'llm' });
   } catch (err) {
     console.error('[v2 onboarding/suggest-competitors] error:', err.message);
     res.status(500).json({ error: 'Failed to load suggestions' });
