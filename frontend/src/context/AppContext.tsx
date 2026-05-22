@@ -21,7 +21,7 @@ const AppContext = createContext<AppContextType>({
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(
-    () => (localStorage.getItem("rebase_theme") as Theme) || "dark"
+    () => (localStorage.getItem("rebase_theme") as Theme) || "light"
   );
   const [lang, setLangState] = useState<Lang>(
     () => (localStorage.getItem("rebase_lang") as Lang) || "en"

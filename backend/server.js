@@ -29,7 +29,12 @@ const apiLimiter = rateLimit({
 // Every request to /api/* must include the header: x-rebase-secret: <your secret>
 // Vercel frontend sends this automatically. Random bots don't know it.
 // Public endpoints (e.g. /api/onboarding) are whitelisted — no secret needed.
-const PUBLIC_API_PATHS = ['/onboarding', '/auth/verify-code'];
+const PUBLIC_API_PATHS = [
+  '/onboarding',
+  '/auth/verify-code',
+  '/v2/auth/signup',  // new wizard signup — public; password creates the workspace
+  '/v2/auth/login',   // new email+password login
+];
 
 function requireSecret(req, res, next) {
   const secret = process.env.API_SECRET;
@@ -3663,6 +3668,359 @@ app.get('/api/ci/admin/cleanup-brand-names', async (req, res) => {
   } catch (err) {
     console.error('[CLEANUP] Error:', err.message);
     res.status(500).json({ error: 'Cleanup failed', detail: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// V2 ONBOARDING WIZARD — signup → brand → competitors → goals → dashboard
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// New self-serve flow that replaces the lead-form + invite-code dance.
+// User signs up with email+password, gets a workspace (is_onboarded=false),
+// and walks through 4 wizard steps. Each step PATCHes the workspace; the
+// final step flips is_onboarded=true so ProtectedRoute lets them into /ci.
+//
+// Public:  POST /api/v2/auth/signup, POST /api/v2/auth/login
+// Authed:  PATCH /api/v2/onboarding/brand
+//          POST  /api/v2/onboarding/competitors
+//          POST  /api/v2/onboarding/goals
+//          GET   /api/v2/onboarding/state
+//          GET   /api/v2/onboarding/suggest-competitors?category=
+//
+// Auth uses the same JWT scheme as the legacy /auth/verify-code path —
+// x-user-id header (== JWT.sub) identifies the workspace owner.
+
+const PBKDF2_ITERS = 200_000;
+
+function hashPassword(plain) {
+  const salt = crypto.randomBytes(16);
+  const hash = crypto.pbkdf2Sync(plain, salt, PBKDF2_ITERS, 32, 'sha256');
+  return `${PBKDF2_ITERS}$${salt.toString('hex')}$${hash.toString('hex')}`;
+}
+
+function verifyPassword(plain, stored) {
+  if (!stored || typeof stored !== 'string') return false;
+  const [itersStr, saltHex, hashHex] = stored.split('$');
+  const iters = parseInt(itersStr, 10);
+  if (!iters || !saltHex || !hashHex) return false;
+  const salt = Buffer.from(saltHex, 'hex');
+  const expected = Buffer.from(hashHex, 'hex');
+  const actual = crypto.pbkdf2Sync(plain, salt, iters, expected.length, 'sha256');
+  return crypto.timingSafeEqual(expected, actual);
+}
+
+function signWorkspaceToken(workspace) {
+  const secret = process.env.JWT_SECRET || 'rebase-dev-secret';
+  return jwt.sign(
+    {
+      sub: workspace.user_id,
+      workspace_id: workspace.id,
+      email: workspace.user_email,
+      brand_name: workspace.brand_name,
+    },
+    secret,
+    { expiresIn: '30d' }
+  );
+}
+
+// Look up the caller's current workspace via x-user-id header. Returns null
+// if missing/unknown — callers should 401 in that case.
+async function findCallerWorkspace(req) {
+  const userId = req.headers['x-user-id'];
+  if (!userId) return null;
+  const { rows } = await pool.query(
+    'SELECT * FROM workspaces WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
+    [userId]
+  );
+  return rows[0] || null;
+}
+
+// POST /api/v2/auth/signup — { email, password, brand_name }
+// Creates a workspace with is_onboarded=false and returns a JWT.
+app.post('/api/v2/auth/signup', async (req, res) => {
+  try {
+    const { email, password, brand_name } = req.body || {};
+    if (!email || !password || !brand_name) {
+      return res.status(400).json({ error: 'email, password, brand_name are required' });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+    const emailLc = String(email).trim().toLowerCase();
+
+    // Reject duplicates up-front (the unique index would also catch it,
+    // but this gives a clean error).
+    const existing = await pool.query(
+      'SELECT id FROM workspaces WHERE lower(user_email) = $1 LIMIT 1',
+      [emailLc]
+    );
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: 'An account with that email already exists. Try logging in.' });
+    }
+
+    const user_id = crypto.randomUUID();
+    const password_hash = hashPassword(password);
+
+    const { rows } = await pool.query(
+      `INSERT INTO workspaces
+         (user_id, brand_name, user_email, user_password_hash,
+          is_onboarded, onboarding_step)
+       VALUES ($1, $2, $3, $4, FALSE, 'brand')
+       RETURNING *`,
+      [user_id, brand_name.trim(), emailLc, password_hash]
+    );
+    const workspace = rows[0];
+    const token = signWorkspaceToken(workspace);
+
+    console.log(`[Signup] New workspace ${workspace.id} for ${emailLc} (brand: ${brand_name})`);
+    res.status(201).json({
+      token,
+      workspace: {
+        id: workspace.id,
+        brand_name: workspace.brand_name,
+        is_onboarded: workspace.is_onboarded,
+        onboarding_step: workspace.onboarding_step,
+      },
+    });
+  } catch (err) {
+    console.error('[v2 signup] error:', err.message);
+    res.status(500).json({ error: 'Signup failed' });
+  }
+});
+
+// POST /api/v2/auth/login — { email, password }
+app.post('/api/v2/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    if (!email || !password) {
+      return res.status(400).json({ error: 'email and password are required' });
+    }
+    const emailLc = String(email).trim().toLowerCase();
+
+    const { rows } = await pool.query(
+      'SELECT * FROM workspaces WHERE lower(user_email) = $1 LIMIT 1',
+      [emailLc]
+    );
+    const workspace = rows[0];
+    if (!workspace || !verifyPassword(password, workspace.user_password_hash)) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    const token = signWorkspaceToken(workspace);
+    res.json({
+      token,
+      workspace: {
+        id: workspace.id,
+        brand_name: workspace.brand_name,
+        is_onboarded: workspace.is_onboarded,
+        onboarding_step: workspace.onboarding_step,
+      },
+    });
+  } catch (err) {
+    console.error('[v2 login] error:', err.message);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// GET /api/v2/onboarding/state — where is the caller in the wizard?
+app.get('/api/v2/onboarding/state', async (req, res) => {
+  try {
+    const workspace = await findCallerWorkspace(req);
+    if (!workspace) return res.status(401).json({ error: 'Not authenticated' });
+
+    const competitorCount = await pool.query(
+      'SELECT COUNT(*)::int AS n FROM workspace_competitors WHERE workspace_id = $1',
+      [workspace.id]
+    );
+
+    res.json({
+      workspace_id: workspace.id,
+      brand_name: workspace.brand_name,
+      is_onboarded: workspace.is_onboarded,
+      onboarding_step: workspace.onboarding_step,
+      filled: {
+        brand: Boolean(workspace.brand_category),
+        competitors: competitorCount.rows[0].n >= 3,
+        goals: Boolean(workspace.onboarding_goals),
+      },
+    });
+  } catch (err) {
+    console.error('[v2 state] error:', err.message);
+    res.status(500).json({ error: 'Failed to load state' });
+  }
+});
+
+// PATCH /api/v2/onboarding/brand — { brand_category, brand_price_range?, brand_platforms? }
+app.patch('/api/v2/onboarding/brand', async (req, res) => {
+  try {
+    const workspace = await findCallerWorkspace(req);
+    if (!workspace) return res.status(401).json({ error: 'Not authenticated' });
+
+    const { brand_category, brand_price_range, brand_platforms, brand_name } = req.body || {};
+    if (!brand_category) {
+      return res.status(400).json({ error: 'brand_category is required' });
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE workspaces
+         SET brand_name = COALESCE($1, brand_name),
+             brand_category = $2,
+             brand_price_range = COALESCE($3, brand_price_range),
+             brand_platforms = COALESCE($4, brand_platforms),
+             onboarding_step = 'competitors',
+             updated_at = NOW()
+       WHERE id = $5
+       RETURNING *`,
+      [brand_name, brand_category, brand_price_range, brand_platforms, workspace.id]
+    );
+
+    res.json({ workspace: rows[0] });
+  } catch (err) {
+    console.error('[v2 onboarding/brand] error:', err.message);
+    res.status(500).json({ error: 'Failed to save brand info' });
+  }
+});
+
+// POST /api/v2/onboarding/competitors — { competitors: [{ brand_name, tier?, platform_ids? }, ...] }
+// Bulk insert. Replaces any existing onboarding-added competitors so the user
+// can re-submit the step without duplicating rows.
+app.post('/api/v2/onboarding/competitors', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const workspace = await findCallerWorkspace(req);
+    if (!workspace) {
+      client.release();
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const { competitors } = req.body || {};
+    if (!Array.isArray(competitors) || competitors.length < 3) {
+      client.release();
+      return res.status(400).json({ error: 'At least 3 competitors are required' });
+    }
+    if (competitors.length > 15) {
+      client.release();
+      return res.status(400).json({ error: 'No more than 15 competitors at a time' });
+    }
+
+    await client.query('BEGIN');
+    // Wipe any prior onboarding-added rows for this workspace, then insert fresh.
+    await client.query(
+      `DELETE FROM workspace_competitors
+        WHERE workspace_id = $1 AND added_via = 'onboarding'`,
+      [workspace.id]
+    );
+    for (const c of competitors) {
+      if (!c.brand_name) continue;
+      await client.query(
+        `INSERT INTO workspace_competitors (workspace_id, brand_name, tier, platform_ids, added_via)
+         VALUES ($1, $2, $3, $4, 'onboarding')
+         ON CONFLICT (workspace_id, brand_name) DO UPDATE
+           SET tier = EXCLUDED.tier,
+               platform_ids = EXCLUDED.platform_ids,
+               added_via = 'onboarding'`,
+        [workspace.id, c.brand_name.trim(), c.tier || 'watchlist', c.platform_ids || null]
+      );
+    }
+    await client.query(
+      `UPDATE workspaces SET onboarding_step = 'goals', updated_at = NOW() WHERE id = $1`,
+      [workspace.id]
+    );
+    await client.query('COMMIT');
+
+    const { rows } = await pool.query(
+      `SELECT id, brand_name, tier, platform_ids
+         FROM workspace_competitors
+        WHERE workspace_id = $1
+        ORDER BY brand_name`,
+      [workspace.id]
+    );
+    res.json({ competitors: rows });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('[v2 onboarding/competitors] error:', err.message);
+    res.status(500).json({ error: 'Failed to save competitors' });
+  } finally {
+    client.release();
+  }
+});
+
+// POST /api/v2/onboarding/goals — { goals: { tracking: [...], cadence, email_notifications } }
+// Final step. Flips is_onboarded=true and onboarding_step='done'.
+app.post('/api/v2/onboarding/goals', async (req, res) => {
+  try {
+    const workspace = await findCallerWorkspace(req);
+    if (!workspace) return res.status(401).json({ error: 'Not authenticated' });
+
+    const { goals } = req.body || {};
+    if (!goals || typeof goals !== 'object') {
+      return res.status(400).json({ error: 'goals object is required' });
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE workspaces
+         SET onboarding_goals = $1,
+             onboarding_step = 'done',
+             is_onboarded = TRUE,
+             updated_at = NOW()
+       WHERE id = $2
+       RETURNING *`,
+      [goals, workspace.id]
+    );
+
+    console.log(`[v2 onboarding] Workspace ${workspace.id} (${workspace.brand_name}) completed wizard`);
+    res.json({ workspace: rows[0] });
+  } catch (err) {
+    console.error('[v2 onboarding/goals] error:', err.message);
+    res.status(500).json({ error: 'Failed to save goals' });
+  }
+});
+
+// GET /api/v2/onboarding/suggest-competitors?category=<x>&brand_name=<x>
+// Thin wrapper around the existing /api/ci/suggest-competitors so the wizard
+// has a clean URL surface. Forwards to the same handler logic.
+app.get('/api/v2/onboarding/suggest-competitors', async (req, res) => {
+  try {
+    const workspace = await findCallerWorkspace(req);
+    if (!workspace) return res.status(401).json({ error: 'Not authenticated' });
+
+    const category = (req.query.category || workspace.brand_category || '').toString();
+    const brand_name = (req.query.brand_name || workspace.brand_name || '').toString();
+
+    if (!category) {
+      return res.status(400).json({ error: 'category is required (in query or workspace)' });
+    }
+
+    // Filter the static KNOWN_BRANDS registry by category — gives the wizard
+    // an instant suggestion list without burning an LLM call on every step load.
+    // Registry shape (see backend/brand_registry.js): { name, name_en, category,
+    // xhs_keyword, douyin_keyword, tmall_store, badge }.
+    const known = getKnownBrands ? getKnownBrands() : KNOWN_BRANDS;
+    const lc = (s) => String(s || '').toLowerCase();
+    const catLc = lc(category);
+    const suggestions = (known || [])
+      .filter((b) => lc(b.category).includes(catLc) || catLc.includes(lc(b.category)))
+      .filter((b) => lc(b.name) !== lc(brand_name) && lc(b.name_en) !== lc(brand_name))
+      .slice(0, 12)
+      .map((b) => {
+        const platform_ids = {};
+        if (b.xhs_keyword) platform_ids.xhs = b.xhs_keyword;
+        if (b.douyin_keyword) platform_ids.douyin = b.douyin_keyword;
+        if (b.tmall_store) platform_ids.taobao = b.tmall_store;
+        return {
+          brand_name: b.name,
+          brand_name_en: b.name_en || null,
+          category: b.category,
+          badge: b.badge || null,
+          platform_ids: Object.keys(platform_ids).length ? platform_ids : null,
+          tier: 'watchlist',
+        };
+      });
+
+    res.json({ suggestions });
+  } catch (err) {
+    console.error('[v2 onboarding/suggest-competitors] error:', err.message);
+    res.status(500).json({ error: 'Failed to load suggestions' });
   }
 });
 
