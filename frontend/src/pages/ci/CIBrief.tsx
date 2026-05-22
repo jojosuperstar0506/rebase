@@ -41,6 +41,10 @@ import {
 import { getIndices, type IndicesResponse } from '../../services/ciIndices';
 import { runAnalysis, getAnalysisStatus, type AnalysisJob } from '../../services/ciApi';
 import { categoryLabel } from '../../utils/categoryLabels';
+import { Heading } from '@/components/ui/Heading';
+import { Eyebrow } from '@/components/ui/Eyebrow';
+import { Highlight } from '@/components/ui/Highlight';
+import { Button } from '@/components/ui/Button';
 
 // Show "data is stale" warning if the brief is older than this many days.
 const STALE_DAYS_THRESHOLD = 7;
@@ -498,11 +502,17 @@ export default function CIBrief() {
       <div style={pageStyle}>
         <div style={container}>
           <CISubNav />
-          <div style={{ ...card, textAlign: 'center', padding: 60, marginTop: 20 }}>
-            <Newspaper size={32} strokeWidth={1.5} color={C.t2} style={{ marginBottom: 12 }} />
-            <div style={{ fontSize: 15, color: C.t2 }}>
-              {lang === 'zh' ? '正在生成本周简报…' : 'Generating this week\'s brief…'}
-            </div>
+          <div className="mt-8 flex items-center gap-3">
+            <span
+              className="inline-block w-2 h-2 rounded-full animate-pulse"
+              style={{ background: 'var(--color-accent)' }}
+            />
+            <span
+              className="text-sm text-[var(--color-text-muted)]"
+              style={{ fontFamily: 'var(--font-mono)' }}
+            >
+              {lang === 'zh' ? '// 正在生成本周简报…' : '// generating this week’s brief…'}
+            </span>
           </div>
         </div>
       </div>
@@ -514,25 +524,22 @@ export default function CIBrief() {
       <div style={pageStyle}>
         <div style={container}>
           <CISubNav />
-          <div style={{ ...card, textAlign: 'center', padding: 60, marginTop: 20 }}>
-            <AlertTriangle size={32} strokeWidth={1.75} color="#ef4444" style={{ marginBottom: 12 }} />
-            <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px' }}>
-              {lang === 'zh' ? '加载失败' : 'Something went wrong'}
-            </h3>
-            <p style={{ fontSize: 13, color: C.t3, margin: '0 0 18px' }}>
-              {lang === 'zh'
-                ? '无法加载本周简报，请稍后重试。'
-                : 'Could not load this week\'s brief. Check your connection and try again.'}
-            </p>
-            <button
-              onClick={() => { setError(false); setLoading(true); }}
-              style={{
-                background: C.ac, color: '#fff', border: 'none', borderRadius: 8,
-                padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer',
-              }}
+          <div className="mt-8 flex flex-col gap-5 items-start">
+            <Eyebrow>// error</Eyebrow>
+            <Heading as={2} size="section">
+              couldn't load the brief
+            </Heading>
+            <p
+              className="text-sm text-[var(--color-text-muted)] border-l-2 border-[var(--color-danger)] pl-3 py-1"
+              style={{ fontFamily: 'var(--font-mono)' }}
             >
-              {lang === 'zh' ? '重试' : 'Retry'}
-            </button>
+              {lang === 'zh'
+                ? '// 无法加载本周简报，请检查网络后重试。'
+                : '// could not load this week’s brief. check your connection and retry.'}
+            </p>
+            <Button variant="accent" size="md" onClick={() => { setError(false); setLoading(true); }}>
+              {lang === 'zh' ? '↻ 重试' : '↻ retry'}
+            </Button>
           </div>
         </div>
       </div>
@@ -540,33 +547,104 @@ export default function CIBrief() {
   }
 
   if (!brief) {
+    const compCount = competitors.length;
     return (
       <div style={pageStyle}>
         <div style={container}>
           <CISubNav />
-          {/* W13: CIWelcomeBanner replaces the previous text-only empty state.
-              It's a richer onboarding moment — explains what the user can
-              expect, links to Brands tab to confirm competitor list, and
-              dismisses to localStorage so it doesn't reappear forever. */}
-          <div style={{ marginTop: 20 }}>
-            <CIWelcomeBanner />
+
+          {/* Post-onboarding landing — the brief is being generated.
+              Builder-energy treatment: dark inverse hero + a recap of what
+              the user just configured so the wait feels intentional. */}
+          <div
+            data-scheme="inverse"
+            className="grid-hairline mt-6 rounded-[var(--radius-md)] flex flex-col gap-5 p-8 md:p-10"
+            style={{ background: 'var(--color-inverse)', color: 'var(--color-text-inverse)' }}
+          >
+            <div className="flex items-center gap-3">
+              <span
+                className="inline-block w-2 h-2 rounded-full animate-pulse"
+                style={{ background: 'var(--color-accent)' }}
+              />
+              <Eyebrow>// workspace · live</Eyebrow>
+            </div>
+            <Heading as={1} size="hero">
+              your first brief is <Highlight color="amber">being built</Highlight>
+            </Heading>
+            <div className="flex flex-col gap-2" style={{ fontFamily: 'var(--font-mono)' }}>
+              <p className="text-sm">
+                <span className="text-[var(--fg-muted)]">{'>'}</span>{' '}
+                {lang === 'zh'
+                  ? '正在抓取小红书、抖音、天猫的竞品数据'
+                  : 'scraping competitor data across xhs, douyin + tmall'}
+              </p>
+              <p className="text-sm">
+                <span className="text-[var(--fg-muted)]">{'>'}</span>{' '}
+                {lang === 'zh'
+                  ? '首份简报通常在 24–48 小时内生成'
+                  : 'your first brief usually lands within 24–48h'}
+              </p>
+              <p className="text-sm">
+                <span className="text-[var(--fg-muted)]">{'>'}</span>{' '}
+                {lang === 'zh' ? '准备好后我们会发邮件通知你' : 'we’ll email you the moment it’s ready'}
+              </p>
+            </div>
           </div>
-          <div style={{ ...card, textAlign: 'center', padding: 60, marginTop: 20 }}>
-            <Newspaper size={40} strokeWidth={1.5} color={C.t2} style={{ marginBottom: 16 }} />
-            <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 10px' }}>
-              {lang === 'zh' ? '简报即将出炉' : 'Your brief is on its way'}
-            </h3>
-            <p style={{ fontSize: 14, color: C.t2, margin: '0 0 8px', lineHeight: 1.7, maxWidth: 460, marginLeft: 'auto', marginRight: 'auto' }}>
-              {lang === 'zh'
-                ? '我们正在为您抓取竞品数据并生成首份简报,通常在 24-48 小时内完成。'
-                : 'We\'re gathering data for your competitors and preparing your first brief. This usually takes 24–48 hours.'}
-            </p>
-            <p style={{ fontSize: 12, color: C.t3, margin: 0, lineHeight: 1.6, maxWidth: 460, marginLeft: 'auto', marginRight: 'auto' }}>
-              {lang === 'zh'
-                ? '准备好后我们会通过邮件通知您。如需添加或修改竞品,请前往「品牌」页面。'
-                : 'We\'ll email you when it\'s ready. To add or edit competitors in the meantime, visit the Brands tab.'}
-            </p>
-          </div>
+
+          {/* Recap — what they set up in onboarding */}
+          {workspace?.brand_name && (
+            <div
+              className="mt-4 rounded-[var(--radius-md)] p-6 flex flex-col gap-4"
+              style={{ background: 'var(--color-raised)', border: '1px solid var(--color-border-hairline)' }}
+            >
+              <Eyebrow>// tracking</Eyebrow>
+              <div className="flex flex-wrap items-baseline gap-2">
+                <span
+                  className="text-xl font-semibold text-[var(--color-text-primary)]"
+                  style={{ fontFamily: 'var(--font-display)' }}
+                >
+                  {workspace.brand_name}
+                </span>
+                {workspace.brand_category && (
+                  <span
+                    className="text-xs text-[var(--color-text-muted)]"
+                    style={{ fontFamily: 'var(--font-mono)' }}
+                  >
+                    {categoryLabel(workspace.brand_category, lang)}
+                  </span>
+                )}
+              </div>
+              {compCount > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {competitors.map((c) => (
+                    <span
+                      key={c.id || c.brand_name}
+                      className="text-xs px-2.5 py-1 rounded-[var(--radius-pill)]"
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        background: 'var(--color-sunken)',
+                        color: 'var(--color-text-muted)',
+                      }}
+                    >
+                      {c.brand_name}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p
+                  className="text-sm text-[var(--color-text-muted)]"
+                  style={{ fontFamily: 'var(--font-mono)' }}
+                >
+                  // {lang === 'zh' ? '前往「品牌」页添加竞品' : 'add competitors from the brands tab'}
+                </p>
+              )}
+              <div className="pt-1">
+                <Button variant="outline" size="sm" onClick={() => navigate('/ci/competitors')}>
+                  {lang === 'zh' ? '管理竞品 →' : 'manage competitors →'}
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -579,94 +657,73 @@ export default function CIBrief() {
       <div style={container}>
         <CISubNav />
 
-        {/* Page header — masthead style */}
-        <header style={{ margin: '20px 0 28px', textAlign: isMobile ? 'left' : 'center' }}>
-          <div style={{ fontSize: 11, color: C.t3, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 8, fontFamily: 'var(--font-mono)' }}>
+        {/* Page header — masthead style, left-aligned builder treatment */}
+        <header
+          className="flex flex-col gap-3"
+          style={{ margin: '24px 0 32px' }}
+        >
+          <Eyebrow>
             {lang === 'zh' ? '// 每周竞品行动简报' : '// weekly action brief'}
-          </div>
-          <h1 style={{ fontSize: isMobile ? 26 : 38, fontWeight: 700, margin: 0, letterSpacing: -0.5, fontFamily: 'var(--font-display)' }}>
+          </Eyebrow>
+          <Heading as={1} size="hero">
             {formatWeek(brief.week_of, lang)}
-          </h1>
-          <div style={{ marginTop: 8, fontSize: 13, color: C.t3, fontFamily: 'var(--font-mono)' }}>
-            {brief.workspace_brand_name} · {lang === 'zh' ? '更新于' : 'updated'} {formatRelativeTime(brief.generated_at, lang)}
+          </Heading>
+          <div
+            className="text-[13px] text-[var(--color-text-muted)]"
+            style={{ fontFamily: 'var(--font-mono)' }}
+          >
+            {brief.workspace_brand_name} · {lang === 'zh' ? '更新于' : 'updated'}{' '}
+            {formatRelativeTime(brief.generated_at, lang)}
           </div>
+
           {workspace?.brand_name && competitors.length > 0 && (
-            <div style={{
-              marginTop: 10,
-              fontSize: 12,
-              color: C.t3,
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 6,
-              justifyContent: isMobile ? 'flex-start' : 'center',
-              alignItems: 'center',
-              maxWidth: 600,
-              marginLeft: isMobile ? 0 : 'auto',
-              marginRight: isMobile ? 0 : 'auto',
-              lineHeight: 1.6,
-            }}>
-              <span>
-                {lang === 'zh' ? '对比' : 'Tracking'}{' '}
-                <strong style={{ color: C.t2 }}>{workspace.brand_name}</strong>
-                {workspace.brand_category ? ` (${categoryLabel(workspace.brand_category, lang)})` : ''}{' '}
-                {lang === 'zh' ? '对比于' : 'vs'}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              <span
+                className="text-xs text-[var(--color-text-muted)]"
+                style={{ fontFamily: 'var(--font-mono)' }}
+              >
+                {lang === 'zh' ? '// 追踪' : '// tracking'}{' '}
+                <strong className="text-[var(--color-text-primary)]">
+                  {workspace.brand_name}
+                </strong>{' '}
+                {lang === 'zh' ? '对比' : 'vs'}
               </span>
-              {competitors.map(c => {
-                // Per-brand recency labels (e.g. "no data" / "14d ago") were
-                // removed 2026-05-04: they showed "no data" for any brand
-                // without scraped_brand_profiles (which the demo seeder
-                // intentionally skips for cross-account isolation), making
-                // a polished demo workspace look unfinished. Real-customer
-                // freshness still surfaces on Settings → Platform
-                // Connections; the Brief header is a glance-context strip,
-                // not a diagnostic panel.
-                return (
-                  <span key={c.id || c.brand_name} title={c.brand_name} style={{
-                    background: C.s2, padding: '2px 10px', borderRadius: 12,
-                    fontSize: 11, color: C.t2,
-                    display: 'inline-flex', alignItems: 'baseline',
-                  }}>
-                    {c.brand_name}
-                  </span>
-                );
-              })}
+              {competitors.map((c) => (
+                <span
+                  key={c.id || c.brand_name}
+                  title={c.brand_name}
+                  className="text-[11px] px-2 py-0.5 rounded-[var(--radius-pill)]"
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    background: 'var(--color-sunken)',
+                    color: 'var(--color-text-muted)',
+                  }}
+                >
+                  {c.brand_name}
+                </span>
+              ))}
             </div>
           )}
-          <button
-            onClick={handleRegenerate}
-            disabled={regenerating}
-            style={{
-              marginTop: 14,
-              background: regenerating ? C.s2 : C.ac,
-              color: regenerating ? C.t2 : '#fff',
-              border: 'none', borderRadius: 8, padding: '8px 18px',
-              fontSize: 13, fontWeight: 700,
-              cursor: regenerating ? 'default' : 'pointer',
-              display: 'inline-flex', alignItems: 'center', gap: 8,
-              minWidth: 220,
-              justifyContent: 'center',
-            }}
-          >
-            {regenerating
-              ? <Hourglass size={14} strokeWidth={2} />
-              : <RefreshCw size={14} strokeWidth={2} />}
-            <span>{regenerating
-              ? jobStageLabel(jobStatus, lang)
-              : (lang === 'zh' ? '更新本周简报' : "Refresh This Week's Brief")}</span>
-          </button>
+
+          <div className="pt-2">
+            <Button
+              variant={regenerating ? 'outline' : 'accent'}
+              size="md"
+              onClick={handleRegenerate}
+              disabled={regenerating}
+            >
+              {regenerating
+                ? jobStageLabel(jobStatus, lang)
+                : `↻ ${lang === 'zh' ? '更新本周简报' : "refresh this week's brief"}`}
+            </Button>
+          </div>
+
           {jobError && (
-            <div style={{
-              marginTop: 10,
-              fontSize: 12,
-              color: '#ef4444',
-              padding: '6px 12px',
-              background: '#ef444411',
-              border: '1px solid #ef444433',
-              borderRadius: 6,
-              display: 'inline-block',
-              maxWidth: 480,
-            }}>
-              {jobError}
+            <div
+              className="text-xs text-[var(--color-danger)] border-l-2 border-[var(--color-danger)] pl-3 py-1"
+              style={{ fontFamily: 'var(--font-mono)' }}
+            >
+              // {jobError}
             </div>
           )}
         </header>
