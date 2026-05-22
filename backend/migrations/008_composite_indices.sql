@@ -40,5 +40,17 @@ CREATE INDEX IF NOT EXISTS idx_composite_indices_workspace
 CREATE INDEX IF NOT EXISTS idx_composite_indices_lookup
   ON composite_indices(workspace_id, competitor_name, index_name, computed_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_composite_indices_today
-  ON composite_indices(workspace_id, (computed_at::date));
+-- NOTE: a third index on `(workspace_id, (computed_at::date))` was originally
+-- specified here for the compute layer's same-day-rerun delete. PostgreSQL
+-- rejects bare `(computed_at::date)` in index expressions because the cast
+-- depends on session timezone and is not IMMUTABLE. The obvious fix —
+-- `((computed_at AT TIME ZONE 'UTC')::date)` — is accepted but wouldn't be
+-- used by `composite_indices.py`'s queries, which use `computed_at::date =
+-- CURRENT_DATE` (session-tz-based, server is CST/HKT). Mismatched
+-- expression → planner won't use the index → no actual perf benefit.
+--
+-- Dropped rather than half-fixed. At current scale (~84 rows per workspace
+-- per day) the same-day delete and prior-score lookup both run fast enough
+-- with the existing `(workspace_id, computed_at DESC)` index above. Add a
+-- matching same-day index intentionally if perf telemetry shows it's needed,
+-- in lockstep with updating the Python queries to use the same expression.
