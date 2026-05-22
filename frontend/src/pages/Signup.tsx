@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FormEvent, CSSProperties } from "react";
 import { Link } from "react-router-dom";
+import { Sun, Moon } from "lucide-react";
 import { useApp } from "../context/AppContext";
 
 const INDUSTRIES = [
@@ -108,8 +109,9 @@ export default function Signup() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 24px", borderBottom: `1px solid ${C.bd}` }}>
         <Link to="/" style={{ textDecoration: "none", fontSize: 16, fontWeight: 800, color: C.ac }}>Rebase</Link>
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} style={btnStyle}>
-            {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
+          <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} style={{ ...btnStyle, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            {theme === "dark" ? <Sun size={13} /> : <Moon size={13} />}
+            <span>{theme === "dark" ? "Light" : "Dark"}</span>
           </button>
           <button onClick={() => setLang(lang === "en" ? "zh" : "en")} style={btnStyle}>
             {lang === "en" ? "中文" : "EN"}

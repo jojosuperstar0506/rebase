@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AlertTriangle } from "lucide-react";
 import FileUpload from "./FileUpload";
 import { useApp } from "../../context/AppContext";
 
@@ -84,7 +85,7 @@ export default function IntakePanel({ description, files, onDescriptionChange, o
             onFocus={(e) => { e.currentTarget.style.borderColor = C.ac; }}
             onBlur={(e) => { e.currentTarget.style.borderColor = inlineError ? C.danger : C.inputBd; }}
           />
-          {inlineError && <div style={{ color: C.danger, fontSize: 12, marginTop: 6 }}>⚠ {inlineError}</div>}
+          {inlineError && <div style={{ color: C.danger, fontSize: 12, marginTop: 6, display: "flex", alignItems: "center", gap: 5 }}><AlertTriangle size={12} strokeWidth={2} />{inlineError}</div>}
         </div>
 
         {/* File upload */}

@@ -1,4 +1,6 @@
 import type { CSSProperties } from 'react';
+import { Circle, BarChart3, TrendingUp } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { t, T } from '../../i18n';
 import CISubNav from '../../components/ci/CISubNav';
@@ -143,31 +145,34 @@ export default function CIHelp() {
         <div style={card}>
           <CICollapsible title={lang === 'zh' ? '解读仪表盘' : 'Reading the Dashboard'}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {[
+              {([
                 {
-                  icon: '🫧',
+                  Icon: Circle as LucideIcon,
+                  key: 'bubble',
                   titleZh: '气泡图（竞品态势图）',
                   titleEn: 'Bubble Chart',
                   descZh: 'X轴 = 威胁指数，Y轴 = 增长势能，气泡大小 = 支付意愿。右上象限是最高优先级竞品。鼠标悬停查看详细评分。',
                   descEn: 'X = Threat Index, Y = Momentum, size = WTP. Top-right = highest priority. Hover for details.',
                 },
                 {
-                  icon: '📊',
+                  Icon: BarChart3 as LucideIcon,
+                  key: 'landscape',
                   titleZh: '市场全景（价格×销量）',
                   titleEn: 'Market Landscape',
                   descZh: 'X轴 = 均价，Y轴 = 预估月销量。展示整个品类的竞争格局，以及你的品牌在其中的定位。',
                   descEn: 'X = average price, Y = estimated monthly volume. Shows where you sit vs. the whole market.',
                 },
                 {
-                  icon: '📈',
+                  Icon: TrendingUp as LucideIcon,
+                  key: 'trends',
                   titleZh: '评分趋势（30/90天）',
                   titleEn: 'Score Trends',
                   descZh: '展示过去30天或90天的评分变化。箭头向上（↑）代表上升，向下（↓）代表下降。',
                   descEn: '30-day and 90-day score history with direction arrows. ↑ rising, ↓ falling.',
                 },
-              ].map(item => (
-                <div key={item.icon} style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-                  <span style={{ fontSize: 20, flexShrink: 0 }}>{item.icon}</span>
+              ] as const).map(item => (
+                <div key={item.key} style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                  <item.Icon size={18} strokeWidth={1.75} color={C.ac} style={{ flexShrink: 0, marginTop: 2 }} />
                   <div>
                     <div style={{ fontWeight: 700, color: C.tx, fontSize: 14, marginBottom: 4 }}>
                       {lang === 'zh' ? item.titleZh : item.titleEn}
@@ -199,8 +204,8 @@ export default function CIHelp() {
             <Step num={4} C={Cc} text={lang === 'zh' ? '在「设置 → 连接账号」粘贴 Cookie' : 'Paste into Settings → Platform Connections'} />
             <div style={{ marginTop: 14, padding: '12px 16px', background: `${'#f59e0b'}14`, borderLeft: `3px solid ${'#f59e0b'}`, borderRadius: 8, fontSize: 13, color: C.t2 }}>
               {lang === 'zh'
-                ? 'Cookie 通常每24–48小时过期，过期后设置页面将显示 ❌ 状态，粘贴新的 Cookie 即可重新连接。'
-                : 'Cookies expire every 24–48 hours. You\'ll see a ❌ status in Settings. Paste fresh cookies to reconnect.'}
+                ? 'Cookie 通常每24–48小时过期，过期后设置页面会显示「未连接」状态，粘贴新的 Cookie 即可重新连接。'
+                : 'Cookies expire every 24–48 hours. You\'ll see a "not connected" indicator in Settings. Paste fresh cookies to reconnect.'}
             </div>
           </CICollapsible>
         </div>
@@ -285,8 +290,8 @@ export default function CIHelp() {
             <QA C={Cc}
               q={lang === 'zh' ? 'Cookie 过期了怎么办？' : 'What if my cookies expire?'}
               a={lang === 'zh'
-                ? '设置页面会显示 ❌ 状态，表示该账号已断开连接。重新登录平台，复制新的 Cookie 并粘贴即可。'
-                : 'You\'ll see a ❌ status in Settings → Platform Connections. Re-login, copy fresh cookies, and paste.'}
+                ? '设置页面会显示「未连接」状态，表示该账号已断开。重新登录平台，复制新的 Cookie 并粘贴即可。'
+                : 'You\'ll see a "not connected" indicator in Settings → Platform Connections. Re-login, copy fresh cookies, and paste.'}
             />
             <QA C={Cc}
               q={lang === 'zh' ? '能追踪10个以上的竞品吗？' : 'Can I track more than 10 competitors?'}

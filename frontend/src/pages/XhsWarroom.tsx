@@ -1,6 +1,8 @@
 import { useState, useRef } from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../context/AppContext";
+import { useCIData } from "../hooks/useCIData";
+import BriefDraftPanel from "../components/ci/BriefDraftPanel";
 
 async function askAI(prompt: string): Promise<string> {
   try {
@@ -393,10 +395,32 @@ const ALL_TABS = [
 ];
 
 export default function XhsWarroom() {
-  const { colors: C } = useApp();
+  const { colors: C, lang } = useApp();
+  const { workspace } = useCIData();
   const [tab, setTab] = useState("t1");
   const found = ALL_TABS.find(function (t) { return t.id === tab; });
   const ActiveComp = found ? found.Comp : Tab1;
+
+  // Demo workspaces (YC invite, internal demo accounts) get the Brief-driven
+  // auto-draft surface. Other workspaces — internal power users — see the
+  // existing 4-tab paste-in toolset unchanged. is_demo is only set by the
+  // seeder, so this never fires for a real customer workspace.
+  const isDemo = workspace?.is_demo === true;
+  const workspaceId = workspace?.id;
+
+  // Title/subtitle — was hardcoded "OMI" in the original build. Now reflects
+  // the workspace's brand name and switches by lang so EN-mode YC reviewers
+  // see English chrome. When the workspace has no brand_name yet, we fall
+  // back to just the warroom label (no "Content Warroom · Content Warroom"
+  // duplication).
+  const warroomLabel = lang === 'zh' ? '内容作战室' : 'Content Warroom';
+  const titleText = workspace?.brand_name
+    ? `${workspace.brand_name} · ${warroomLabel}`
+    : warroomLabel;
+  const subtitle = lang === 'zh'
+    ? '小红书爆款内容工业化 · AI 驱动'
+    : 'Xiaohongshu content engine · AI-driven';
+  const initial = (workspace?.brand_name || 'X').trim().charAt(0).toUpperCase();
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: '"Noto Sans SC", "PingFang SC", system-ui, sans-serif', color: C.tx }}>
@@ -415,12 +439,16 @@ export default function XhsWarroom() {
             background: "linear-gradient(135deg, " + C.ac + ", " + C.ac2 + ")",
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 17, fontWeight: 900, color: "#000",
-          }}>{"O"}</div>
+          }}>{initial}</div>
           <div>
-            <div style={{ fontSize: 17, fontWeight: 800, color: C.tx }}>OMI 内容作战室</div>
-            <div style={{ fontSize: 11, color: C.t3 }}>小红书爆款内容工业化 · AI驱动</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: C.tx }}>{titleText}</div>
+            <div style={{ fontSize: 11, color: C.t3 }}>{subtitle}</div>
           </div>
         </div>
+        {/* Hide the 4-tab nav on demo workspaces — the Brief-driven panel is
+            the only surface YC reviewers should see during the recording.
+            Power-user tabs are still shipped, just gated behind !isDemo. */}
+        {!isDemo && (
         <div style={{ display: "flex", gap: 2 }}>
           {ALL_TABS.map(function (t, i) {
             return (
@@ -440,32 +468,45 @@ export default function XhsWarroom() {
             );
           })}
         </div>
+        )}
       </div>
 
       <div style={{ padding: "20px 24px 40px", maxWidth: 880 }}>
-        <div style={{
-          display: "flex", alignItems: "center", gap: 6, marginBottom: 16,
-          padding: "8px 12px", background: C.s1, borderRadius: 7,
-          border: "1px solid " + C.bd, fontSize: 11,
-        }}>
-          {ALL_TABS.map(function (t, i) {
-            return (
-              <span key={t.id} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <span style={{
-                  width: 20, height: 20, borderRadius: "50%",
-                  display: "inline-flex", alignItems: "center", justifyContent: "center",
-                  background: tab === t.id ? C.ac : "transparent",
-                  border: "1px solid " + (tab === t.id ? C.ac : C.bd),
-                  color: tab === t.id ? "#000" : C.t3,
-                  fontSize: 10, fontWeight: 700,
-                }}>{String(i + 1)}</span>
-                <span style={{ color: tab === t.id ? C.tx : C.t3, fontWeight: tab === t.id ? 700 : 400 }}>{t.label}</span>
-                {i < 3 ? <span style={{ color: C.t3, margin: "0 2px" }}>{"\u2192"}</span> : null}
-              </span>
-            );
-          })}
-        </div>
-        <ActiveComp />
+        {isDemo && workspaceId ? (
+          // Demo path: prebaked Tory Burch draft, deterministic — no live
+          // LLM call. The panel renders the hardcoded JSON instantly so
+          // screen recordings have zero latency or quality variance.
+          // Live LLM endpoint is preserved for non-demo workspaces and
+          // for when the gate widens later.
+          <BriefDraftPanel workspaceId={workspaceId} moveIndex={0} isDemo />
+        ) : (
+          // Power-user path: existing 4-tab paste-in workflow unchanged.
+          <>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 6, marginBottom: 16,
+              padding: "8px 12px", background: C.s1, borderRadius: 7,
+              border: "1px solid " + C.bd, fontSize: 11,
+            }}>
+              {ALL_TABS.map(function (t, i) {
+                return (
+                  <span key={t.id} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                    <span style={{
+                      width: 20, height: 20, borderRadius: "50%",
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      background: tab === t.id ? C.ac : "transparent",
+                      border: "1px solid " + (tab === t.id ? C.ac : C.bd),
+                      color: tab === t.id ? "#000" : C.t3,
+                      fontSize: 10, fontWeight: 700,
+                    }}>{String(i + 1)}</span>
+                    <span style={{ color: tab === t.id ? C.tx : C.t3, fontWeight: tab === t.id ? 700 : 400 }}>{t.label}</span>
+                    {i < 3 ? <span style={{ color: C.t3, margin: "0 2px" }}>{"\u2192"}</span> : null}
+                  </span>
+                );
+              })}
+            </div>
+            <ActiveComp />
+          </>
+        )}
       </div>
     </div>
   );

@@ -1048,8 +1048,80 @@ def lookup_prior_score(cur, workspace_id, competitor_name, index_name, version):
 
 # ─── Writer ──────────────────────────────────────────────────────────────
 
+def _load_brand_data(cur, brand_name):
+    """Load metrics + profile + products for a single brand. Mirrors the
+    shape that load_competitor_data produces per-competitor — used to
+    splice the workspace's OWN brand into the data dict, since
+    workspace_competitors only stores competitors and load_competitor_data
+    iterates that table.
+
+    Without this, the own brand has no composite_indices rows written and
+    the Analytics dashboard renders "Coverage pending" for every card
+    (IndexCard renders `ownValue` from composite_indices, not from
+    analysis_results directly).
+
+    Lookups use LOWER(...) = LOWER(%s) because the brand_name on
+    workspaces is whatever the user typed in Settings ("Tory Burch"),
+    while analysis_results / scraped_* may have been written with a
+    different casing ("TORY BURCH" from the seeder, etc.). A case-
+    sensitive match silently returns zero rows and renders "Coverage
+    pending" everywhere.
+    """
+    metrics = {}
+    cur.execute(
+        """
+        SELECT DISTINCT ON (metric_type) metric_type, score, raw_inputs
+          FROM analysis_results
+         WHERE LOWER(competitor_name) = LOWER(%s)
+         ORDER BY metric_type, analyzed_at DESC
+        """,
+        (brand_name,),
+    )
+    for row in cur.fetchall():
+        raw = row["raw_inputs"]
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except Exception:
+                raw = {}
+        metrics[row["metric_type"]] = {
+            "score": float(row["score"]) if row["score"] is not None else 0.0,
+            "raw_inputs": raw or {},
+        }
+
+    cur.execute(
+        f"""
+        SELECT * FROM scraped_brand_profiles
+         WHERE LOWER(brand_name) = LOWER(%s) AND {VALID_PROFILE_FILTER}
+         ORDER BY scraped_at DESC LIMIT 1
+        """,
+        (brand_name,),
+    )
+    profile = cur.fetchone()
+
+    cur.execute(
+        """
+        SELECT brand_name, product_name, price, original_price,
+               sales_volume, scraped_at, material_tags, category
+          FROM scraped_products
+         WHERE LOWER(brand_name) = LOWER(%s)
+           AND scraped_at > NOW() - INTERVAL '90 days'
+         ORDER BY scraped_at DESC
+        """,
+        (brand_name,),
+    )
+    products = list(cur.fetchall())
+
+    return {"metrics": metrics, "profile": profile, "products": products}
+
+
 def compute_all_for_workspace(workspace_id):
-    """Compute all 12 indices for every competitor in the workspace."""
+    """Compute all 12 indices for every competitor in the workspace,
+    plus the workspace's own brand. The own brand needs its own
+    composite_indices rows because the Analytics dashboard's IndexCard
+    renders the workspace's score as the primary number — without an
+    own-brand row, every card shows "Coverage pending".
+    """
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -1060,11 +1132,21 @@ def compute_all_for_workspace(workspace_id):
                 return
 
             data = load_competitor_data(cur, workspace_id)
+
+            # Splice the own brand in alongside competitors. Guarded against
+            # duplication in the unlikely case someone added their own brand
+            # as a "competitor" in workspace_competitors.
+            own_brand = (ws.get("brand_name") or "").strip()
+            if own_brand and own_brand not in data:
+                data[own_brand] = _load_brand_data(cur, own_brand)
+
             if not data:
-                print(f"[INFO] No competitors for workspace {workspace_id}")
+                print(f"[INFO] No competitors and no own brand for workspace {workspace_id}")
                 return
 
-            print(f"[INDICES] Computing 12 indices × {len(data)} competitors in workspace {workspace_id}")
+            n_competitors = len(data) - (1 if own_brand and own_brand in data else 0)
+            print(f"[INDICES] Computing 12 indices × {len(data)} brands "
+                  f"(own + {n_competitors} competitors) in workspace {workspace_id}")
 
             # Idempotent same-day rerun: clear today's rows for this workspace.
             cur.execute(

@@ -1,6 +1,15 @@
 import { useNavigate } from "react-router-dom";
+import { ClipboardList, Search, KeyRound, Rocket, BarChart3 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { T, t } from "../i18n";
+
+const STEP_ICONS: Record<string, LucideIcon> = {
+  ClipboardList,
+  Search,
+  KeyRound,
+  Rocket,
+};
 
 export default function Success() {
   const { colors: C, lang } = useApp();
@@ -33,17 +42,20 @@ export default function Success() {
             {t(s.whatNextTitle, lang)}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-            {s.steps.map((step, i) => (
-              <div key={i} style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-                <div style={{ fontSize: 24, flexShrink: 0, width: 44, height: 44, background: C.s2, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  {step.icon}
+            {s.steps.map((step, i) => {
+              const Icon = STEP_ICONS[step.icon] || Rocket;
+              return (
+                <div key={i} style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+                  <div style={{ flexShrink: 0, width: 44, height: 44, background: C.s2, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", color: C.ac }}>
+                    <Icon size={20} strokeWidth={1.75} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: C.tx, marginBottom: 4 }}>{t(step.title, lang)}</div>
+                    <div style={{ fontSize: 14, color: C.t2, lineHeight: 1.6 }}>{t(step.desc, lang)}</div>
+                  </div>
                 </div>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: C.tx, marginBottom: 4 }}>{t(step.title, lang)}</div>
-                  <div style={{ fontSize: 14, color: C.t2, lineHeight: 1.6 }}>{t(step.desc, lang)}</div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -67,7 +79,7 @@ export default function Success() {
             marginBottom: 24,
             textAlign: 'center',
           }}>
-            <div style={{ fontSize: 28, marginBottom: 12 }}>📊</div>
+            <BarChart3 size={28} strokeWidth={1.5} color={C.ac} style={{ marginBottom: 12 }} />
             <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8, marginTop: 0, color: C.tx }}>
               {t(T.ci.yourIntelReady, lang)}
             </h3>

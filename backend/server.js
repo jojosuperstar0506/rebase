@@ -205,12 +205,10 @@ app.post("/api/onboarding", async (req, res) => {
     // Auto-create CI workspace if competitors field is present (non-fatal side effect)
     if (competitors && competitors.trim()) {
       try {
-        // user_id precedence MUST match POST /api/auth/verify-code's JWT.sub
-        // construction (line ~487): phone first, email second. Phone is a
-        // required field so this always resolves; if we used email-first here
-        // and a user supplied both, the JWT's sub (=phone) wouldn't match the
-        // workspace's user_id (=email) on first login → "no workspace found"
-        // on the very first /ci visit. Same precedence both places.
+        // At onboarding the applicant has no inviteCode yet (admin hasn't
+        // approved). Workspace gets phone-keyed user_id as a placeholder; the
+        // /api/admin/approve route re-keys it to inviteCode once the code is
+        // generated, so subsequent logins (whose JWT.sub = inviteCode) find it.
         const userId = phone || email || `applicant-${Date.now()}`;
 
         // Create workspace
@@ -254,6 +252,20 @@ app.post("/api/onboarding", async (req, res) => {
   }
 });
 
+// HTML-escape user-supplied content before embedding in email templates.
+// Without this, an applicant could submit name="<script>...</script>" or
+// goal containing HTML/event-handler attributes, which would render in
+// our admin inbox (or the applicant's own welcome email).
+function escHtml(s) {
+  if (s == null) return "";
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // Sends a notification email to REPORT_EMAIL when a new application arrives.
 // Uses Resend REST API via Node's built-in https — no extra npm package needed.
 // If RESEND_API_KEY or REPORT_EMAIL is not set, logs a message and skips.
@@ -267,6 +279,9 @@ async function notifyNewApplicant(applicant) {
   }
 
   const https = require("https");
+  // Note: subject lines aren't HTML, but Resend will pass them through to email
+  // clients, some of which interpret entities. Use plain-text fields for the
+  // subject — keep escaping tight in the html body where injection actually matters.
   const body = JSON.stringify({
     from: "Rebase <onboarding@resend.dev>",
     to: [toEmail],
@@ -274,15 +289,15 @@ async function notifyNewApplicant(applicant) {
     html: `
       <h2>New Rebase Application</h2>
       <table style="border-collapse:collapse;font-family:sans-serif;font-size:14px">
-        <tr><td style="padding:6px 12px;color:#666">Name</td><td style="padding:6px 12px"><strong>${applicant.name}</strong></td></tr>
-        <tr><td style="padding:6px 12px;color:#666">Email</td><td style="padding:6px 12px">${applicant.email}</td></tr>
-        <tr><td style="padding:6px 12px;color:#666">Company</td><td style="padding:6px 12px">${applicant.company || "—"}</td></tr>
-        <tr><td style="padding:6px 12px;color:#666">Industry</td><td style="padding:6px 12px">${applicant.industry}</td></tr>
-        <tr><td style="padding:6px 12px;color:#666">Competitors</td><td style="padding:6px 12px">${applicant.competitors || "—"}</td></tr>
-        <tr><td style="padding:6px 12px;color:#666">Goal</td><td style="padding:6px 12px">${applicant.goal || "—"}</td></tr>
-        <tr><td style="padding:6px 12px;color:#666">Submitted</td><td style="padding:6px 12px">${applicant.submittedAt}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Name</td><td style="padding:6px 12px"><strong>${escHtml(applicant.name)}</strong></td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Email</td><td style="padding:6px 12px">${escHtml(applicant.email)}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Company</td><td style="padding:6px 12px">${escHtml(applicant.company) || "—"}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Industry</td><td style="padding:6px 12px">${escHtml(applicant.industry)}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Competitors</td><td style="padding:6px 12px">${escHtml(applicant.competitors) || "—"}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Goal</td><td style="padding:6px 12px">${escHtml(applicant.goal) || "—"}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Submitted</td><td style="padding:6px 12px">${escHtml(applicant.submittedAt)}</td></tr>
       </table>
-      <p style="margin-top:24px;color:#666;font-size:13px">Reply to this applicant directly at <a href="mailto:${applicant.email}">${applicant.email}</a> with their access code to grant them entry to Rebase.</p>
+      <p style="margin-top:24px;color:#666;font-size:13px">Reply to this applicant directly at <a href="mailto:${encodeURIComponent(applicant.email || "")}">${escHtml(applicant.email)}</a> with their access code to grant them entry to Rebase.</p>
     `,
   });
 
@@ -520,6 +535,12 @@ app.get("/api/admin/applicants", (req, res) => {
 
 // POST /api/auth/verify-code — user enters their invite code
 // Returns a JWT containing their full profile (name, company, industry, competitors, goal)
+//
+// JWT.sub = inviteCode (uppercase). The invite code IS the account identifier:
+// any device, any colleague using the same code resolves to the same workspace
+// set (same model as email+password — log in from anywhere, see your data).
+// Pre-fix this used phone||email which fragmented one customer across multiple
+// workspaces depending on which login they came in through.
 app.post("/api/auth/verify-code", (req, res) => {
   const { code } = req.body;
   if (!code) return res.status(400).json({ error: "Invite code is required" });
@@ -533,9 +554,14 @@ app.post("/api/auth/verify-code", (req, res) => {
     return res.status(401).json({ error: "Invalid or unrecognised invite code. Check your code and try again." });
   }
 
+  const accountId = (user.inviteCode || "").toUpperCase();
   const secret = process.env.JWT_SECRET || "rebase-dev-secret";
   const payload = {
-    sub: user.phone || user.email,
+    sub: accountId,
+    // Person-level fields kept alongside the account ID for personalization
+    // hooks (greeting copy, contact email) — never used for workspace lookup.
+    phone: user.phone || "",
+    email: user.email || "",
     name: user.name,
     company: user.company || "",
     industry: user.industry || "",
@@ -543,7 +569,7 @@ app.post("/api/auth/verify-code", (req, res) => {
     goal: user.goal || "",
   };
   const token = jwt.sign(payload, secret, { expiresIn: "30d" });
-  console.log(`[Auth] ${user.name} (${user.company}) logged in with invite code`);
+  console.log(`[Auth] ${user.name} (${user.company}) logged in → account ${accountId}`);
   res.json({ success: true, token, user: { name: user.name, company: user.company } });
 });
 
@@ -551,7 +577,7 @@ app.post("/api/auth/verify-code", (req, res) => {
 // Protected by x-rebase-secret header (only Will/Joanna can call this)
 // Body: { "phone": "+86 138 0000 0000" }  OR  { "name": "John Doe" }
 // Returns the generated invite code so you can share it with the user
-app.post("/api/admin/approve", (req, res) => {
+app.post("/api/admin/approve", async (req, res) => {
   const { phone, name } = req.body;
   if (!phone && !name) return res.status(400).json({ error: "Provide phone or name to identify the applicant" });
 
@@ -589,6 +615,38 @@ app.post("/api/admin/approve", (req, res) => {
 
   console.log(`[Admin] Approved ${applicant.name} → invite code: ${inviteCode}`);
 
+  // Re-key any pre-created workspaces from phone/email keying to invite-code
+  // keying. The onboarding route auto-creates a workspace with user_id =
+  // phone||email (because the invite code doesn't exist yet at that point).
+  // After approval, the user's JWT will carry sub = inviteCode, so the
+  // workspace must be rekeyed to match — otherwise their first login lands
+  // on an empty dashboard while their old workspace sits orphaned.
+  //
+  // We surface the re-key outcome in the response body so the admin UI can
+  // distinguish three states: rekey ran and updated N rows, rekey ran but
+  // found nothing to update (acceptable — applicant onboarded without
+  // competitors), rekey failed (admin needs to run the backfill script).
+  const accountId = inviteCode.toUpperCase();
+  const oldKeys = [applicant.phone, applicant.email].filter(Boolean);
+  let rekey = { attempted: false, rekeyedRows: 0, error: null };
+  if (oldKeys.length > 0) {
+    rekey.attempted = true;
+    try {
+      const { rowCount } = await pool.query(
+        `UPDATE workspaces
+            SET user_id = $1
+          WHERE user_id = ANY($2::text[])
+            AND user_id NOT LIKE 'RB-%'`,
+        [accountId, oldKeys]
+      );
+      rekey.rekeyedRows = rowCount;
+      if (rowCount > 0) console.log(`[Admin] Re-keyed ${rowCount} workspace(s) → ${accountId}`);
+    } catch (e) {
+      rekey.error = e.message;
+      console.error("[Admin] Workspace re-key failed (non-fatal):", e.message);
+    }
+  }
+
   // Auto-email the invite code to the applicant if RESEND_API_KEY is set
   // and they provided an email. Non-fatal — admin response still returns
   // the code regardless so it can be shared manually if email fails.
@@ -596,7 +654,14 @@ app.post("/api/admin/approve", (req, res) => {
     console.error("[Admin] Approval email failed (non-fatal):", e.message)
   );
 
-  res.json({ success: true, inviteCode, user: applicant.name, company: applicant.company, email: applicant.email || "" });
+  res.json({
+    success: true,
+    inviteCode,
+    user: applicant.name,
+    company: applicant.company,
+    email: applicant.email || "",
+    rekey,
+  });
 });
 
 // Send the inviteCode to the applicant's email after admin approval. Skips
@@ -617,7 +682,7 @@ async function notifyApplicantApproved(applicant) {
     <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#222">
       <h2 style="color:#0f766e;margin:0 0 8px">You're in.</h2>
       <p style="font-size:14px;line-height:1.6;color:#444;margin:0 0 16px">
-        Hi ${applicant.name}, your Rebase application has been approved.
+        Hi ${escHtml(applicant.name)}, your Rebase application has been approved.
         Use the invite code below to sign in for the first time.
       </p>
       <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;text-align:center;margin:16px 0">
@@ -625,7 +690,7 @@ async function notifyApplicantApproved(applicant) {
           INVITE CODE
         </div>
         <div style="font-family:monospace;font-size:22px;font-weight:700;color:#16a34a;letter-spacing:3px">
-          ${applicant.inviteCode}
+          ${escHtml(applicant.inviteCode)}
         </div>
       </div>
       <p style="font-size:14px;line-height:1.6;color:#444;margin:16px 0 8px">
@@ -814,12 +879,29 @@ app.patch('/api/ci/workspace/:id', async (req, res) => {
     if (!userId) return res.status(401).json({ error: 'Missing user ID' });
 
     // Confirm the workspace belongs to this user before letting them edit.
+    // Pull is_demo + the canonical brand_name in the same query so the
+    // demo guard below can reuse them without a second round-trip.
     const owned = await pool.query(
-      'SELECT id FROM workspaces WHERE id = $1 AND user_id = $2',
+      'SELECT id, is_demo, brand_name FROM workspaces WHERE id = $1 AND user_id = $2',
       [id, userId]
     );
     if (owned.rows.length === 0) {
       return res.status(404).json({ error: 'Workspace not found or not owned by this user' });
+    }
+    const isDemo = owned.rows[0].is_demo === true;
+    const canonicalBrandName = owned.rows[0].brand_name;
+
+    // Demo workspace guard: silently drop brand_name edits. The Analytics
+    // tab keys composite_indices rows by (workspace_id, competitor_name),
+    // and renames break the own-brand lookup until the next compute job
+    // runs. For the YC demo invite workspace we'd rather YC reviewers
+    // exercise the rest of Settings (category, price, platforms, add/
+    // remove competitors) without one stray brand-name keystroke wiping
+    // the curated Analytics page. is_demo is only ever set by the
+    // seeder, so this never affects a real customer workspace.
+    if (isDemo && Object.prototype.hasOwnProperty.call(req.body, 'brand_name')
+        && req.body.brand_name !== canonicalBrandName) {
+      delete req.body.brand_name;
     }
 
     // Build dynamic SET clause from whichever editable fields are present.
@@ -1485,12 +1567,40 @@ app.get('/api/ci/brief', async (req, res) => {
     }
 
     // ─── Bilingual resolution ──────────────────────────────────────
-    const verdictFields = ['headline', 'sentence', 'top_action'];
+    // verdictFields covers the flat top-level bilingual strings.
+    // pressure_points / at_risk / sources are nested structures handled
+    // immediately after — see comments inline.
+    const verdictFields = ['headline', 'summary', 'sentence', 'top_action'];
     const moveFields = ['headline', 'detail', 'so_what', 'action'];
     const draftFields = ['title', 'hook_3s', 'main_15s', 'cta_3s', 'reasoning', 'why_now'];
     const oppFields = ['concept_name', 'positioning', 'why_now', 'target_price', 'launch_timeline'];
 
     const resolvedVerdict = resolveObj(verdict || {}, lang, verdictFields);
+
+    // Pressure points: each item has a flat brand string (literal — never
+    // translated) + bilingual badge / headline / source, plus an `evidence`
+    // array that's stored as {zh: [...], en: [...]} and resolves to a
+    // single-language string array via resolveLang.
+    if (Array.isArray(resolvedVerdict.pressure_points)) {
+      resolvedVerdict.pressure_points = resolvedVerdict.pressure_points.map(p => {
+        const r = resolveObj(p, lang, ['badge', 'headline', 'source']);
+        if (r.evidence) {
+          const ev = resolveLang(r.evidence, lang);
+          r.evidence = Array.isArray(ev) ? ev : [];
+        }
+        return r;
+      });
+    }
+
+    // At-risk callout: simple bilingual object.
+    if (resolvedVerdict.at_risk && typeof resolvedVerdict.at_risk === 'object') {
+      resolvedVerdict.at_risk = resolveObj(resolvedVerdict.at_risk, lang, ['metric', 'magnitude', 'narrative']);
+    }
+
+    // Sources: array of bilingual citation strings → array of resolved strings.
+    if (Array.isArray(resolvedVerdict.sources)) {
+      resolvedVerdict.sources = resolvedVerdict.sources.map(s => resolveLang(s, lang));
+    }
     const resolvedMoves = (Array.isArray(moves) ? moves : []).map(m => resolveObj(m, lang, moveFields));
     const resolvedDrafts = contentDrafts.map(d => resolveObj(d, lang, draftFields));
     let resolvedOpp = productOpportunity;
@@ -1615,6 +1725,208 @@ app.get('/api/ci/brief', async (req, res) => {
   } catch (err) {
     console.error('[CI] GET brief error:', err.message);
     res.status(500).json({ error: 'Failed to fetch brief' });
+  }
+});
+
+// POST /api/ci/brief/draft — generate a publish-ready XHS post draft
+// for one of the current Brief's moves. This is the "execution layer" the
+// AI-Native Agency thesis sells: insight → playbook → ready-to-publish copy
+// in one click.
+//
+// Body:
+//   workspace_id  (required) UUID
+//   move_index    (optional) integer, defaults to 0 = highest-pressure move
+//   channel       (optional) 'xhs' for v1; structure left open for douyin /
+//                            email / comment_reply later
+//   lang          (optional) 'zh' | 'en' — controls UI labels in the
+//                            response. The XHS draft itself is always Chinese
+//                            because XHS is a Chinese platform; when lang=en
+//                            we additionally include en_translation as a
+//                            readable gloss for English-mode reviewers.
+//
+// Response 200:
+//   {
+//     channel: 'xhs',
+//     based_on: { move_index, move_headline },
+//     draft: {
+//       title: string,        // 15-20 char Chinese hook
+//       body: string,         // 200-300 char story-driven post
+//       tags: string[],       // 6-8 hashtags incl. brand + category + trend
+//       image_concept: string // one-sentence shoot brief
+//     },
+//     en_translation?: {       // present iff lang=en
+//       title, body, image_concept
+//     }
+//   }
+//
+// Frontend gate: only `workspaces.is_demo=TRUE` workspaces show the trigger
+// button (CIBrief.tsx). The endpoint accepts any workspace so it can ship
+// to all customers later by removing that one gate, without touching server
+// business logic.
+app.post('/api/ci/brief/draft', async (req, res) => {
+  try {
+    const workspaceId = req.body.workspace_id;
+    const moveIndex = Number.isInteger(req.body.move_index) ? req.body.move_index : 0;
+    const channel = req.body.channel === 'xhs' ? 'xhs' : 'xhs'; // v1: XHS only
+    const lang = req.body.lang === 'en' ? 'en' : 'zh';
+
+    if (!workspaceId || !isValidUuid(workspaceId)) {
+      return res.status(400).json({ error: 'Missing or invalid workspace_id' });
+    }
+
+    // 1. Pull workspace context — brand identity feeds the prompt.
+    const { rows: wsRows } = await pool.query(
+      `SELECT brand_name, brand_category, brand_price_range
+         FROM workspaces WHERE id = $1`,
+      [workspaceId]
+    );
+    if (wsRows.length === 0) return res.status(404).json({ error: 'Workspace not found' });
+    const ws = wsRows[0];
+
+    // 2. Pull the latest Brief for this workspace and pick the move.
+    const { rows: briefRows } = await pool.query(
+      `SELECT verdict, moves FROM weekly_briefs
+        WHERE workspace_id = $1
+        ORDER BY week_of DESC LIMIT 1`,
+      [workspaceId]
+    );
+    if (briefRows.length === 0) {
+      return res.status(404).json({ error: 'No brief generated yet — run analysis first' });
+    }
+    let moves = briefRows[0].moves;
+    if (typeof moves === 'string') {
+      try { moves = JSON.parse(moves); } catch { moves = []; }
+    }
+    if (!Array.isArray(moves) || moves.length === 0) {
+      return res.status(404).json({ error: 'Brief has no moves to respond to' });
+    }
+    const safeMoveIndex = Math.min(Math.max(0, moveIndex), moves.length - 1);
+    const move = moves[safeMoveIndex];
+
+    // Resolve bilingual fields on the move so the LLM sees concrete strings,
+    // not the raw {zh, en} envelopes (which would confuse the prompt).
+    const moveFields = ['headline', 'detail', 'so_what', 'action'];
+    const resolvedMove = resolveObj(move || {}, 'zh', moveFields); // always feed zh to the LLM
+    const moveHeadlineZh = resolvedMove.headline || '';
+    const moveDetailZh = resolvedMove.detail || '';
+    const moveSoWhatZh = resolvedMove.so_what || '';
+    const moveActionZh = resolvedMove.action || '';
+
+    // 3. Build the prompt. One Claude call returns JSON; we extract.
+    //    Voice and structure tuned to match real XHS operator posts:
+    //    story-driven first-person, mid-density emoji, hashtag mix of
+    //    brand + category + trend + scene words.
+    const priceRangeStr = ws.brand_price_range
+      ? `¥${ws.brand_price_range.min || '?'}-${ws.brand_price_range.max || '?'}`
+      : '未知';
+    const prompt = `你是一位资深的小红书内容运营,正在为消费品牌策划本周的对位响应。
+
+品牌背景:
+- 品牌:${ws.brand_name}
+- 品类:${ws.brand_category || '未知'}
+- 价位带:${priceRangeStr}
+
+本周需要响应的竞争动作 (来自竞品智能简报):
+- 动作标题:${moveHeadlineZh}
+- 详情:${moveDetailZh}
+- 核心判断:${moveSoWhatZh}
+- 建议行动:${moveActionZh}
+
+请草拟一篇可直接发布的小红书图文笔记,语气贴近真实运营,不要写得像广告。
+
+要求:
+1. 标题:15-20 字的钩子句,带情绪或对比;不要堆砌品牌名
+2. 正文:200-300 字,第一人称叙事,包含 1-2 个真实场景细节,中等密度 emoji (3-6 个),不要罗列卖点
+3. 标签:6-8 个井号开头的标签,组合 = 品牌词 + 品类词 + 场景词 + 当前热点
+4. 配图建议:一句话描述拍摄方向 (光线、构图、道具),让运营可以直接交给摄影师
+
+仅以以下 JSON 格式回复,不要任何额外文字、不要 markdown 代码块:
+{
+  "title": "...",
+  "body": "...",
+  "tags": ["#...", "#...", "..."],
+  "image_concept": "..."
+}`;
+
+    // 4. Generate. Haiku is fast + cheap and good enough for content drafting;
+    //    swap to Sonnet later if quality regresses.
+    const aiResponse = await anthropicClient.messages.create({
+      model: process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001',
+      max_tokens: 1500,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    // Extract JSON from the response. Handle a few defensive cases:
+    // raw JSON, JSON wrapped in ```json fences, or markdown commentary
+    // around the JSON. We pick the first {...} block.
+    const rawText = (aiResponse.content || [])
+      .map(b => b.text || '')
+      .join('')
+      .trim();
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error('[CI brief/draft] Could not parse JSON from LLM response:', rawText.slice(0, 200));
+      return res.status(502).json({ error: 'Draft generation returned malformed output — try again' });
+    }
+    let draft;
+    try {
+      draft = JSON.parse(jsonMatch[0]);
+    } catch (parseErr) {
+      console.error('[CI brief/draft] JSON.parse failed:', parseErr.message, 'on:', jsonMatch[0].slice(0, 200));
+      return res.status(502).json({ error: 'Draft generation returned malformed output — try again' });
+    }
+
+    // Sanitize the draft shape so the frontend can render without defensive checks.
+    const safeDraft = {
+      title: typeof draft.title === 'string' ? draft.title : '',
+      body: typeof draft.body === 'string' ? draft.body : '',
+      tags: Array.isArray(draft.tags) ? draft.tags.filter(t => typeof t === 'string') : [],
+      image_concept: typeof draft.image_concept === 'string' ? draft.image_concept : '',
+    };
+
+    // 5. If lang=en, run a tiny second call for the English gloss. We keep
+    //    this opt-in (only on en) so the zh-mode hot path stays one LLM call.
+    let enTranslation = null;
+    if (lang === 'en' && safeDraft.title) {
+      try {
+        const glossPrompt = `Translate the following Chinese Xiaohongshu post into natural English so an American reader can grasp the tone and content. Keep emoji as-is. Reply ONLY with JSON: {"title": "...", "body": "...", "image_concept": "..."}.
+
+Title: ${safeDraft.title}
+Body: ${safeDraft.body}
+Image concept: ${safeDraft.image_concept}`;
+        const glossResp = await anthropicClient.messages.create({
+          model: process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001',
+          max_tokens: 800,
+          messages: [{ role: 'user', content: glossPrompt }],
+        });
+        const glossText = (glossResp.content || []).map(b => b.text || '').join('').trim();
+        const glossMatch = glossText.match(/\{[\s\S]*\}/);
+        if (glossMatch) {
+          const parsed = JSON.parse(glossMatch[0]);
+          enTranslation = {
+            title: typeof parsed.title === 'string' ? parsed.title : '',
+            body: typeof parsed.body === 'string' ? parsed.body : '',
+            image_concept: typeof parsed.image_concept === 'string' ? parsed.image_concept : '',
+          };
+        }
+      } catch (glossErr) {
+        // Non-fatal — main draft already generated; gloss is a nice-to-have.
+        console.warn('[CI brief/draft] EN gloss failed (non-fatal):', glossErr.message);
+      }
+    }
+
+    return res.json({
+      channel,
+      based_on: {
+        move_index: safeMoveIndex,
+        move_headline: moveHeadlineZh,
+      },
+      draft: safeDraft,
+      ...(enTranslation ? { en_translation: enTranslation } : {}),
+    });
+  } catch (err) {
+    console.error('[CI] POST brief/draft error:', err.message);
+    return res.status(500).json({ error: 'Draft generation failed' });
   }
 });
 
@@ -1978,6 +2290,27 @@ app.get('/api/ci/indices', async (req, res) => {
       };
       if (!latestComputedAt || r.computed_at > latestComputedAt) {
         latestComputedAt = r.computed_at;
+      }
+    }
+
+    // Re-key the own brand under the workspace's current brand_name casing.
+    // composite_indices rows were written with whatever casing existed when
+    // the compute job ran ("TORY BURCH" from the seeder). If the user later
+    // edited the brand profile via Settings ("Tory Burch"), the workspace
+    // row diverges from the indices rows and the frontend's lookup
+    // `indices_by_competitor[workspaceBrandName]` returns undefined → every
+    // card renders "Coverage pending" until the next pipeline run.
+    //
+    // Normalize here so brand-profile edits don't break Analytics. Cheaper
+    // than triggering a recompute on every brand_name update, and applies
+    // to all workspaces (real customers will hit this too).
+    const ownBrandLower = workspaceBrandName.toLowerCase();
+    if (ownBrandLower) {
+      for (const key of Object.keys(indicesByCompetitor)) {
+        if (key !== workspaceBrandName && key.toLowerCase() === ownBrandLower) {
+          indicesByCompetitor[workspaceBrandName] = indicesByCompetitor[key];
+          delete indicesByCompetitor[key];
+        }
       }
     }
 
@@ -3429,6 +3762,10 @@ app.post('/api/ci/parse-link', async (req, res) => {
 // POST /api/ci/suggest-competitors — AI-powered competitor suggestions
 app.post('/api/ci/suggest-competitors', async (req, res) => {
   const { brand_name, brand_category, brand_price_range, brand_platforms } = req.body;
+  // Match the UI language. Default zh because the demo + the bulk of users
+  // are in zh-CN; English-mode YC reviewers need EN reasons or the AI
+  // suggestions card looks broken (English UI, Chinese reasons).
+  const lang = req.body.lang === 'en' ? 'en' : 'zh';
 
   if (!brand_name || !brand_category) {
     return res.status(400).json({ error: 'Missing brand_name or brand_category' });
@@ -3471,7 +3808,7 @@ IMPORTANT RULES:
 2. You are NOT limited to our database — suggest any real, well-known brand that competes in "${brand_category}" within the ${priceStr} price range in the Chinese market.
 3. All suggested brands must be real brands that actually exist and sell products on Chinese e-commerce platforms.
 
-Suggest 5-8 competitors they should track. For each, explain in one sentence WHY they should track this competitor (in Chinese/简体中文).
+Suggest 5-8 competitors they should track. For each, explain in one sentence WHY they should track this competitor ${lang === 'en' ? 'in English' : 'in Chinese/简体中文'}.
 
 Prioritize:
 1. Direct price-range competitors (same category, similar pricing)
@@ -3481,7 +3818,7 @@ Prioritize:
 Respond in this exact JSON format, no markdown:
 {
   "suggestions": [
-    {"brand_name": "...", "reason": "...理由...", "priority": "high|medium|low", "group": "direct|aspirational|emerging"}
+    {"brand_name": "...", "reason": "${lang === 'en' ? '...reason...' : '...理由...'}", "priority": "high|medium|low", "group": "direct|aspirational|emerging"}
   ]
 }`;
 

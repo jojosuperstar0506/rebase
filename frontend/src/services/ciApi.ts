@@ -5,6 +5,24 @@ import {
 
 const API_BASE = '/api/ci';
 
+// JWT.sub for invite-code users is the uppercase invite code (e.g. "RB-TORYBU-841E").
+// Older tokens minted before the auth refactor had sub = phone or email — those are
+// stale: workspaces now key on the invite code, so a phone-keyed sub silently lands
+// on an empty workspace. We treat anything that doesn't look like a valid account
+// identifier as stale and clear the token, falling back to anon (which is the
+// pre-login state). This forces those users to re-login and get a fresh JWT.
+function isValidAccountSub(sub: string): boolean {
+  if (!sub) return false;
+  // Email format → stale
+  if (sub.includes('@')) return false;
+  // Phone-only digits (with optional + and spaces/dashes) → stale
+  if (/^[+\-\s()0-9]+$/.test(sub)) return false;
+  // Anon-prefixed IDs from this same client → valid (anon-keyed workspace path)
+  if (sub.startsWith('anon-')) return true;
+  // Invite-code shape (RB-XXXXX-XXXX) or any uppercase alphanumeric token → valid
+  return /^[A-Z0-9_-]{3,}$/.test(sub);
+}
+
 // Helper: get auth headers from JWT token
 function getHeaders(): Record<string, string> {
   const token = localStorage.getItem('rebase_token');
@@ -12,7 +30,15 @@ function getHeaders(): Record<string, string> {
   if (token) {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
-      userId = payload.sub || payload.id || payload.email || '';
+      const candidate = (payload.sub || payload.id || payload.email || '').toString();
+      if (isValidAccountSub(candidate)) {
+        userId = candidate;
+      } else if (candidate) {
+        // Stale token from before the auth refactor — clear it so next login
+        // mints a fresh JWT with sub = invite code.
+        console.warn('[CI API] Stale JWT detected (sub format invalid). Clearing token; please log in again.');
+        localStorage.removeItem('rebase_token');
+      }
     } catch {}
   }
   // Fallback: generate a stable anonymous ID so workspace creation works without JWT
@@ -499,7 +525,8 @@ export interface SuggestCompetitorsResult {
 export async function suggestCompetitors(
   brandName: string,
   category: string,
-  priceRange?: { min: number; max: number }
+  priceRange?: { min: number; max: number },
+  lang: string = 'zh'
 ): Promise<SuggestCompetitorsResult> {
   const result = await tryApiVerbose<{
     suggestions: CompetitorSuggestion[];
@@ -507,7 +534,12 @@ export async function suggestCompetitors(
     message?: string;
   }>('/suggest-competitors', {
     method: 'POST',
-    body: JSON.stringify({ brand_name: brandName, brand_category: category, brand_price_range: priceRange }),
+    body: JSON.stringify({
+      brand_name: brandName,
+      brand_category: category,
+      brand_price_range: priceRange,
+      lang,
+    }),
   });
 
   if (!result.ok) {
@@ -530,6 +562,71 @@ export async function suggestCompetitors(
     status: result.status,
     message: result.data?.message,
   };
+}
+
+// ─── Brief draft (execution layer) ────────────────────────────────
+// AI-Native Agency thesis on screen: generate a publish-ready XHS post
+// from this week's top Brief move. Demoed at /agents/xhs-content for
+// is_demo workspaces; backend accepts any workspace so the gate can
+// widen later by removing one frontend conditional.
+
+export interface BriefDraftResponse {
+  channel: string;
+  based_on: {
+    move_index: number;
+    move_headline: string;
+    /** Optional EN version of the move headline. Lets the panel subtitle
+     *  flip when the operator toggles content language. */
+    move_headline_en?: string;
+  };
+  draft: { title: string; body: string; tags: string[]; image_concept: string };
+  en_translation?: {
+    title: string;
+    body: string;
+    image_concept: string;
+    /** Optional EN-translated tags. Used for the Warroom's panel-local
+     *  content toggle so YC reviewers see English everywhere when they
+     *  flip the panel. NOTE: when widening to real customers, copy-to-
+     *  clipboard should still emit the Chinese tags from `draft.tags`
+     *  for actual publish — XHS hashtags are platform-native. */
+    tags?: string[];
+  };
+  /** Optional bilingual chain-of-reasoning callout: WHY this draft exists.
+   *  Surfaces the connection from competitive intel → playbook → content.
+   *  Currently set on the prebaked demo draft; live LLM path can populate
+   *  this in a future iteration to make the AI-Native Agency thesis
+   *  legible in the UI. */
+  rationale?: { zh: string; en: string };
+}
+
+export interface BriefDraftResult {
+  ok: boolean;
+  data?: BriefDraftResponse;
+  status: number;
+  message?: string;
+}
+
+export async function generateBriefDraft(
+  workspaceId: string,
+  moveIndex: number = 0,
+  lang: string = 'zh',
+  channel: 'xhs' = 'xhs',
+): Promise<BriefDraftResult> {
+  const result = await tryApiVerbose<BriefDraftResponse>('/brief/draft', {
+    method: 'POST',
+    body: JSON.stringify({ workspace_id: workspaceId, move_index: moveIndex, channel, lang }),
+  });
+  if (!result.ok) {
+    return {
+      ok: false,
+      status: result.status,
+      message: result.message
+        || (result.status === 0
+          ? (lang === 'zh' ? '无法连接服务器,请重试' : 'Could not reach the server, try again')
+          : `Request failed (HTTP ${result.status})`),
+    };
+  }
+  return { ok: true, data: result.data, status: result.status };
 }
 
 export async function searchBrands(query: string): Promise<BrandResolution[]> {

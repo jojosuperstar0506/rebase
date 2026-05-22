@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
+import {
+  MousePointerClick, Bot, Sparkles, Pencil,
+  CheckCircle2, Circle,
+} from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { t, T } from '../../i18n';
 import CISubNav from '../../components/ci/CISubNav';
@@ -17,9 +21,26 @@ import {
   addCompetitor, removeCompetitor, getCompetitors,
   type BrandResolution, type CompetitorSuggestion,
 } from '../../services/ciApi';
+import { categoryLabel } from '../../utils/categoryLabels';
 
-const CATEGORIES = ['女包', '男包', '箱包配件', '鞋类', '服饰', '其他'];
-const PLATFORM_OPTIONS = ['淘宝/天猫', '京东', '小红书', '抖音'];
+// Category + platform values stay Chinese — they're foreign keys into the
+// pipeline's INDEX_HIERARCHY weighting + scraper routing. The label is the
+// only thing that switches with lang. The value never gets translated, or
+// the backend's category-keyed lookups silently return zero rows.
+const CATEGORIES: { value: string; label: { en: string; zh: string } }[] = [
+  { value: '女包',     label: { en: "Women's bags",         zh: '女包' } },
+  { value: '男包',     label: { en: "Men's bags",           zh: '男包' } },
+  { value: '箱包配件', label: { en: 'Bags & accessories',   zh: '箱包配件' } },
+  { value: '鞋类',     label: { en: 'Footwear',             zh: '鞋类' } },
+  { value: '服饰',     label: { en: 'Apparel',              zh: '服饰' } },
+  { value: '其他',     label: { en: 'Other',                zh: '其他' } },
+];
+const PLATFORM_OPTIONS: { value: string; label: { en: string; zh: string } }[] = [
+  { value: '淘宝/天猫', label: { en: 'Taobao / Tmall', zh: '淘宝/天猫' } },
+  { value: '京东',      label: { en: 'JD',             zh: '京东' } },
+  { value: '小红书',    label: { en: 'Xiaohongshu',    zh: '小红书' } },
+  { value: '抖音',      label: { en: 'Douyin',         zh: '抖音' } },
+];
 const MAX_WATCHLIST = 10;
 
 // Reject inputs that aren't a real brand name. We saw production rows with
@@ -181,7 +202,11 @@ function BrandProfileSection({ C, lang, isMobile }: { C: ReturnType<typeof useAp
             onChange={e => setForm(f => ({ ...f, brand_category: e.target.value }))}
           >
             <option value="">-- select --</option>
-            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            {CATEGORIES.map(c => (
+              <option key={c.value} value={c.value}>
+                {c.label[lang as 'en' | 'zh'] ?? c.label.en}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -214,16 +239,16 @@ function BrandProfileSection({ C, lang, isMobile }: { C: ReturnType<typeof useAp
           <label style={labelStyle}>{t(T.ci.platforms, lang as any)}</label>
           <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 8 }}>
             {PLATFORM_OPTIONS.map(p => {
-              const checked = form.platforms.includes(p);
+              const checked = form.platforms.includes(p.value);
               return (
-                <label key={p} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+                <label key={p.value} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
                   <input
                     type="checkbox"
                     checked={checked}
-                    onChange={() => togglePlatform(p)}
+                    onChange={() => togglePlatform(p.value)}
                     style={{ accentColor: C.ac }}
                   />
-                  {p}
+                  {p.label[lang as 'en' | 'zh'] ?? p.label.en}
                 </label>
               );
             })}
@@ -453,7 +478,7 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
     setAiLoading(true);
     setAiError('');
     try {
-      const result = await suggestCompetitors(ws.brand_name, ws.brand_category, ws.price_range);
+      const result = await suggestCompetitors(ws.brand_name, ws.brand_category, ws.price_range, lang);
       setAiSuggestions(result.suggestions);
 
       // Show actual cause to the user instead of a generic "unavailable"
@@ -762,8 +787,8 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
               padding: '28px 20px', background: C.s2, borderRadius: 10, fontSize: 13,
               color: C.t3, textAlign: 'center', border: `1px solid ${C.bd}`,
             }}>
-              <div style={{ fontSize: 22, marginBottom: 8 }}>👆</div>
-              {t(T.ci.setupBrandFirst, lang as any)}
+              <MousePointerClick size={22} strokeWidth={1.75} color={C.t2} style={{ marginBottom: 8 }} />
+              <div>{t(T.ci.setupBrandFirst, lang as any)}</div>
             </div>
           ) : aiLoading ? (
             <div>
@@ -804,7 +829,7 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
               <div style={{ fontSize: 13, color: C.t2, marginBottom: 12 }}>
                 {t(T.ci.aiRecommends, lang as any)}{' '}
                 <strong style={{ color: C.tx }}>{workspace.brand_name}</strong>
-                {workspace.brand_category && ` (${workspace.brand_category}`}
+                {workspace.brand_category && ` (${categoryLabel(workspace.brand_category, lang)}`}
                 {workspace.price_range?.min ? `, ¥${workspace.price_range.min}–${workspace.price_range.max})` : workspace.brand_category ? ')' : ''}
               </div>
 
@@ -888,7 +913,7 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
               padding: '32px 20px', textAlign: 'center',
               background: C.s2, borderRadius: 12, border: `1px solid ${C.bd}`,
             }}>
-              <div style={{ fontSize: 28, marginBottom: 12 }}>🤖</div>
+              <Bot size={28} strokeWidth={1.5} color={C.ac} style={{ marginBottom: 12 }} />
               <div style={{ fontSize: 14, fontWeight: 600, color: C.tx, marginBottom: 6 }}>
                 {lang === 'zh' ? 'AI竞品推荐' : 'AI Competitor Suggestions'}
               </div>
@@ -905,7 +930,8 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
                   display: 'inline-flex', alignItems: 'center', gap: 8,
                 }}
               >
-                ✨ {t(T.ci.generateSuggestions, lang as any)}
+                <Sparkles size={14} strokeWidth={2} />
+                {t(T.ci.generateSuggestions, lang as any)}
               </button>
               <div style={{ fontSize: 11, color: C.t3, marginTop: 10 }}>
                 {t(T.ci.generatingTakes, lang as any)}
@@ -1070,7 +1096,10 @@ function CompetitorList({ C, lang, competitors, onChange, isMobile, readOnly = f
               )}
               {resolving
                 ? (lang === 'zh' ? '正在解析…' : 'Resolving…')
-                : (lang === 'zh' ? `✨ 自动解析 ${badRows.length} 个名称` : `✨ Auto-resolve ${badRows.length} name${badRows.length === 1 ? '' : 's'}`)}
+                : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    <Sparkles size={11} strokeWidth={2} />
+                    {lang === 'zh' ? `自动解析 ${badRows.length} 个名称` : `Auto-resolve ${badRows.length} name${badRows.length === 1 ? '' : 's'}`}
+                  </span>}
             </button>
             {resolveResult && (
               <span style={{
@@ -1194,13 +1223,14 @@ function CompetitorList({ C, lang, competitors, onChange, isMobile, readOnly = f
                     onClick={() => startEdit(c)}
                     style={{
                       background: 'none', border: 'none', color: isBad ? C.danger : C.t3,
-                      cursor: 'pointer', fontSize: 14, padding: '0 6px', lineHeight: 1,
+                      cursor: 'pointer', padding: '0 6px',
                       minWidth: isMobile ? 44 : undefined, minHeight: isMobile ? 44 : undefined,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}
                     title={lang === 'zh' ? '重命名品牌' : 'Rename brand'}
+                    aria-label={lang === 'zh' ? '重命名品牌' : 'Rename brand'}
                   >
-                    ✎
+                    <Pencil size={14} strokeWidth={1.75} />
                   </button>
 
                   <button
@@ -1212,6 +1242,7 @@ function CompetitorList({ C, lang, competitors, onChange, isMobile, readOnly = f
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}
                     title={t(T.ci.removeCompetitor, lang as any)}
+                    aria-label={t(T.ci.removeCompetitor, lang as any)}
                   >
                     ×
                   </button>
@@ -1270,7 +1301,11 @@ function ConnectionsSection({ C, lang, isMobile }: { C: ReturnType<typeof useApp
               border: `1px solid ${isConnected ? C.success : C.bd}`,
             }}>
               {/* Status dot */}
-              <span style={{ fontSize: 18, flexShrink: 0 }}>{isConnected ? '✅' : '⬜'}</span>
+              <span style={{ flexShrink: 0, display: 'inline-flex' }}>
+                {isConnected
+                  ? <CheckCircle2 size={18} strokeWidth={2} color={C.success} />
+                  : <Circle size={18} strokeWidth={1.5} color={C.t3} />}
+              </span>
 
               {/* Info */}
               <div style={{ flex: 1 }}>
@@ -1562,7 +1597,7 @@ function StartAnalysisCard({ C, lang, competitorCount, workspaceName, isMobile }
   const priceMin = workspace?.price_range?.min;
   const priceMax = workspace?.price_range?.max;
   const priceLabel = priceMin && priceMax ? `, ¥${priceMin}–${priceMax}` : '';
-  const catLabel = workspace?.brand_category ? `, ${workspace.brand_category}` : '';
+  const catLabel = workspace?.brand_category ? `, ${categoryLabel(workspace.brand_category, lang)}` : '';
 
   return (
     <div style={{

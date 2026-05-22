@@ -1,6 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from "react";
 import type { CSSProperties } from "react";
 import { Routes, Route, Link, useNavigate, useLocation } from "react-router-dom";
+import { Sun, Moon } from "lucide-react";
 
 import { AppProvider, useApp } from "./context/AppContext";
 import { BrandChip } from "@/components/ui/BrandChip";
@@ -9,6 +10,7 @@ import { useCIAlertCount } from "./hooks/useCIAlertCount";
 import { T, t } from "./i18n";
 
 import Home from "./pages/Home";
+import Contact from "./pages/Contact";
 import DiagnosticDashboard from "./pages/DiagnosticDashboard";
 import WorkflowScout from "./pages/WorkflowScout";
 import AgentMonitor from "./pages/AgentMonitor";
@@ -66,7 +68,7 @@ function NavLink({ to, label, highlight }: { to: string; label: string; highligh
 }
 
 function Nav() {
-  const { colors: C, theme, lang, setTheme, setLang } = useApp();
+  const { colors: C, theme, lang, setTheme, setLang, langSwitching } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
   function checkAuth() {
@@ -160,6 +162,9 @@ function Nav() {
       borderBottom: "1px solid var(--color-border-hairline)",
       fontFamily: "var(--font-mono)", position: "sticky", top: 0, zIndex: 100,
     }}>
+      {/* Spinner keyframes — used by the language toggle's loading indicator. */}
+      <style>{`@keyframes rebase-spin { to { transform: rotate(360deg); } }`}</style>
+
       {/* Logo */}
       <Link to="/" style={{
         textDecoration: "none", fontSize: 16, fontWeight: 700,
@@ -169,17 +174,21 @@ function Nav() {
         rebase
       </Link>
 
-      {/* Left nav links */}
+      {/* Left nav links — slimmed 2026-05-04. The platform now centers on
+          one product surface (Intelligence / 竞品情报). The previous tabs
+          (Diagnostics calculator, Agents, Workflow Discovery, Costs) were
+          earlier-iteration ideas that confuse new users — they still
+          route at /calculator, /agents, /workflows, /costs for testing,
+          but no longer surface in the public nav. Admin/Will/Joanna can
+          re-add them later if needed. */}
       <div style={{ display: "flex", gap: 22, alignItems: "center", overflow: "hidden" }}>
-        <NavLink to="/calculator" label={t(nav.diagnostics, lang)} />
-
         {!isLoggedIn && (
           <NavLink to="/signup" label={t(nav.requestAccess, lang)} highlight />
         )}
 
         {isLoggedIn && (
           <>
-            {/* CI nav link with alert badge (real count) or dot fallback */}
+            {/* Intelligence nav link with alert badge (real count) or dot fallback */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <NavLink to="/ci" label={t(nav.ciVfinal, lang)} />
               {alertCount > 0 ? (
@@ -205,11 +214,14 @@ function Nav() {
                 }} />
               )}
             </div>
-            <NavLink to="/agents" label={t(nav.agents, lang)} />
-            <NavLink to="/workflows" label={t(nav.workflows, lang)} />
-            <NavLink to="/costs" label={t(nav.costs, lang)} />
           </>
         )}
+
+        {/* Contact link — routes to the in-app /contact page (was a
+            mailto:; replaced with a real page so users see the team,
+            response time, and data-handling info before deciding to
+            email). */}
+        <NavLink to="/contact" label={t(nav.contact, lang)} />
       </div>
 
       {/* Right controls */}
@@ -221,14 +233,36 @@ function Nav() {
           </Link>
         )}
 
-        {/* Theme toggle — text only, no emoji */}
-        <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} style={btnStyle} title="Toggle theme">
-          {theme === "dark" ? "light" : "dark"}
+        {/* Theme toggle */}
+        <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} style={{ ...btnStyle, display: "inline-flex", alignItems: "center", gap: 6 }} title="Toggle theme">
+          {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+          <span>{theme === "dark" ? t(nav.lightMode, lang) : t(nav.darkMode, lang)}</span>
         </button>
 
         {/* Language toggle */}
-        <button onClick={() => setLang(lang === "en" ? "zh" : "en")} style={btnStyle} title="Switch language">
-          {lang === "en" ? "中文" : "EN"}
+        <button
+          onClick={() => setLang(lang === "en" ? "zh" : "en")}
+          style={{
+            ...btnStyle,
+            opacity: langSwitching ? 0.6 : 1,
+            cursor: langSwitching ? "wait" : "pointer",
+            display: "inline-flex", alignItems: "center", gap: 6,
+          }}
+          title="Switch language"
+          disabled={langSwitching}
+        >
+          {langSwitching && (
+            <span
+              aria-hidden
+              style={{
+                width: 10, height: 10, borderRadius: "50%",
+                border: `2px solid ${C.t2}`, borderTopColor: "transparent",
+                display: "inline-block",
+                animation: "rebase-spin 0.7s linear infinite",
+              }}
+            />
+          )}
+          <span>{lang === "en" ? "中文" : "EN"}</span>
         </button>
 
         {/* Admin — visible when logged out (for Will/Joanna) or when logged in as admin; hidden for regular users */}
@@ -253,6 +287,41 @@ function Nav() {
   );
 }
 
+function LangSwitchingToast() {
+  const { colors: C, lang, langSwitching } = useApp();
+  if (!langSwitching) return null;
+  return (
+    <div style={{
+      position: "fixed", top: 70, right: 20, zIndex: 200,
+      background: C.s1, border: `1px solid ${C.bd}`,
+      borderRadius: 8, padding: "10px 16px",
+      display: "flex", alignItems: "center", gap: 10,
+      fontSize: 13, color: C.tx, fontFamily: "system-ui, sans-serif",
+      boxShadow: "0 4px 16px rgba(0,0,0,0.18)",
+      animation: "rebase-toast-in 0.18s ease-out",
+    }}>
+      <style>{`
+        @keyframes rebase-toast-in {
+          from { opacity: 0; transform: translateY(-6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+      <span
+        aria-hidden
+        style={{
+          width: 12, height: 12, borderRadius: "50%",
+          border: `2px solid ${C.ac}`, borderTopColor: "transparent",
+          display: "inline-block",
+          animation: "rebase-spin 0.7s linear infinite",
+        }}
+      />
+      <span>
+        {lang === "zh" ? "正在切换为中文…" : "Switching to English…"}
+      </span>
+    </div>
+  );
+}
+
 function AppRoutes() {
   const { colors: C } = useApp();
   const location = useLocation();
@@ -262,9 +331,12 @@ function AppRoutes() {
   return (
     <div style={{ background: standalone ? "var(--color-canvas)" : C.bg, minHeight: "100vh" }}>
       <Nav />
+      <LangSwitchingToast />
       <Routes>
         {/* Public */}
         <Route path="/" element={<Home />} />
+        <Route path="/contact" element={<Contact />} />
+        {/* Legacy lead-form retired — redirect to the self-serve signup wizard */}
         <Route path="/onboarding" element={<Navigate to="/signup" replace />} />
         <Route path="/success" element={<Success />} />
         <Route path="/login" element={<Login />} />

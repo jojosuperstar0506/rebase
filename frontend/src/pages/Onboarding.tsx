@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import { Sun, Moon } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import type { ColorSet } from "../theme/colors";
 import { T, t } from "../i18n";
@@ -104,8 +105,9 @@ export default function Onboarding() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 24px", borderBottom: `1px solid ${C.bd}` }}>
         <a href="/" style={{ fontSize: 16, fontWeight: 800, color: C.ac, textDecoration: "none" }}>Rebase</a>
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} style={{ background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 6, padding: "5px 11px", cursor: "pointer", color: C.t2, fontSize: 12, fontWeight: 600 }}>
-            {theme === "dark" ? "☀️ " + t(nav.lightMode, lang) : "🌙 " + t(nav.darkMode, lang)}
+          <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} style={{ background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 6, padding: "5px 11px", cursor: "pointer", color: C.t2, fontSize: 12, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            {theme === "dark" ? <Sun size={13} /> : <Moon size={13} />}
+            <span>{theme === "dark" ? t(nav.lightMode, lang) : t(nav.darkMode, lang)}</span>
           </button>
           <button onClick={() => setLang(lang === "en" ? "zh" : "en")} style={{ background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 6, padding: "5px 11px", cursor: "pointer", color: C.t2, fontSize: 12, fontWeight: 600 }}>
             {lang === "en" ? "中文" : "EN"}

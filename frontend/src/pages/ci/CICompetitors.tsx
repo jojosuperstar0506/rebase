@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { Tag, ClipboardList } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { t, T, Lang } from '../../i18n';
 import CISubNav from '../../components/ci/CISubNav';
@@ -263,8 +264,10 @@ function CompetitorCard({
             flex: 1, padding: '7px 12px', borderRadius: 8,
             background: `${C.ac}15`, border: `1px solid ${C.ac}33`,
             color: C.ac, fontSize: 12, fontWeight: 600, textAlign: 'center' as const,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
           }}>
-            {lang === 'zh' ? '🏷️ 你的品牌 · 对比基准' : '🏷️ Your brand · comparison baseline'}
+            <Tag size={12} strokeWidth={2} />
+            {lang === 'zh' ? '你的品牌 · 对比基准' : 'Your brand · comparison baseline'}
           </div>
         ) : (
           <button
@@ -609,7 +612,7 @@ export default function CICompetitors() {
           <CISubNav />
           <h1 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, marginBottom: 8, marginTop: 0 }}>{t(T.ci.competitors, lang)}</h1>
           <div style={{ textAlign: 'center', padding: '80px 24px' }}>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>📋</div>
+            <ClipboardList size={48} strokeWidth={1.5} color={C.t2} style={{ marginBottom: 16 }} />
             <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>{t(T.ci.noCompetitorsYet, lang)}</h2>
             <p style={{ color: C.t2, marginBottom: 24 }}>{t(T.ci.addInSettings, lang)}</p>
             <Link to="/ci/settings" style={{ background: C.ac, color: '#fff', padding: '10px 24px', borderRadius: 8, textDecoration: 'none', fontWeight: 600 }}>

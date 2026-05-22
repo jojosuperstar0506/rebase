@@ -1,4 +1,5 @@
 import { Component, ReactNode } from 'react';
+import { AlertTriangle } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
@@ -36,7 +37,7 @@ export class CIErrorBoundary extends Component<Props, State> {
           textAlign: 'center',
           fontFamily: 'system-ui, sans-serif',
         }}>
-          <div style={{ fontSize: 40, marginBottom: 20 }}>⚠️</div>
+          <AlertTriangle size={40} strokeWidth={1.75} color="#ef4444" style={{ marginBottom: 20 }} />
           <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12, marginTop: 0 }}>
             Something went wrong
           </h2>

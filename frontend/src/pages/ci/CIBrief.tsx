@@ -18,11 +18,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { CSSProperties } from 'react';
+import {
+  Newspaper, AlertTriangle, RefreshCw, Hourglass,
+  Lightbulb, ClipboardCopy, BarChart3,
+} from 'lucide-react';
+import { MetricIcon } from '../../utils/metricIcons';
 import { useApp } from '../../context/AppContext';
 import type { ColorSet } from '../../theme/colors';
 import CISubNav from '../../components/ci/CISubNav';
 import CIWelcomeBanner from '../../components/ci/CIWelcomeBanner';
 import CIAlertFeed from '../../components/ci/CIAlertFeed';
+import IndexScatterPlot from '../../components/ci/IndexScatterPlot';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useCIData } from '../../hooks/useCIData';
 import {
@@ -32,10 +38,42 @@ import {
   type WeeklyBrief, type ContentDraft, type ProductOpportunity,
   type DomainScores, type TrendDirection,
 } from '../../services/ciMocks';
+import { getIndices, type IndicesResponse } from '../../services/ciIndices';
 import { runAnalysis, getAnalysisStatus, type AnalysisJob } from '../../services/ciApi';
+import { categoryLabel } from '../../utils/categoryLabels';
 
 // Show "data is stale" warning if the brief is older than this many days.
 const STALE_DAYS_THRESHOLD = 7;
+
+/**
+ * Defensive language resolver — handles fields that should already be
+ * single-language strings (resolved by the backend) but might still be
+ * bilingual `{zh, en}` objects if:
+ *   - the backend hasn't been restarted after a deploy that added new
+ *     resolveLang fields, or
+ *   - resolveLang missed a nested structure (e.g. an array we didn't
+ *     teach it to walk)
+ *
+ * Without this, `<div>{p.someField}</div>` would render `[object Object]`
+ * and `{evidence.map(...)}` would crash with `evidence.map is not a
+ * function` because the value is `{zh: [...], en: [...]}` instead of
+ * a flat array. The fix on the backend is one PM2 restart away, but the
+ * frontend should never crash on data shape regressions.
+ *
+ * Usage:
+ *   pickLang(value, lang, '')        // string fallback
+ *   pickLang(value, lang, [])        // array fallback
+ */
+function pickLang<T>(val: unknown, lang: string, fallback: T): T {
+  if (val == null) return fallback;
+  if (typeof val === 'string' || Array.isArray(val)) return val as unknown as T;
+  if (typeof val === 'object') {
+    const obj = val as Record<string, unknown>;
+    const picked = obj[lang] ?? obj.zh ?? obj.en;
+    if (picked != null) return picked as T;
+  }
+  return fallback;
+}
 
 // Pretty-print a relative timestamp: "2 hours ago", "5 days ago", "just now".
 // Falls back to absolute date for anything > 30 days.
@@ -162,6 +200,10 @@ export default function CIBrief() {
   const pollTimerRef = useRef<number | null>(null);
   const [showMetrics, setShowMetrics] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  // Composite indices powering the scatter plot. Fetched in the same
+  // useEffect as brief data; falls through gracefully when the endpoint
+  // returns null (older backend or empty workspace).
+  const [indices, setIndices] = useState<IndicesResponse | null>(null);
 
   // Local state mirror of content / opportunity status so the UI updates
   // instantly on click without refetching.
@@ -204,6 +246,9 @@ export default function CIBrief() {
       setError(true);
       setLoading(false);
     });
+    // Indices fetch is independent of the main brief data — failure here
+    // just hides the scatter section, doesn't break the page.
+    getIndices(workspaceId, lang).then(setIndices).catch(() => setIndices(null));
   }, [workspaceId, lang]);
 
   // Cleanup any in-flight polling when the component unmounts.
@@ -454,7 +499,7 @@ export default function CIBrief() {
         <div style={container}>
           <CISubNav />
           <div style={{ ...card, textAlign: 'center', padding: 60, marginTop: 20 }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>📰</div>
+            <Newspaper size={32} strokeWidth={1.5} color={C.t2} style={{ marginBottom: 12 }} />
             <div style={{ fontSize: 15, color: C.t2 }}>
               {lang === 'zh' ? '正在生成本周简报…' : 'Generating this week\'s brief…'}
             </div>
@@ -470,7 +515,7 @@ export default function CIBrief() {
         <div style={container}>
           <CISubNav />
           <div style={{ ...card, textAlign: 'center', padding: 60, marginTop: 20 }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
+            <AlertTriangle size={32} strokeWidth={1.75} color="#ef4444" style={{ marginBottom: 12 }} />
             <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px' }}>
               {lang === 'zh' ? '加载失败' : 'Something went wrong'}
             </h3>
@@ -507,7 +552,7 @@ export default function CIBrief() {
             <CIWelcomeBanner />
           </div>
           <div style={{ ...card, textAlign: 'center', padding: 60, marginTop: 20 }}>
-            <div style={{ fontSize: 40, marginBottom: 16 }}>📰</div>
+            <Newspaper size={40} strokeWidth={1.5} color={C.t2} style={{ marginBottom: 16 }} />
             <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 10px' }}>
               {lang === 'zh' ? '简报即将出炉' : 'Your brief is on its way'}
             </h3>
@@ -563,41 +608,25 @@ export default function CIBrief() {
               <span>
                 {lang === 'zh' ? '对比' : 'Tracking'}{' '}
                 <strong style={{ color: C.t2 }}>{workspace.brand_name}</strong>
-                {workspace.brand_category ? ` (${workspace.brand_category})` : ''}{' '}
+                {workspace.brand_category ? ` (${categoryLabel(workspace.brand_category, lang)})` : ''}{' '}
                 {lang === 'zh' ? '对比于' : 'vs'}
               </span>
               {competitors.map(c => {
-                // #18: per-brand scrape recency. The Competitor type now
-                // carries last_scraped_at (LATERAL join in /api/ci/competitors).
-                // Stale beyond 7d gets a warning color so the user can see
-                // which brand's data is fresh vs aging.
-                const lastScraped = (c as { last_scraped_at?: string | null }).last_scraped_at;
-                const daysSince = lastScraped ? ageInDays(lastScraped) : null;
-                const isStale = daysSince !== null && daysSince > STALE_DAYS_THRESHOLD;
-                const isFresh = daysSince !== null && daysSince <= 2;
-                const chipBg = isStale ? `${C.danger || '#ef4444'}18`
-                              : isFresh ? `${C.success || '#22c55e'}18`
-                              : C.s2;
-                const chipFg = isStale ? (C.danger || '#ef4444')
-                              : isFresh ? (C.success || '#22c55e')
-                              : C.t2;
-                const recencyLabel = daysSince === null
-                  ? (lang === 'zh' ? '未抓取' : 'no data')
-                  : daysSince === 0
-                    ? (lang === 'zh' ? '今天' : 'today')
-                    : (lang === 'zh' ? `${daysSince}天前` : `${daysSince}d ago`);
+                // Per-brand recency labels (e.g. "no data" / "14d ago") were
+                // removed 2026-05-04: they showed "no data" for any brand
+                // without scraped_brand_profiles (which the demo seeder
+                // intentionally skips for cross-account isolation), making
+                // a polished demo workspace look unfinished. Real-customer
+                // freshness still surfaces on Settings → Platform
+                // Connections; the Brief header is a glance-context strip,
+                // not a diagnostic panel.
                 return (
-                  <span key={c.id || c.brand_name} title={
-                    lastScraped
-                      ? `${c.brand_name} — ${lang === 'zh' ? '最近抓取于' : 'last scraped'} ${new Date(lastScraped).toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-US')}`
-                      : `${c.brand_name} — ${lang === 'zh' ? '尚未抓取' : 'not yet scraped'}`
-                  } style={{
-                    background: chipBg, padding: '2px 8px', borderRadius: 12,
-                    fontSize: 11, color: chipFg,
-                    display: 'inline-flex', gap: 5, alignItems: 'baseline',
+                  <span key={c.id || c.brand_name} title={c.brand_name} style={{
+                    background: C.s2, padding: '2px 10px', borderRadius: 12,
+                    fontSize: 11, color: C.t2,
+                    display: 'inline-flex', alignItems: 'baseline',
                   }}>
-                    <span>{c.brand_name}</span>
-                    <span style={{ fontSize: 10, opacity: 0.85 }}>· {recencyLabel}</span>
+                    {c.brand_name}
                   </span>
                 );
               })}
@@ -618,7 +647,9 @@ export default function CIBrief() {
               justifyContent: 'center',
             }}
           >
-            <span>{regenerating ? '⏳' : '🔄'}</span>
+            {regenerating
+              ? <Hourglass size={14} strokeWidth={2} />
+              : <RefreshCw size={14} strokeWidth={2} />}
             <span>{regenerating
               ? jobStageLabel(jobStatus, lang)
               : (lang === 'zh' ? '更新本周简报' : "Refresh This Week's Brief")}</span>
@@ -667,12 +698,25 @@ export default function CIBrief() {
         )}
 
         {/* ─── SECTION 1: Verdict ─────────────────────────────────────── */}
+        {/* Layout (when verdict.pressure_points is present — the structured shape):
+              Hero band:    trend pill · context label · headline · 1-line summary
+              Pressure grid: 3 cards (one per threat vector), magnitude badge +
+                             headline + 2-3 evidence bullets + source citation
+              At-risk:      single dramatic stat callout
+              Top action:   accent-bordered card (existing pattern)
+              Sources:      collapsed disclosure at bottom
+
+            When pressure_points is missing (LLM-generated briefs that pre-date
+            the structured shape), we fall back to the legacy single-paragraph
+            sentence rendering — see the `else` branch.
+        */}
         <section style={{ marginBottom: 28 }}>
           <div style={{
             ...card,
             background: `linear-gradient(135deg, ${C.s1} 0%, ${trendColor(brief.verdict.trend)}08 100%)`,
             borderColor: `${trendColor(brief.verdict.trend)}44`,
           }}>
+            {/* Hero band */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
               <span style={{
                 fontSize: 12, fontWeight: 700,
@@ -688,16 +732,142 @@ export default function CIBrief() {
               </span>
             </div>
             <h2 style={{
-              fontSize: isMobile ? 19 : 22, fontWeight: 700, margin: '0 0 12px',
-              lineHeight: 1.4, letterSpacing: -0.2,
+              fontSize: isMobile ? 22 : 28, fontWeight: 800, margin: '0 0 10px',
+              lineHeight: 1.25, letterSpacing: -0.4,
             }}>
               {brief.verdict.headline}
             </h2>
-            <p style={{ fontSize: 14, color: C.t2, margin: 0, lineHeight: 1.7 }}>
-              {brief.verdict.sentence}
-            </p>
+            {(() => {
+              const summary = pickLang<string>(brief.verdict.summary, lang, '');
+              return summary ? (
+                <p style={{ fontSize: isMobile ? 14 : 15, color: C.t2, margin: '0 0 22px', lineHeight: 1.65 }}>
+                  {summary}
+                </p>
+              ) : null;
+            })()}
+
+            {/* Structured pressure grid (when present) */}
+            {Array.isArray(brief.verdict.pressure_points) && brief.verdict.pressure_points.length > 0 ? (
+              <>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: isMobile ? '1fr' : `repeat(${Math.min(brief.verdict.pressure_points.length, 3)}, 1fr)`,
+                  gap: 12,
+                  marginBottom: 18,
+                }}>
+                  {brief.verdict.pressure_points.map((p, idx) => {
+                    // Defensive: if backend hasn't been restarted after adding the
+                    // resolveLang for these nested fields, badge/headline/evidence/
+                    // source still arrive as bilingual {zh, en} objects. pickLang
+                    // handles both shapes so the UI never crashes.
+                    const badge = pickLang<string>(p.badge, lang, '');
+                    const headline = pickLang<string>(p.headline, lang, '');
+                    const evidence = pickLang<string[]>(p.evidence, lang, []);
+                    const source = pickLang<string>(p.source, lang, '');
+                    return (
+                      <div key={`${p.brand}-${idx}`} style={{
+                        background: C.bg,
+                        border: `1px solid ${C.bd}`,
+                        borderRadius: 10,
+                        padding: '14px 16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 10,
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+                          <span style={{
+                            fontSize: 13, fontWeight: 800, color: C.tx, letterSpacing: -0.1,
+                            maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }} title={p.brand}>
+                            {p.brand}
+                          </span>
+                          {badge ? (
+                            <span style={{
+                              fontSize: 10, fontWeight: 700,
+                              color: trendColor(brief.verdict.trend),
+                              background: `${trendColor(brief.verdict.trend)}1a`,
+                              padding: '3px 8px', borderRadius: 12,
+                              letterSpacing: '0.05em', whiteSpace: 'nowrap', flexShrink: 0,
+                            }}>
+                              {badge}
+                            </span>
+                          ) : null}
+                        </div>
+                        {headline ? (
+                          <div style={{ fontSize: 13, fontWeight: 600, color: C.tx, lineHeight: 1.4 }}>
+                            {headline}
+                          </div>
+                        ) : null}
+                        {Array.isArray(evidence) && evidence.length > 0 ? (
+                          <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: C.t2, lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            {evidence.map((line, i) => (
+                              <li key={i}>{typeof line === 'string' ? line : ''}</li>
+                            ))}
+                          </ul>
+                        ) : null}
+                        {source ? (
+                          <div style={{ fontSize: 10, color: C.t3, marginTop: 'auto', paddingTop: 4, fontStyle: 'italic' }}>
+                            {lang === 'zh' ? '来源：' : 'Source: '}{source}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* At-risk callout */}
+                {brief.verdict.at_risk ? (() => {
+                  const metric = pickLang<string>(brief.verdict.at_risk.metric, lang, '');
+                  const magnitude = pickLang<string>(brief.verdict.at_risk.magnitude, lang, '');
+                  const narrative = pickLang<string>(brief.verdict.at_risk.narrative, lang, '');
+                  // Only render if at least one field has content — otherwise the
+                  // callout shows up as an empty colored box.
+                  if (!metric && !magnitude && !narrative) return null;
+                  return (
+                    <div style={{
+                      background: `${trendColor(brief.verdict.trend)}0d`,
+                      border: `1px solid ${trendColor(brief.verdict.trend)}40`,
+                      borderRadius: 10,
+                      padding: isMobile ? '14px 16px' : '16px 20px',
+                      display: 'flex',
+                      alignItems: isMobile ? 'flex-start' : 'center',
+                      flexDirection: isMobile ? 'column' : 'row',
+                      gap: isMobile ? 10 : 18,
+                      marginBottom: 18,
+                    }}>
+                      <div style={{ flexShrink: 0 }}>
+                        {metric ? (
+                          <div style={{ fontSize: 10, fontWeight: 700, color: trendColor(brief.verdict.trend), letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
+                            {metric}
+                          </div>
+                        ) : null}
+                        {magnitude ? (
+                          <div style={{ fontSize: isMobile ? 26 : 30, fontWeight: 800, color: trendColor(brief.verdict.trend), letterSpacing: -0.5, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+                            {magnitude}
+                          </div>
+                        ) : null}
+                      </div>
+                      {narrative ? (
+                        <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.6 }}>
+                          {narrative}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })() : null}
+              </>
+            ) : (
+              /* Legacy fallback: render the single paragraph sentence as before.
+                 pickLang handles the rare case where sentence comes through
+                 unresolved as a bilingual object. */
+              <p style={{ fontSize: 14, color: C.t2, margin: '0 0 18px', lineHeight: 1.7, whiteSpace: 'pre-line' }}>
+                {pickLang<string>(brief.verdict.sentence, lang, '')}
+              </p>
+            )}
+
+            {/* Top action — same accent-bordered card as before */}
             <div style={{
-              marginTop: 18, padding: '14px 16px',
+              padding: '14px 16px',
               background: `${C.ac}10`, borderLeft: `3px solid ${C.ac}`, borderRadius: 6,
             }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: C.ac, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>
@@ -707,8 +877,49 @@ export default function CIBrief() {
                 {brief.verdict.top_action}
               </div>
             </div>
+
+            {/* Sources disclosure (collapsed by default) */}
+            {Array.isArray(brief.verdict.sources) && brief.verdict.sources.length > 0 ? (
+              <details style={{ marginTop: 16 }}>
+                <summary style={{
+                  fontSize: 11, color: C.t3, cursor: 'pointer', userSelect: 'none',
+                  letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600,
+                  outline: 'none',
+                }}>
+                  {lang === 'zh' ? `数据来源 · ${brief.verdict.sources.length} 项` : `Data sources · ${brief.verdict.sources.length}`}
+                </summary>
+                <ul style={{
+                  margin: '8px 0 0', paddingLeft: 18, fontSize: 11, color: C.t3,
+                  lineHeight: 1.7, display: 'flex', flexDirection: 'column', gap: 2,
+                }}>
+                  {brief.verdict.sources.map((s, i) => (
+                    <li key={i}>{pickLang<string>(s, lang, '')}</li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
           </div>
         </section>
+
+        {/* ─── SECTION 1.5: Competitive map (scatter) ─────────────────────
+             Visual companion to the verdict — shows where the user sits vs
+             every competitor across any 2 of the 12 indices the user cares
+             about. Lives on Brief (not Analytics) because the verdict
+             interprets competitive position; the scatter shows it. Falls
+             through silently if the indices endpoint returns null. */}
+        {indices && Object.keys(indices.indices_by_competitor).length > 0 && (
+          <section style={{ marginBottom: 40 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 6px' }}>
+              {lang === 'zh' ? '竞争地图' : 'Competitive map'}
+            </h3>
+            <p style={{ fontSize: 12, color: C.t3, margin: '0 0 14px', lineHeight: 1.55 }}>
+              {lang === 'zh'
+                ? '任选 2 项指数作为 X / Y 轴 — 看自己和竞品在矩阵中的相对位置。'
+                : "Pick any 2 indices as X / Y — see where you sit vs every competitor in the matrix."}
+            </p>
+            <IndexScatterPlot data={indices} />
+          </section>
+        )}
 
         {/* ─── SECTION 1b: Three moves ──────────────────────────────── */}
         <section style={{ marginBottom: 40 }}>
@@ -747,7 +958,9 @@ export default function CIBrief() {
                 borderLeft: `4px solid ${impactBg(m.impact)}`,
               }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                  <div style={{ fontSize: 24, lineHeight: 1, flexShrink: 0 }}>{m.icon}</div>
+                  <div style={{ flexShrink: 0, marginTop: 2 }}>
+                    <MetricIcon name={m.icon} size={22} color={impactBg(m.impact)} />
+                  </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 10, fontWeight: 700, color: C.t3, letterSpacing: '0.05em' }}>
@@ -918,9 +1131,11 @@ export default function CIBrief() {
                         opacity: isPosted ? 0.5 : 1,
                       }}
                     >
-                      {copiedId === c.id
-                        ? (lang === 'zh' ? '✓ 已复制' : '✓ Copied')
-                        : (lang === 'zh' ? '📋 复制脚本' : '📋 Copy Script')}
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        {copiedId === c.id
+                          ? <>{lang === 'zh' ? '✓ 已复制' : '✓ Copied'}</>
+                          : <><ClipboardCopy size={12} strokeWidth={2} />{lang === 'zh' ? '复制脚本' : 'Copy Script'}</>}
+                      </span>
                     </button>
                     {!isPosted && (
                       <button
@@ -989,8 +1204,9 @@ export default function CIBrief() {
               cursor: 'pointer',
             }}
           >
-            <span>
-              {lang === 'zh' ? '📊 查看全部12项指标分数（分析师视图）' : '📊 See all 12 metric scores (analyst view)'}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <BarChart3 size={14} strokeWidth={2} />
+              {lang === 'zh' ? '查看全部12项指标分数（分析师视图）' : 'See all 12 metric scores (analyst view)'}
             </span>
             <span style={{ fontSize: 11, color: C.t3, transform: showMetrics ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
               ▼
@@ -1058,7 +1274,7 @@ function ProductOpportunityCard({ opp, accepted, onAccept, onDismiss, C, lang, i
       padding: isMobile ? 16 : 22,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-        <span style={{ fontSize: 28, lineHeight: 1 }}>💡</span>
+        <Lightbulb size={26} strokeWidth={1.75} color={C.ac} />
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 11, color: C.t3, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
             {lang === 'zh' ? '产品概念' : 'Product Concept'}

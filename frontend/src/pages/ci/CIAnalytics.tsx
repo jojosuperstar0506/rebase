@@ -21,6 +21,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { CSSProperties } from 'react';
+import { AlertTriangle, BarChart3, ListChecks, Tag, TrendingUp, TrendingDown, Minus, ChevronDown } from 'lucide-react';
+import { MetricIcon } from '../../utils/metricIcons';
 import { useApp } from '../../context/AppContext';
 import type { ColorSet } from '../../theme/colors';
 import CISubNav from '../../components/ci/CISubNav';
@@ -35,7 +37,6 @@ import {
 import { getBrandInsights } from '../../services/ciApi';
 import { getIndices, type IndicesResponse, type PillarName } from '../../services/ciIndices';
 import PillarSection from '../../components/ci/PillarSection';
-import IndexScatterPlot from '../../components/ci/IndexScatterPlot';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -166,7 +167,7 @@ export default function CIAnalytics() {
         <div style={container}>
           <CISubNav />
           <div style={{ ...card, textAlign: 'center', padding: 50, marginTop: 20 }}>
-            <div style={{ fontSize: 28, marginBottom: 10 }}>⚠️</div>
+            <AlertTriangle size={28} strokeWidth={1.75} color="#ef4444" style={{ marginBottom: 10 }} />
             <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 8px' }}>
               {lang === 'zh' ? '加载失败' : 'Could not load analytics'}
             </h3>
@@ -185,7 +186,7 @@ export default function CIAnalytics() {
         <div style={container}>
           <CISubNav />
           <div style={{ ...card, textAlign: 'center', padding: 50, marginTop: 20 }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>📊</div>
+            <BarChart3 size={32} strokeWidth={1.5} color={C.t2} style={{ marginBottom: 12 }} />
             <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 8px' }}>
               {lang === 'zh' ? '暂无分析数据' : 'No analytics yet'}
             </h3>
@@ -207,15 +208,15 @@ export default function CIAnalytics() {
       <div style={container}>
         <CISubNav />
 
-        {/* Header */}
+        {/* Header — page title + 1-line orientation */}
         <header style={{ margin: '20px 0 24px' }}>
           <h1 style={{ fontSize: isMobile ? 24 : 30, fontWeight: 800, margin: 0, letterSpacing: -0.3 }}>
             {lang === 'zh' ? '分析' : 'Analytics'}
           </h1>
           <p style={{ color: C.t2, fontSize: 14, margin: '6px 0 0', lineHeight: 1.6 }}>
             {lang === 'zh'
-              ? `本周优先指标 · 市场空白机会 · 全部12项指标深度分析`
-              : 'Priority metrics · white space opportunities · all-12 deep dive'}
+              ? '本周竞争位置 + 各项指数与竞品对比'
+              : "Your competitive position + per-index comparison vs competitors"}
           </p>
         </header>
 
@@ -257,18 +258,26 @@ export default function CIAnalytics() {
           </div>
         )}
 
-        {/* ─── §0. Composite indices (3 pillars × 12 indices) ──────────────
-             Renders ABOVE the legacy priority/whitespace/all-metrics blocks.
-             Falls through silently when /api/ci/indices returns null (e.g.
-             older backend or empty workspace) — the rest of the page still
-             works as it did pre-V1.5. */}
+        {/* ─── §0a. Scorecard hero ──────────────────────────────────────
+             "Where you stand at a glance" — the consultant-grade answer-first
+             pattern. Computes ahead/behind/tied counts + strongest/weakest 3
+             from the indices data. Defensive: renders nothing if own brand
+             is missing from indices (e.g. compute_all_for_workspace hasn't
+             run yet on this workspace). */}
+        {indices && (
+          <IndexScorecard indices={indices} C={C} lang={lang} isMobile={isMobile} />
+        )}
+
+        {/* ─── §0b. Composite indices (3 pillars × 12 indices) ──────────
+             The detailed breakdown that backs up the scorecard. Each pillar
+             carries its own description + methodology disclosure. */}
         {indices && Object.keys(indices.indices_by_competitor).length > 0 && (
           <section style={{ marginBottom: 28 }}>
             <SectionHeader
-              title={lang === 'zh' ? '12 项专属指数 · 3 大支柱' : '12 Composite Indices · 3 Pillars'}
+              title={lang === 'zh' ? '12 项指数 · 详细分解' : '12 Indices · Detail'}
               subtitle={lang === 'zh'
-                ? '基于底层信号合成的用户面层指数。点击任一卡片查看权重与计算输入。'
-                : 'User-facing indices composed from raw signals. Click any card to see weights + inputs.'}
+                ? '按 3 大支柱分组 · 点击「如何计算？」展开方法论 · 点击任一卡片查看输入与权重。'
+                : 'Grouped by 3 pillars · click "How is this calculated?" for methodology · click any card for inputs + weights.'}
               count={null}
               C={C}
             />
@@ -280,46 +289,17 @@ export default function CIAnalytics() {
                 data={indices}
               />
             ))}
-
-            {/* Scatter plot — its own section header so customers don't miss
-                this 2-axis comparison view sitting underneath the pillars. */}
-            <div style={{ marginTop: 28 }}>
-              <SectionHeader
-                title={lang === 'zh' ? '比较视图 · 任选两项指数对比' : 'Comparison View · Pick any two indices'}
-                subtitle={lang === 'zh'
-                  ? '将任意两项指数作为 X 轴和 Y 轴，看自己与竞品在矩阵中的相对位置。'
-                  : 'Plot own brand vs competitors across any two of the 12 indices as X / Y axes.'}
-                count={null}
-                C={C}
-              />
-              <IndexScatterPlot data={indices} />
-            </div>
+            {/* Scatter plot moved to /ci (Brief tab) — visualizing the user's
+                position vs competitors lives next to the verdict that
+                interprets it, not in the deep-dive page. */}
           </section>
         )}
 
-        {/* ─── §A. Priority metrics this week ──────────────────────────── */}
-        <section style={{ marginBottom: 36 }}>
-          <SectionHeader
-            title={lang === 'zh' ? '本周优先指标' : "This week's priority metrics"}
-            subtitle={lang === 'zh'
-              ? '按照"变化幅度 × 与领先者差距"自动排序，优先级最高的3-5项。'
-              : "Ranked by |delta| × gap_to_leader. The metrics most likely to shift your verdict."}
-            count={data.priority_metrics.length}
-            C={C}
-          />
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: 12 }}>
-            {data.priority_metrics.map((m, i) => (
-              <PriorityMetricCard
-                key={m.metric_key}
-                metric={m}
-                rank={i + 1}
-                onClick={() => setDrill({ kind: 'priority', metric: m })}
-                C={C}
-                lang={lang}
-              />
-            ))}
-          </div>
-        </section>
+        {/* ─── §A. Priority metrics — REMOVED ──────────────────────────────
+             The scorecard's "Watch:" pills cover the same ground (top
+             negative-gap indices) without the duplicate card grid. If we
+             ever bring this back, it should be a tighter inline list, not
+             a 2-column card grid. */}
 
         {/* ─── §A.5 Brand insights (DeepSeek narratives per competitor) ──
             Always render the section when there's a workspace brand_name
@@ -330,8 +310,8 @@ export default function CIAnalytics() {
             <SectionHeader
               title={lang === 'zh' ? 'AI 品牌洞察' : 'AI brand insights'}
               subtitle={lang === 'zh'
-                ? '每个被追踪品牌的一段 AI 综合诊断，基于本周所有指标得分自动生成。'
-                : 'A short AI diagnosis per tracked brand, synthesized from this week’s metric scores.'}
+                ? '每个品牌的 AI 综合诊断 · 点击展开。'
+                : 'Per-brand AI diagnosis · click to expand.'}
               count={Object.keys(insights).length + (data.workspace_brand_name && !insights[data.workspace_brand_name] ? 1 : 0)}
               C={C}
             />
@@ -375,73 +355,89 @@ export default function CIAnalytics() {
           </section>
         )}
 
-        {/* ─── §B. White space opportunities ───────────────────────────── */}
-        <section style={{ marginBottom: 36 }}>
-          <SectionHeader
-            title={lang === 'zh' ? '市场空白机会' : 'White space opportunities'}
-            subtitle={lang === 'zh'
-              ? '竞品集中没有人占领的维度、价位带或关键词领域。这是Rebase的独特分析输出。'
-              : "Uncontested dimensions, price bands, or keyword pockets — Rebase's most differentiated output."}
-            count={data.white_space.length}
-            C={C}
-          />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {data.white_space.map(ws => (
-              <WhiteSpaceCard
-                key={ws.id}
-                item={ws}
-                onClick={() => setDrill({ kind: 'whitespace', item: ws })}
-                C={C}
-                lang={lang}
-                isMobile={isMobile}
-              />
-            ))}
-          </div>
-        </section>
+        {/* ─── §B. White space — REMOVED from Analytics ───────────────────
+             The strategic-opportunity content (channel / dimension / keyword
+             bets) doesn't belong on a metrics-deep-dive page, and the card
+             rendering currently leaks raw bilingual JSON for unresolved
+             title / summary fields. Data still flows from /api/ci/brief —
+             we just don't surface it here anymore. Future home: Library or
+             a dedicated /ci/opportunity tab. */}
 
-        {/* ─── §C. All 12 metrics (collapsed) ──────────────────────────── */}
-        <section style={{ marginBottom: 40 }}>
-          <button
-            onClick={() => setShowAllMetrics(v => !v)}
-            style={{
-              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              background: 'transparent', border: `1px solid ${C.bd}`, borderRadius: 10,
-              padding: '12px 16px', color: C.t2, fontSize: 13, fontWeight: 600,
-              cursor: 'pointer', marginBottom: showAllMetrics ? 14 : 0,
-            }}
-          >
-            <span>
-              📋 {lang === 'zh' ? `查看全部12项指标详情` : `See all 12 metrics`}
-              <span style={{ color: C.t3, marginLeft: 8 }}>· {data.all_metrics.length}</span>
-            </span>
-            <span style={{
-              fontSize: 11, color: C.t3,
-              transform: showAllMetrics ? 'rotate(180deg)' : 'none',
-              transition: 'transform 0.2s',
-            }}>
-              ▼
-            </span>
-          </button>
+        {/* ─── §C. All 12 indices (collapsed) ────────────────────────────
+             Flat-grid view of the 12 composite indices — same data the
+             pillar grid above renders, but flat instead of grouped, for
+             quick scanning. Used to source from data.all_metrics (the
+             legacy raw-metric scores: Mindshare / Keywords / Hot
+             Products / etc.); now sources from the composite indices
+             so the names match the rest of the page (Brand Heat /
+             Brand NPS / Pricing Power / etc.). */}
+        {indices && Object.keys(indices.indices_by_competitor).length > 0 && (() => {
+          const ownBrand = indices.workspace_brand_name;
+          const ownEntries = indices.indices_by_competitor[ownBrand] || {};
+          const allIndexNames = Object.keys(indices.index_labels) as Array<keyof typeof indices.index_labels>;
+          const competitorBrands = Object.keys(indices.indices_by_competitor).filter(b => b !== ownBrand);
 
-          {showAllMetrics && (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(260px, 1fr))',
-              gap: 10,
-            }}>
-              {data.all_metrics.map(m => (
-                <AllMetricMiniCard
-                  key={m.metric_key}
-                  metric={m}
-                  ownBrand={data.workspace_brand_name}
-                  onClick={() => setDrill({ kind: 'metric', metric: m })}
-                  C={C}
-                  lang={lang}
-                />
-              ))}
-            </div>
-          )}
-        </section>
+          return (
+            <section style={{ marginBottom: 40 }}>
+              <button
+                onClick={() => setShowAllMetrics(v => !v)}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  background: 'transparent', border: `1px solid ${C.bd}`, borderRadius: 10,
+                  padding: '12px 16px', color: C.t2, fontSize: 13, fontWeight: 600,
+                  cursor: 'pointer', marginBottom: showAllMetrics ? 14 : 0,
+                }}
+              >
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <ListChecks size={14} strokeWidth={2} />
+                  {lang === 'zh' ? '查看全部 12 项指数（平铺视图）' : 'See all 12 indices (flat view)'}
+                  <span style={{ color: C.t3, marginLeft: 4 }}>· {allIndexNames.length}</span>
+                </span>
+                <span style={{
+                  fontSize: 11, color: C.t3,
+                  transform: showAllMetrics ? 'rotate(180deg)' : 'none',
+                  transition: 'transform 0.2s',
+                }}>
+                  ▼
+                </span>
+              </button>
+
+              {showAllMetrics && (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(220px, 1fr))',
+                  gap: 10,
+                }}>
+                  {allIndexNames.map(idxName => {
+                    const labelEntry = indices.index_labels[idxName];
+                    const ownVal = ownEntries[idxName];
+                    // Best competitor on this index
+                    let bestComp: { brand: string; score: number } | null = null;
+                    for (const c of competitorBrands) {
+                      const v = indices.indices_by_competitor[c]?.[idxName];
+                      if (v && v.score !== null && v.score !== undefined) {
+                        const s = Number(v.score);
+                        if (!bestComp || s > bestComp.score) bestComp = { brand: c, score: s };
+                      }
+                    }
+                    return (
+                      <CompositeIndexMiniCard
+                        key={idxName}
+                        label={labelEntry?.label || String(idxName)}
+                        pillar={labelEntry?.pillar || 'brand_equity'}
+                        ownScore={ownVal?.score ?? null}
+                        isProxy={Boolean(ownVal?.is_proxy)}
+                        leader={bestComp}
+                        C={C}
+                        lang={lang}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          );
+        })()}
       </div>
 
       {/* ─── Drill-down modal ─────────────────────────────────────────── */}
@@ -449,7 +445,7 @@ export default function CIAnalytics() {
         <CIDrillDownModal
           open={true}
           onClose={() => setDrill(null)}
-          title={`${drill.metric.icon} ${lang === 'zh' ? drill.metric.label.zh : drill.metric.label.en}`}
+          title={lang === 'zh' ? drill.metric.label.zh : drill.metric.label.en}
           subtitle={lang === 'zh' ? drill.metric.description.zh : drill.metric.description.en}
           size="md"
         >
@@ -467,7 +463,7 @@ export default function CIAnalytics() {
         <CIDrillDownModal
           open={true}
           onClose={() => setDrill(null)}
-          title={`${drill.metric.icon} ${lang === 'zh' ? drill.metric.label.zh : drill.metric.label.en}`}
+          title={lang === 'zh' ? drill.metric.label.zh : drill.metric.label.en}
           subtitle={lang === 'zh' ? '本周优先指标 · 深度分析' : "Priority metric · deep dive"}
           size="md"
         >
@@ -484,7 +480,7 @@ export default function CIAnalytics() {
         <CIDrillDownModal
           open={true}
           onClose={() => setDrill(null)}
-          title={`🟩 ${drill.item.title}`}
+          title={drill.item.title}
           subtitle={drill.item.summary}
           size="lg"
         >
@@ -496,6 +492,167 @@ export default function CIAnalytics() {
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────
+
+/**
+ * IndexScorecard — compact "where you stand" strip at the top of Analytics.
+ *
+ * Single horizontal band (~80px tall on desktop, stacks on mobile) showing:
+ *   Trend pill · Ahead/Behind/Tied inline counts · Top 3 weakest indices
+ *
+ * Replaces the previous full-card scorecard which took ~600px of vertical
+ * real estate for what is essentially a sentence's worth of information.
+ *
+ * Defensive: returns null if own brand is missing from indices (e.g. backend
+ * hasn't computed indices for own brand yet).
+ */
+function IndexScorecard({ indices, C, lang, isMobile }: {
+  indices: IndicesResponse; C: ColorSet; lang: string; isMobile: boolean;
+}) {
+  const ownBrand = indices.workspace_brand_name;
+  const ownScores = indices.indices_by_competitor[ownBrand];
+  if (!ownScores) return null;
+
+  const allBrands = Object.keys(indices.indices_by_competitor);
+  const competitors = allBrands.filter(b => b !== ownBrand);
+  const indexNames = Object.keys(indices.index_labels);
+
+  const positions: Array<{ idx: string; ownScore: number; bestComp: number; gap: number; label: string }> = [];
+  for (const idx of indexNames) {
+    const ownVal = ownScores[idx as keyof typeof ownScores];
+    if (!ownVal || ownVal.score === null || ownVal.score === undefined) continue;
+    const ownScore = Number(ownVal.score);
+
+    let bestComp = 0;
+    let bestSeen = false;
+    for (const c of competitors) {
+      const v = indices.indices_by_competitor[c]?.[idx as keyof typeof ownScores];
+      if (v && v.score !== null && v.score !== undefined) {
+        const s = Number(v.score);
+        if (!bestSeen || s > bestComp) { bestComp = s; bestSeen = true; }
+      }
+    }
+    if (!bestSeen) continue;
+
+    positions.push({
+      idx,
+      ownScore,
+      bestComp,
+      gap: Math.round((ownScore - bestComp) * 10) / 10,
+      label: indices.index_labels[idx as keyof typeof indices.index_labels]?.label || idx,
+    });
+  }
+
+  if (positions.length === 0) return null;
+
+  // ±2 tie threshold filters out noise so ahead/behind counts mean something.
+  const TIE_THRESHOLD = 2;
+  let ahead = 0, behind = 0, tied = 0;
+  for (const p of positions) {
+    if (Math.abs(p.gap) <= TIE_THRESHOLD) tied++;
+    else if (p.gap > 0) ahead++;
+    else behind++;
+  }
+
+  const sorted = [...positions].sort((a, b) => b.gap - a.gap);
+  const weakest = [...sorted].reverse().filter(p => p.gap < -TIE_THRESHOLD).slice(0, 3);
+
+  const netDirection = ahead > behind ? 'gaining' : ahead < behind ? 'losing' : 'steady';
+  const trendC = netDirection === 'gaining' ? '#22c55e' : netDirection === 'losing' ? '#ef4444' : C.t3;
+  const trendIcon = netDirection === 'gaining' ? <TrendingUp size={11} strokeWidth={2.5} />
+                  : netDirection === 'losing' ? <TrendingDown size={11} strokeWidth={2.5} />
+                  : <Minus size={11} strokeWidth={2.5} />;
+  const trendLabelText = lang === 'zh'
+    ? (netDirection === 'gaining' ? '净领先' : netDirection === 'losing' ? '净落后' : '势均力敌')
+    : (netDirection === 'gaining' ? 'Net ahead' : netDirection === 'losing' ? 'Net behind' : 'Even');
+
+  const tagStyle = (color: string): CSSProperties => ({
+    display: 'inline-flex', alignItems: 'baseline', gap: 4,
+    fontSize: 12, fontWeight: 600, color: C.t2,
+    fontVariantNumeric: 'tabular-nums',
+  });
+  const numStyle = (color: string): CSSProperties => ({
+    fontSize: 14, fontWeight: 800, color, fontVariantNumeric: 'tabular-nums',
+  });
+
+  return (
+    <section style={{ marginBottom: 24 }}>
+      <div style={{
+        background: `linear-gradient(135deg, ${C.s1} 0%, ${trendC}08 100%)`,
+        border: `1px solid ${trendC}44`,
+        borderRadius: 10,
+        padding: isMobile ? '12px 14px' : '14px 18px',
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        alignItems: isMobile ? 'flex-start' : 'center',
+        gap: isMobile ? 10 : 18,
+        flexWrap: 'wrap',
+      }}>
+        {/* Trend pill */}
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          fontSize: 11, fontWeight: 700, color: trendC,
+          background: `${trendC}18`, padding: '3px 9px', borderRadius: 16,
+          letterSpacing: '0.05em', textTransform: 'uppercase', flexShrink: 0,
+        }}>
+          {trendIcon} {trendLabelText}
+        </span>
+
+        {/* Inline counts */}
+        <div style={{ display: 'flex', gap: 14, alignItems: 'baseline' }}>
+          <span style={tagStyle(C.t2)}>
+            <span style={numStyle('#22c55e')}>{ahead}</span>
+            <span>{lang === 'zh' ? '领先' : 'ahead'}</span>
+          </span>
+          <span style={{ color: C.bd }}>·</span>
+          <span style={tagStyle(C.t2)}>
+            <span style={numStyle('#ef4444')}>{behind}</span>
+            <span>{lang === 'zh' ? '落后' : 'behind'}</span>
+          </span>
+          <span style={{ color: C.bd }}>·</span>
+          <span style={tagStyle(C.t2)}>
+            <span style={numStyle(C.t3)}>{tied}</span>
+            <span>{lang === 'zh' ? '势均' : 'tied'}</span>
+          </span>
+          <span style={{ fontSize: 11, color: C.t3, marginLeft: 2 }}>
+            {lang === 'zh' ? `/ ${positions.length} 项` : `/ ${positions.length}`}
+          </span>
+        </div>
+
+        {/* Weakest 3 — inline pills */}
+        {weakest.length > 0 && (
+          <>
+            {!isMobile && <span style={{ color: C.bd, marginLeft: 'auto' }}>·</span>}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+              fontSize: 11, color: C.t3,
+            }}>
+              <span style={{ fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                {lang === 'zh' ? '需关注' : 'Watch'}:
+              </span>
+              {weakest.map(w => (
+                <span key={w.idx} style={{
+                  display: 'inline-flex', alignItems: 'baseline', gap: 4,
+                  fontSize: 12, fontWeight: 600, color: C.tx,
+                }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }} title={w.label}>
+                    {w.label}
+                  </span>
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, color: '#ef4444',
+                    background: '#ef44441a', padding: '1px 6px', borderRadius: 8,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    {w.gap}
+                  </span>
+                </span>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
 
 function SectionHeader({ title, subtitle, count, C }: {
   title: string; subtitle: string; count: number | null; C: ColorSet;
@@ -522,11 +679,34 @@ function SectionHeader({ title, subtitle, count, C }: {
   );
 }
 
+/** First-paragraph extractor for AI insight previews. The seeder writes
+ * narratives as `\n`-separated paragraphs (诊断 / 关键数据 / 用户语 /
+ * TORY BURCH 应对). The first paragraph is always the diagnosis claim —
+ * a perfect 1-line preview. Falls back to a hard truncation for long
+ * single-paragraph narratives. */
+function firstParagraph(text: string, maxChars = 220): string {
+  if (!text) return '';
+  const trimmed = text.trim();
+  const para = (trimmed.split('\n')[0] || '').trim();
+  const candidate = para || trimmed;
+  if (candidate.length > maxChars) return candidate.slice(0, maxChars).trim() + '…';
+  return candidate;
+}
+
 function BrandInsightCard({ brand, isOwn, narrative, C, lang, highlight, cardRef }: {
   brand: string; isOwn: boolean; narrative: string; C: ColorSet; lang: string;
   highlight?: boolean;
   cardRef?: (el: HTMLDivElement | null) => void;
 }) {
+  const [expanded, setExpanded] = React.useState(false);
+  const preview = firstParagraph(narrative);
+  const hasMore = preview.length < (narrative || '').trim().length;
+  // When the cross-link from Brief targets this card, default to expanded
+  // so the user sees the full diagnosis without an extra click.
+  React.useEffect(() => {
+    if (highlight) setExpanded(true);
+  }, [highlight]);
+
   return (
     <div
       ref={cardRef}
@@ -543,7 +723,7 @@ function BrandInsightCard({ brand, isOwn, narrative, C, lang, highlight, cardRef
         transition: 'outline 0.3s, border-color 0.3s',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-        {isOwn && <span style={{ fontSize: 12 }}>🏷️</span>}
+        {isOwn && <Tag size={12} strokeWidth={2} color={C.ac} />}
         <span style={{ fontSize: 14, fontWeight: 700, color: C.tx }}>{brand}</span>
         {isOwn && (
           <span style={{
@@ -556,8 +736,35 @@ function BrandInsightCard({ brand, isOwn, narrative, C, lang, highlight, cardRef
         )}
       </div>
       <p style={{ fontSize: 13, color: C.t2, margin: 0, lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
-        {narrative}
+        {expanded ? narrative : preview}
       </p>
+      {hasMore && (
+        <button
+          onClick={() => setExpanded(v => !v)}
+          style={{
+            marginTop: 10,
+            background: 'transparent',
+            border: 'none',
+            color: C.ac,
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: 'pointer',
+            padding: 0,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          <span>{expanded
+            ? (lang === 'zh' ? '收起' : 'Show less')
+            : (lang === 'zh' ? '查看完整诊断' : 'Read full diagnosis')}</span>
+          <ChevronDown
+            size={12}
+            strokeWidth={2.5}
+            style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}
+          />
+        </button>
+      )}
     </div>
   );
 }
@@ -581,7 +788,7 @@ function PriorityMetricCard({ metric, rank, onClick, C, lang }: {
         <span style={{ fontSize: 10, fontWeight: 700, color: C.t3, letterSpacing: '0.05em' }}>
           #{rank}
         </span>
-        <span style={{ fontSize: 18 }}>{metric.icon}</span>
+        <MetricIcon name={metric.icon} size={16} color={C.ac} />
         <span style={{ fontSize: 14, fontWeight: 700, color: C.tx, flex: 1 }}>
           {lang === 'zh' ? metric.label.zh : metric.label.en}
         </span>
@@ -670,8 +877,10 @@ function WhiteSpaceCard({ item, onClick, C, lang, isMobile }: {
           fontSize: 10, fontWeight: 700, color: catColor,
           background: `${catColor}18`, padding: '3px 8px', borderRadius: 4,
           letterSpacing: '0.05em', textTransform: 'uppercase',
+          display: 'inline-flex', alignItems: 'center', gap: 5,
         }}>
-          🟩 {lang === 'zh' ? catLabelMap[item.category].zh : catLabelMap[item.category].en}
+          <span style={{ width: 7, height: 7, borderRadius: 2, background: catColor, display: 'inline-block' }} />
+          {lang === 'zh' ? catLabelMap[item.category].zh : catLabelMap[item.category].en}
         </span>
         <span style={{ fontSize: 11, color: C.t3, marginLeft: 'auto' }}>
           {lang === 'zh' ? '机会分' : 'Opportunity'} {item.opportunity_score}/100
@@ -701,6 +910,92 @@ function isCoveragePending(metric: FullMetric): boolean {
   const scores = Object.values(metric.scores);
   if (scores.length === 0) return true;
   return scores.every(s => s === 0);
+}
+
+/**
+ * Flat-grid mini-card for a single composite index. Used by the
+ * "See all 12 indices" expandable on the Analytics page. Visual mirror
+ * of AllMetricMiniCard (legacy) but reads from indices_by_competitor
+ * data instead of FullMetric.
+ *
+ * Pillar dot color matches the pillar grid above (brand_equity = consumer
+ * domain pink, marketing_engine = marketing domain blue, commerce_engine
+ * = product domain orange) — keeps the visual language consistent.
+ */
+function CompositeIndexMiniCard({ label, pillar, ownScore, isProxy, leader, C, lang }: {
+  label: string;
+  pillar: PillarName;
+  ownScore: number | null;
+  isProxy: boolean;
+  leader: { brand: string; score: number } | null;
+  C: ColorSet;
+  lang: string;
+}) {
+  const pending = ownScore === null || ownScore === undefined;
+  const own = pending ? 0 : Math.round(Number(ownScore));
+  const leaderScore = leader ? Math.round(leader.score) : null;
+  const isLeading = !pending && leader ? own >= leaderScore! : !leader;
+  const pillarLabel = pillar === 'brand_equity' ? (lang === 'zh' ? '品牌资产' : 'Brand Equity')
+                    : pillar === 'marketing_engine' ? (lang === 'zh' ? '营销引擎' : 'Marketing Engine')
+                    : (lang === 'zh' ? '商业引擎' : 'Commerce Engine');
+  const pillarDotColor = pillar === 'brand_equity' ? C.domainConsumer
+                       : pillar === 'marketing_engine' ? C.domainMarketing
+                       : C.domainProduct;
+
+  return (
+    <div style={{
+      background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 10,
+      padding: 12, opacity: pending ? 0.85 : 1,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, justifyContent: 'space-between' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 6, height: 6, background: pillarDotColor, borderRadius: 2 }} />
+          <span style={{ fontSize: 11, color: C.t3 }}>{pillarLabel}</span>
+        </span>
+        {isProxy && (
+          <span style={{
+            fontSize: 9, padding: '2px 6px', borderRadius: 4,
+            background: `${C.warning || '#f59e0b'}20`, color: C.warning || '#f59e0b', fontWeight: 600,
+            letterSpacing: 0.5, textTransform: 'uppercase',
+          }}>
+            {lang === 'zh' ? '估算' : 'PROXY'}
+          </span>
+        )}
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: C.tx, marginBottom: 6 }}>
+        {label}
+      </div>
+      {pending ? (
+        <div style={{
+          display: 'inline-block', marginTop: 2,
+          fontSize: 11, fontWeight: 600, color: C.t3,
+          background: C.s2, border: `1px dashed ${C.bd}`,
+          padding: '3px 9px', borderRadius: 12,
+        }}>
+          {lang === 'zh' ? '覆盖待补' : 'Coverage pending'}
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <span style={{
+              fontSize: 22, fontWeight: 700,
+              color: isLeading ? '#22c55e' : C.tx,
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+              {own}
+            </span>
+            <span style={{ fontSize: 11, color: C.t3 }}>/ 100</span>
+          </div>
+          {leader && (
+            <div style={{ fontSize: 10, color: C.t3, marginTop: 4 }}>
+              {lang === 'zh' ? '领先者：' : 'Leader: '}
+              {leader.brand} ({leaderScore})
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
 }
 
 function AllMetricMiniCard({ metric, ownBrand, onClick, C, lang }: {
@@ -734,7 +1029,7 @@ function AllMetricMiniCard({ metric, ownBrand, onClick, C, lang }: {
         <span style={{ fontSize: 11, color: C.t3 }}>{domainLabel(metric.domain, lang)}</span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-        <span style={{ fontSize: 14 }}>{metric.icon}</span>
+        <MetricIcon name={metric.icon} size={13} color={C.ac} />
         <span style={{ fontSize: 13, fontWeight: 600, color: C.tx }}>
           {lang === 'zh' ? metric.label.zh : metric.label.en}
         </span>
@@ -799,8 +1094,10 @@ function MetricDetailView({ metric, ownBrand, trends, C, lang }: {
               <span style={{
                 width: 84, color: isOwn ? C.tx : C.t2,
                 fontWeight: isOwn ? 700 : 400, flexShrink: 0,
+                display: 'inline-flex', alignItems: 'center', gap: 4,
               }}>
-                {isOwn && '🏷️ '}{name}
+                {isOwn && <Tag size={11} strokeWidth={2} color={C.ac} />}
+                {name}
               </span>
               <div style={{ flex: 1, height: 10, background: C.s2, borderRadius: 5, overflow: 'hidden' }}>
                 <div style={{
@@ -903,7 +1200,10 @@ function WhyThisScore({ metric, ownBrand, C, lang }: {
                   fontSize: 12, color: C.tx, fontWeight: isOwn ? 700 : 500,
                 }}
               >
-                <span>{isOwn && '🏷️ '}{brand}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  {isOwn && <Tag size={11} strokeWidth={2} color={C.ac} />}
+                  {brand}
+                </span>
                 <span style={{ fontSize: 10, color: C.t3 }}>
                   {entries.length} {lang === 'zh' ? '项输入' : 'inputs'} {isExpanded ? '▾' : '▸'}
                 </span>

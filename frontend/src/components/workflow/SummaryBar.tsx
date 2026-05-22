@@ -128,7 +128,7 @@ function ComparisonTable({ analysis, comparison, currentView }: { analysis: GapA
         </thead>
         <tbody>
           {renderRow("当前流程",   origRow, C.s2, C.tx, currentView === "original" ? RED : undefined)}
-          {renderRow("🏆 行业标杆", optRow,  C.s1, C.ac, currentView === "optimized" ? C.ac : undefined)}
+          {renderRow("行业标杆 (Best-in-Class)", optRow,  C.s1, C.ac, currentView === "optimized" ? C.ac : undefined)}
           <tr><td colSpan={6} style={{ height: 1, background: C.bd, padding: 0 }} /></tr>
           {renderRow("可优化空间", animDelta, `${GREEN}0a`, GREEN, undefined, true)}
         </tbody>

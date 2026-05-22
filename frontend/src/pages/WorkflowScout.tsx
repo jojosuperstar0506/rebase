@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { AlertTriangle } from "lucide-react";
 import type { ScoutState } from "../types/workflow";
 import IntakePanel from "../components/workflow/IntakePanel";
 import LoadingView from "../components/workflow/LoadingView";
@@ -629,7 +630,7 @@ export default function WorkflowScout() {
               textAlign: "center",
             }}
           >
-            <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
+            <AlertTriangle size={40} strokeWidth={1.75} color={C.danger} style={{ marginBottom: 16 }} />
             <div style={{ fontSize: 20, fontWeight: 700, color: C.danger, marginBottom: 4 }}>
               分析失败
             </div>

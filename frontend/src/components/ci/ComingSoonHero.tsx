@@ -1,4 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
+import { ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 
@@ -16,15 +18,31 @@ interface PreviewCard {
   title: string;
   /** 1–2 sentence preview of what the card will contain when launched. */
   description: string;
-  /** Emoji icon at the top of the card. */
-  icon: string;
+  /** Icon at the top of the card. Accepts a React node (lucide icon)
+   *  or a string (legacy emoji). */
+  icon: ReactNode;
   /** Optional small label above title (e.g. "Douyin", "Monthly", "Q4"). */
   badge?: string;
+  /** Optional status pill rendered on the right side of the card header
+   *  (e.g. "In development" / "Beta" / "Coming soon"). Used by Actions /
+   *  Opportunity to communicate that these are agents-in-progress, not
+   *  passive previews. */
+  status?: { label: string; color?: 'amber' | 'cyan' | 'gray' };
+  /** Optional in-app route to navigate to when the card is clicked. When
+   *  set, the card becomes interactive (hover lift, "Launch" indicator,
+   *  cursor:pointer) and a click navigates via react-router. Used for
+   *  agents that are actually shippable (XHS Content Warroom v0.1) so
+   *  users can reach them from the Actions tab; cards without `route`
+   *  stay display-only previews. */
+  route?: string;
+  /** Localized "Launch" CTA label for cards with `route`. */
+  launchLabel?: string;
 }
 
 interface ComingSoonHeroProps {
-  /** Page-level emoji shown next to the headline. */
-  pageIcon: string;
+  /** Page-level icon shown above the headline. Accepts a React node (lucide icon)
+   *  or a string (legacy emoji). */
+  pageIcon: ReactNode;
   /** Big headline at the top. ≤ ~10 words. */
   headline: string;
   /** 1-line tagline under the headline explaining what this tab will do. */
@@ -45,6 +63,7 @@ export default function ComingSoonHero(props: ComingSoonHeroProps) {
   const { colors: C, lang } = useApp();
   const bp = useBreakpoint();
   const isMobile = bp === 'mobile';
+  const navigate = useNavigate();
 
   const heroStyle: CSSProperties = {
     background: `linear-gradient(135deg, ${C.s1} 0%, ${C.s2} 100%)`,
@@ -55,6 +74,13 @@ export default function ComingSoonHero(props: ComingSoonHeroProps) {
     marginBottom: 32,
     position: 'relative',
     overflow: 'hidden',
+  };
+
+  const badgeRowStyle: CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 20,
   };
 
   const badgeStyle: CSSProperties = {
@@ -68,31 +94,60 @@ export default function ComingSoonHero(props: ComingSoonHeroProps) {
     background: C.s1,
     border: `1px solid ${C.ac}`,
     borderRadius: 999,
-    marginBottom: 20,
   };
 
+  // Cards are agent previews — keep them readable (no greyed-out
+  // pointer-events:none anymore) so the status pill on each card reads
+  // as authoritative, not decorative. They're still non-interactive
+  // (no onClick) but visually "alive".
   const cardGrid: CSSProperties = {
     display: 'grid',
     gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(260px, 1fr))',
     gap: 16,
     marginBottom: 24,
-    opacity: 0.55, // greyed-out — these are previews, not active features
-    pointerEvents: 'none',
   };
 
   const cardStyle: CSSProperties = {
     background: C.s1,
-    border: `1px dashed ${C.bd}`,
+    border: `1px solid ${C.bd}`,
     borderRadius: 12,
-    padding: '20px 18px',
-    minHeight: 120,
+    padding: '18px 18px',
+    minHeight: 130,
+  };
+
+  const statusPillStyle = (color: 'amber' | 'cyan' | 'gray' = 'amber'): CSSProperties => {
+    const accent = color === 'cyan' ? C.ac : color === 'gray' ? C.t3 : '#f59e0b';
+    return {
+      display: 'inline-block',
+      fontSize: 9,
+      fontWeight: 700,
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+      color: accent,
+      background: `${accent}1a`,
+      padding: '2px 7px',
+      borderRadius: 999,
+      whiteSpace: 'nowrap',
+    };
   };
 
   return (
     <div>
       <div style={heroStyle}>
-        <div style={badgeStyle}>{props.badgeText}</div>
-        <div style={{ fontSize: isMobile ? 36 : 56, marginBottom: 12 }}>{props.pageIcon}</div>
+        {/* Icon-then-badge in a single row. Previously the icon rendered on
+            its own line below the badge with `display: inline-flex` and
+            `text-align: center`, which on wider viewports threw the icon
+            off to the right of the badge — read awkwardly. Putting both in
+            a flex row with the icon left of the badge fixes that. */}
+        <div style={badgeRowStyle}>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center',
+            fontSize: isMobile ? 22 : 26, lineHeight: 1, color: C.ac,
+          }}>
+            {props.pageIcon}
+          </span>
+          <span style={badgeStyle}>{props.badgeText}</span>
+        </div>
         <h1 style={{
           fontSize: isMobile ? 24 : 32,
           fontWeight: 700,
@@ -141,42 +196,99 @@ export default function ComingSoonHero(props: ComingSoonHeroProps) {
       </h3>
 
       <div style={cardGrid}>
-        {props.cards.map((card, i) => (
-          <div key={i} style={cardStyle}>
-            <div style={{ fontSize: 24, marginBottom: 8 }}>{card.icon}</div>
-            {card.badge && (
+        {props.cards.map((card, i) => {
+          const interactive = !!card.route;
+          const launchLabel = card.launchLabel
+            ?? (lang === 'zh' ? '启动智能体' : 'Launch agent');
+          return (
+            <div
+              key={i}
+              role={interactive ? 'link' : undefined}
+              tabIndex={interactive ? 0 : undefined}
+              onClick={interactive ? () => navigate(card.route!) : undefined}
+              onKeyDown={interactive
+                ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(card.route!); } }
+                : undefined}
+              onMouseEnter={interactive
+                ? (e) => { e.currentTarget.style.borderColor = C.ac; e.currentTarget.style.transform = 'translateY(-2px)'; }
+                : undefined}
+              onMouseLeave={interactive
+                ? (e) => { e.currentTarget.style.borderColor = C.bd; e.currentTarget.style.transform = 'translateY(0)'; }
+                : undefined}
+              style={{
+                ...cardStyle,
+                cursor: interactive ? 'pointer' : 'default',
+                transition: interactive ? 'border-color .15s ease, transform .15s ease' : undefined,
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              {/* Header row: icon (left) + status pill (right). Together they
+                  read as "this agent is currently {status}" — same visual
+                  pattern as the existing AgentMonitor cards. */}
               <div style={{
-                display: 'inline-block',
-                fontSize: 10,
-                fontWeight: 600,
-                color: C.t2,
-                padding: '2px 8px',
-                background: C.s2,
-                borderRadius: 4,
-                marginBottom: 8,
-                textTransform: 'uppercase',
-                letterSpacing: 0.5,
+                display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+                gap: 8, marginBottom: 10,
               }}>
-                {card.badge}
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center',
+                  fontSize: 22, lineHeight: 1, color: C.ac,
+                }}>{card.icon}</div>
+                {card.status && (
+                  <span style={statusPillStyle(card.status.color)}>
+                    {card.status.label}
+                  </span>
+                )}
               </div>
-            )}
-            <div style={{
-              fontSize: 15,
-              fontWeight: 600,
-              color: C.tx,
-              marginBottom: 6,
-            }}>
-              {card.title}
+              {card.badge && (
+                <div style={{
+                  display: 'inline-block',
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: C.t2,
+                  padding: '2px 8px',
+                  background: C.s2,
+                  borderRadius: 4,
+                  marginBottom: 8,
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.5,
+                }}>
+                  {card.badge}
+                </div>
+              )}
+              <div style={{
+                fontSize: 15,
+                fontWeight: 600,
+                color: C.tx,
+                marginBottom: 6,
+              }}>
+                {card.title}
+              </div>
+              <div style={{
+                fontSize: 13,
+                color: C.t2,
+                lineHeight: 1.5,
+                flex: 1,
+              }}>
+                {card.description}
+              </div>
+              {interactive && (
+                <div style={{
+                  marginTop: 12,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: C.ac,
+                }}>
+                  {launchLabel}
+                  <ArrowRight size={14} strokeWidth={2.25} />
+                </div>
+              )}
             </div>
-            <div style={{
-              fontSize: 13,
-              color: C.t2,
-              lineHeight: 1.5,
-            }}>
-              {card.description}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {props.footer && (
@@ -194,8 +306,8 @@ export default function ComingSoonHero(props: ComingSoonHeroProps) {
         textAlign: 'center',
       }}>
         {lang === 'zh'
-          ? '我们正在打造这个功能。当前的 Brief、Analytics 和 Library 仍是核心 — 这只是路线图的一瞥。'
-          : 'We\'re building this now. The current Brief, Analytics, and Library tabs remain core — this is just a preview of what\'s next.'}
+          ? '这些智能体正在开发中。Brief、Analytics、Library 是当前已上线的核心模块。'
+          : 'These agents are in active development. The Brief, Analytics, and Library tabs are the live product surface today.'}
       </div>
     </div>
   );

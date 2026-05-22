@@ -1,6 +1,29 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  Crosshair, PenLine, ClipboardList, Package, RefreshCw, Search,
+  Receipt, Boxes, Users, Radar, Activity,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useApp } from "../context/AppContext";
+
+const AGENT_ICONS: Record<string, LucideIcon> = {
+  CompetitiveIntel: Crosshair,
+  XhsContent: PenLine,
+  OrderSync: ClipboardList,
+  Inventory: Package,
+  Reconciliation: RefreshCw,
+  QC: Search,
+  Invoice: Receipt,
+  ProductStructure: Boxes,
+  CustomerInsights: Users,
+  MarketIntelligence: Radar,
+};
+
+function AgentIcon({ name, size = 22, color }: { name: string; size?: number; color?: string }) {
+  const Icon = AGENT_ICONS[name] ?? Activity;
+  return <Icon size={size} strokeWidth={1.75} color={color} />;
+}
 
 // ─── Agent Data Types ───
 
@@ -31,7 +54,7 @@ const AGENTS: Agent[] = [
     id: "jo-competitive-intel",
     name: "Jo Competitive Intel",
     nameCn: "竞品情报",
-    icon: "🎯",
+    icon: "CompetitiveIntel",
     category: "analytics",
     status: "active",
     externalUrl: "/competitor-intel.html",
@@ -63,7 +86,7 @@ const AGENTS: Agent[] = [
     id: "xhs-content",
     name: "XHS Content Warroom",
     nameCn: "小红书内容作战室",
-    icon: "✍️",
+    icon: "XhsContent",
     category: "content",
     status: "active",
     route: "/agents/xhs-content",
@@ -93,7 +116,7 @@ const AGENTS: Agent[] = [
     id: "order-sync",
     name: "Order Sync Agent",
     nameCn: "订单同步助手",
-    icon: "📋",
+    icon: "OrderSync",
     category: "operations",
     status: "beta",
     description:
@@ -118,7 +141,7 @@ const AGENTS: Agent[] = [
     id: "inventory-sync",
     name: "Inventory Sync Agent",
     nameCn: "库存同步助手",
-    icon: "📦",
+    icon: "Inventory",
     category: "operations",
     status: "coming-soon",
     description:
@@ -143,7 +166,7 @@ const AGENTS: Agent[] = [
     id: "reconciliation",
     name: "Reconciliation Agent",
     nameCn: "对账助手",
-    icon: "🔄",
+    icon: "Reconciliation",
     category: "finance",
     status: "coming-soon",
     description:
@@ -168,7 +191,7 @@ const AGENTS: Agent[] = [
     id: "qc-digitization",
     name: "QC Digitization Agent",
     nameCn: "质检数字化助手",
-    icon: "🔍",
+    icon: "QC",
     category: "operations",
     status: "coming-soon",
     description:
@@ -193,7 +216,7 @@ const AGENTS: Agent[] = [
     id: "invoice",
     name: "Invoice Agent",
     nameCn: "开票助手",
-    icon: "🧾",
+    icon: "Invoice",
     category: "finance",
     status: "coming-soon",
     description:
@@ -218,7 +241,7 @@ const AGENTS: Agent[] = [
     id: "product-structure",
     name: "Product Structure Agent",
     nameCn: "产品结构助手",
-    icon: "🏗️",
+    icon: "ProductStructure",
     category: "analytics",
     status: "beta",
     description:
@@ -243,7 +266,7 @@ const AGENTS: Agent[] = [
     id: "customer-insights",
     name: "Customer Insights Agent",
     nameCn: "客户洞察助手",
-    icon: "👥",
+    icon: "CustomerInsights",
     category: "analytics",
     status: "coming-soon",
     description:
@@ -264,7 +287,7 @@ const AGENTS: Agent[] = [
     id: "market-intelligence",
     name: "Market Intelligence Agent",
     nameCn: "市场情报助手",
-    icon: "📡",
+    icon: "MarketIntelligence",
     category: "analytics",
     status: "active",
     route: "/agents/market-intelligence",
@@ -275,14 +298,14 @@ const AGENTS: Agent[] = [
     capabilities: [
       "Multi-source aggregation: Google News (EN+CN), Reddit, 36Kr, 虎嗅, Reuters",
       "3-lens Claude analysis: Trend Radar, Competitive Dynamics, Opportunity Signals",
-      "Email delivery at 7am HK with 👍/👎 feedback buttons",
+      "Email delivery at 7am HK with thumbs-up / thumbs-down feedback buttons",
       "Self-improving playbook — optimized every Sunday based on your feedback",
       "Fully configurable: set your industry, competitors, and geography focus",
     ],
     capabilitiesCn: [
       "多源聚合：Google News（中英）、Reddit、36氪、虎嗅、路透社",
       "Claude三视角分析：趋势雷达、竞争动态、机会信号",
-      "每日7点（香港时间）邮件推送，含👍/👎反馈按钮",
+      "每日7点（香港时间）邮件推送，含点赞/差评反馈按钮",
       "自优化剧本——每周日根据反馈自动优化",
       "完全可配置：设定行业、竞争对手、地域焦点",
     ],
@@ -381,10 +404,9 @@ function AgentCard({ agent }: { agent: Agent }) {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 22,
             }}
           >
-            {agent.icon}
+            <AgentIcon name={agent.icon} size={22} color={C.ac} />
           </div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 700, color: C.tx }}>{displayName}</div>

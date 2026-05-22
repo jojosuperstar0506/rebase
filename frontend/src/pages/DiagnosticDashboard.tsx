@@ -1,4 +1,8 @@
 import { useState, useEffect, useRef } from "react";
+import {
+  Bot, AlertCircle, DollarSign, Monitor, ClipboardList,
+  Zap, UserCog, Clock, AlertTriangle, CheckCircle2,
+} from "lucide-react";
 import { mockData, type Department, type PainPoint, type AIAgent } from "../data/mockVisualization";
 
 // ─── Layout positions for department bubbles (grid layout) ───
@@ -54,9 +58,7 @@ function DepartmentBubble({ dept, showAI }: { dept: Department; showAI: boolean 
         strokeWidth={2.5}
         style={{ transition: "stroke 0.6s ease", filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.08))" }}
       />
-      <text x={14} y={28} fontSize={22}>
-        {dept.icon}
-      </text>
+      <rect x={14} y={14} width={20} height={20} rx={4} fill={dept.color} opacity={0.85} />
       <text x={42} y={28} fontSize={14} fontWeight={600} fill="#1a1a1a">
         {dept.name}
       </text>
@@ -126,7 +128,7 @@ function ConnectionLine({
         style={{ transition: "fill 0.6s ease" }}
       />
       <text x={mx} y={my + 4} textAnchor="middle" fontSize={9} fill={isActive ? "#2E7D32" : "#888"}>
-        {isActive ? "🤖 auto" : conn.type}
+        {isActive ? "auto" : conn.type}
       </text>
     </g>
   );
@@ -150,7 +152,9 @@ function PainCard({ pain, agent, showAI }: { pain: PainPoint; agent?: AIAgent; s
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-            <span style={{ fontSize: 16 }}>{isResolved ? "🤖" : "🔴"}</span>
+            {isResolved
+              ? <Bot size={16} strokeWidth={1.75} color="#2E7D32" />
+              : <AlertCircle size={16} strokeWidth={2} color="#C62828" />}
             <span style={{ fontWeight: 600, fontSize: 13, color: "#1a1a1a" }}>
               {isResolved ? agent!.name : `${pain.connection[0]} → ${pain.connection[1]}`}
             </span>
@@ -165,20 +169,24 @@ function PainCard({ pain, agent, showAI }: { pain: PainPoint; agent?: AIAgent; s
         <div style={{ textAlign: "right", minWidth: 130, paddingLeft: 12 }}>
           {isResolved ? (
             <>
-              <div style={{ fontSize: 12, color: "#2E7D32", fontWeight: 600 }}>
-                ⏱ {pain.hoursPerWeek} hrs → {agent!.residualHoursPerWeek} hr
+              <div style={{ fontSize: 12, color: "#2E7D32", fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 5 }}>
+                <Clock size={11} strokeWidth={2} />
+                {pain.hoursPerWeek} hrs → {agent!.residualHoursPerWeek} hr
               </div>
-              <div style={{ fontSize: 14, color: "#2E7D32", fontWeight: 700, marginTop: 4 }}>
-                💰 Saves ¥{agent!.savingsRmbMonthly.toLocaleString()}/mo
+              <div style={{ fontSize: 14, color: "#2E7D32", fontWeight: 700, marginTop: 4, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 5 }}>
+                <DollarSign size={13} strokeWidth={2} />
+                Saves ¥{agent!.savingsRmbMonthly.toLocaleString()}/mo
               </div>
             </>
           ) : (
             <>
-              <div style={{ fontSize: 12, color: "#C62828", fontWeight: 600 }}>
-                ⏱ {pain.hoursPerWeek} hrs/week
+              <div style={{ fontSize: 12, color: "#C62828", fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 5 }}>
+                <Clock size={11} strokeWidth={2} />
+                {pain.hoursPerWeek} hrs/week
               </div>
-              <div style={{ fontSize: 14, color: "#C62828", fontWeight: 700, marginTop: 4 }}>
-                💰 ¥{pain.costRmbMonthly.toLocaleString()}/mo
+              <div style={{ fontSize: 14, color: "#C62828", fontWeight: 700, marginTop: 4, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 5 }}>
+                <DollarSign size={13} strokeWidth={2} />
+                ¥{pain.costRmbMonthly.toLocaleString()}/mo
               </div>
             </>
           )}
@@ -244,25 +252,25 @@ function ROISummary() {
       >
         {[
           {
-            icon: "💰",
+            Icon: DollarSign,
             label: "Monthly waste eliminated",
             labelCn: "每月减少浪费",
             value: `¥${roi.totalWasteRmbMonthly.toLocaleString()}`,
           },
           {
-            icon: "🖥️",
+            Icon: Monitor,
             label: "Platform cost",
             labelCn: "平台费用",
             value: `¥${roi.platformCostRmbMonthly.toLocaleString()}`,
           },
           {
-            icon: "📋",
+            Icon: ClipboardList,
             label: "Hours freed / week",
             labelCn: "每周释放工时",
             value: `${animatedHours} hrs`,
           },
           {
-            icon: "❌",
+            Icon: AlertCircle,
             label: "Error reduction",
             labelCn: "错误减少",
             value: `~${roi.errorReductionPercent}%`,
@@ -277,7 +285,7 @@ function ROISummary() {
               border: "1px solid #E8E8E8",
             }}
           >
-            <div style={{ fontSize: 20, marginBottom: 6 }}>{stat.icon}</div>
+            <stat.Icon size={18} strokeWidth={1.75} color="#666" style={{ marginBottom: 6 }} />
             <div style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a" }}>{stat.value}</div>
             <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>{stat.label}</div>
             <div style={{ fontSize: 11, color: "#aaa" }}>{stat.labelCn}</div>
@@ -299,13 +307,13 @@ function ROISummary() {
           What your team gets back / 您的团队将获得
         </div>
         {[
-          { icon: "📋", text: `${roi.hoursFreedPerWeek} hrs/week freed from repetitive work`, textCn: "每周释放重复性工作时间" },
-          { icon: "❌", text: `~${roi.errorReductionPercent}% fewer data entry errors`, textCn: "数据录入错误大幅减少" },
-          { icon: "⚡", text: `Customer responses: ${roi.responseTimeImprovement}`, textCn: "客户响应速度大幅提升" },
-          { icon: "🧑‍💼", text: "Staff can focus on growth, not paperwork", textCn: "员工专注业务增长，而非文书工作" },
+          { Icon: ClipboardList, text: `${roi.hoursFreedPerWeek} hrs/week freed from repetitive work`, textCn: "每周释放重复性工作时间" },
+          { Icon: AlertCircle, text: `~${roi.errorReductionPercent}% fewer data entry errors`, textCn: "数据录入错误大幅减少" },
+          { Icon: Zap, text: `Customer responses: ${roi.responseTimeImprovement}`, textCn: "客户响应速度大幅提升" },
+          { Icon: UserCog, text: "Staff can focus on growth, not paperwork", textCn: "员工专注业务增长，而非文书工作" },
         ].map((item, i) => (
           <div key={i} style={{ display: "flex", gap: 10, marginBottom: 8, alignItems: "flex-start" }}>
-            <span style={{ fontSize: 16 }}>{item.icon}</span>
+            <item.Icon size={15} strokeWidth={1.75} color="#2E7D32" style={{ flexShrink: 0, marginTop: 2 }} />
             <div>
               <div style={{ fontSize: 13, color: "#333" }}>{item.text}</div>
               <div style={{ fontSize: 11, color: "#888" }}>{item.textCn}</div>
@@ -446,7 +454,7 @@ export default function DiagnosticDashboard() {
           </h2>
           <p style={{ fontSize: 13, color: "#888", marginBottom: 16 }}>
             {showAI
-              ? "Toggle off to see your current state. Each 🤖 is an AI agent handling work automatically."
+              ? "Toggle off to see your current state. Each Bot icon is an AI agent handling work automatically."
               : "This is your business as you described it. Toggle 'With AI' to see the transformation."}
           </p>
 
@@ -504,7 +512,12 @@ export default function DiagnosticDashboard() {
                 transition: "color 0.4s ease",
               }}
             >
-              {showAI ? "🟢 What AI Handles" : "🔴 Pain Hotspots"}
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {showAI
+                  ? <CheckCircle2 size={14} strokeWidth={2} color="#2E7D32" />
+                  : <AlertCircle size={14} strokeWidth={2} color="#C62828" />}
+                {showAI ? "What AI Handles" : "Pain Hotspots"}
+              </span>
             </h3>
             {data.painPoints.map((pain) => {
               const agent = agentByPainId.get(pain.id);
@@ -523,9 +536,17 @@ export default function DiagnosticDashboard() {
                 transition: "all 0.4s ease",
               }}
             >
-              {showAI
-                ? `✅ Recovered: ⏱ ${data.aiAgents.reduce((s, a) => s + a.hoursSavedPerWeek, 0)} hrs/week  💰 ¥${totalSavings.toLocaleString()}/month saved`
-                : `⚠️ Total wasted: ⏱ ${totalHoursWasted} hrs/week  💰 ¥${totalWaste.toLocaleString()}/month`}
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+                {showAI
+                  ? <>
+                      <CheckCircle2 size={14} strokeWidth={2} />
+                      Recovered: {data.aiAgents.reduce((s, a) => s + a.hoursSavedPerWeek, 0)} hrs/week · ¥{totalSavings.toLocaleString()}/month saved
+                    </>
+                  : <>
+                      <AlertTriangle size={14} strokeWidth={2} />
+                      Total wasted: {totalHoursWasted} hrs/week · ¥{totalWaste.toLocaleString()}/month
+                    </>}
+              </span>
             </div>
           </div>
         </div>

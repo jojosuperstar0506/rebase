@@ -54,20 +54,24 @@ export default function IndexCard({
                  : direction === 'losing'  ? '#ef4444'
                  : C.t3;
 
+  // Density pass: tighter padding + smaller numbers so 12 cards across the
+  // page stop dominating screen real estate. Hero numbers were 36px; small
+  // were 22px — both felt oversized for a consultant dashboard. New: 26px
+  // hero, 18px small. Padding 18→14 (hero) and 12→10 (small).
   const containerStyle: CSSProperties = {
     background: C.s1,
     border: `1px solid ${C.bd}`,
     borderRadius: 10,
-    padding: isHero ? 18 : 12,
+    padding: isHero ? 14 : 10,
     display: 'flex',
     flexDirection: 'column',
-    gap: isHero ? 10 : 6,
+    gap: isHero ? 6 : 4,
     cursor: ownValue ? 'pointer' : 'default',
     transition: 'border-color .15s ease',
   };
 
   const labelStyle: CSSProperties = {
-    fontSize: isHero ? 13 : 12,
+    fontSize: isHero ? 12 : 11,
     color: C.t2,
     fontWeight: 600,
     letterSpacing: 0.2,
@@ -75,7 +79,7 @@ export default function IndexCard({
   };
 
   const scoreStyle: CSSProperties = {
-    fontSize: isHero ? 36 : 22,
+    fontSize: isHero ? 26 : 18,
     fontWeight: 800,
     color: isCoveragePending ? C.t3 : C.tx,
     lineHeight: 1,
@@ -121,22 +125,41 @@ export default function IndexCard({
               )}
             </span>
           )}
-          {!direction && (
-            <span style={{ fontSize: 11, color: C.t3 }}>
-              {lang === 'zh' ? '基线 (下周显示变化)' : 'baseline (Δ next week)'}
-            </span>
-          )}
+          {/* Baseline subtitle (week-1 state) intentionally suppressed —
+              previously read "baseline (Δ next week)" on every card before
+              week-2 data arrives. That's noise repeated 12 times across
+              the page; the Δ arrow appears organically once history
+              accumulates. */}
         </div>
       )}
 
-      {/* Best competitor comparison (hero only, when we have data) */}
+      {/* Best competitor comparison (hero only, when we have data) — also
+          surface the gap so the user can read the position without doing
+          mental math. Smaller font now since the hero number is also
+          smaller; the comparison line should feel like supporting
+          context, not a co-equal stat. */}
       {isHero && !isCoveragePending && bestComp && bestComp.brand !== workspaceBrandName && (
-        <div style={{ fontSize: 12, color: C.t2 }}>
-          {lang === 'zh' ? '榜首竞品: ' : 'Top competitor: '}
+        <div style={{ fontSize: 11, color: C.t2 }}>
+          {lang === 'zh' ? '榜首: ' : 'Leader: '}
           <strong style={{ color: C.tx }}>{bestComp.brand}</strong>{' '}
           <span style={{ color: C.t3, fontVariantNumeric: 'tabular-nums' }}>
             {formatScore(bestComp.value.score, indexName)}
           </span>
+          {(() => {
+            if (typeof ownScore !== 'number' || typeof bestComp.value.score !== 'number') return null;
+            const gap = Math.round((ownScore - bestComp.value.score) * 10) / 10;
+            const gapColor = gap > 0 ? '#22c55e' : gap < 0 ? '#ef4444' : C.t3;
+            const sign = gap > 0 ? '+' : '';
+            return (
+              <span style={{
+                marginLeft: 6, fontSize: 10, fontWeight: 700, color: gapColor,
+                background: `${gapColor}1a`, padding: '1px 6px', borderRadius: 8,
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+                {sign}{gap}
+              </span>
+            );
+          })()}
         </div>
       )}
 

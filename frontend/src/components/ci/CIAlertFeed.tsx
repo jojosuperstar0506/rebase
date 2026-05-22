@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { CSSProperties } from 'react';
+import { Bell, BellOff } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { t, T } from '../../i18n';
 import { getAlerts, markAlertsRead } from '../../services/ciApi';
@@ -250,7 +251,7 @@ export default function CIAlertFeed({ workspaceId, competitors, source }: CIAler
         marginBottom: 16, paddingBottom: 12, borderBottom: `1px solid ${C.bd}`,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 15 }}>🔔</span>
+          <Bell size={15} strokeWidth={2} color={C.t2} />
           <span style={{ fontSize: isMobile ? 14 : 15, fontWeight: 700, color: C.tx }}>
             {t(T.ci.alerts, lang)}
           </span>
@@ -289,7 +290,7 @@ export default function CIAlertFeed({ workspaceId, competitors, source }: CIAler
       {/* Empty state */}
       {!loading && alerts.length === 0 && (
         <div style={{ padding: isMobile ? '24px 0' : '32px 0', textAlign: 'center' }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>🔕</div>
+          <BellOff size={32} strokeWidth={1.5} color={C.t3} style={{ marginBottom: 12 }} />
           <div style={{ fontSize: 14, fontWeight: 600, color: C.t2, marginBottom: 6 }}>
             {t(T.ci.noAlerts, lang)}
           </div>

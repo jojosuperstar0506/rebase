@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Sparkles } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { t, T } from '../../i18n';
 
@@ -31,6 +32,7 @@ export default function CIWelcomeBanner() {
       color: C.t2,
       lineHeight: 1.7,
     }}>
+      <Sparkles size={16} strokeWidth={2} color={C.ac} style={{ flexShrink: 0, marginTop: 3 }} />
       <div style={{ flex: 1 }}>
         {t(T.ci.welcomeBanner, lang)}
       </div>

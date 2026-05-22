@@ -13,7 +13,8 @@ export const T = {
     logout: { en: "Log out", zh: "退出" },
     darkMode: { en: "Dark", zh: "深色" },
     lightMode: { en: "Light", zh: "浅色" },
-    ciVfinal: { en: "CI vFinal", zh: "竞品情报" },
+    ciVfinal: { en: "Intelligence", zh: "竞品情报" },
+    contact: { en: "Contact", zh: "联系我们" },
   },
 
   // ── CI vFinal ───────────────────────────────────────────────────
@@ -228,7 +229,7 @@ export const T = {
     generateSuggestions: { en: "Generate Suggestions", zh: "生成推荐" },
     generatingTakes: { en: "This may take 5-10 seconds", zh: "大约需要5-10秒" },
     readyToAnalyze: { en: "Everything's ready. Start your competitive analysis to see insights, scores, and recommendations.", zh: "一切就绪。开始竞品分析，查看洞察、评分和建议。" },
-    startAnalysis: { en: "🚀 Start Analysis →", zh: "🚀 开始分析 →" },
+    startAnalysis: { en: "Start Analysis →", zh: "开始分析 →" },
     takesAbout: { en: "This will take about 30 seconds.", zh: "大约需要30秒。" },
     analysisNotRun: { en: "Analysis not yet run", zh: "尚未运行分析" },
     goToSettingsToStart: { en: "Go to Settings to start your first analysis", zh: "前往设置开始您的首次分析" },
@@ -265,12 +266,12 @@ export const T = {
 
   // ── Home ────────────────────────────────────────────────────────
   home: {
-    badge: { en: "AI Intelligence Platform for Chinese SMBs", zh: "专为中国中小企业打造的AI智能平台" },
-    heroTitle1: { en: "Your business,", zh: "您的企业，" },
-    heroTitle2: { en: "powered by AI", zh: "AI赋能未来" },
+    badge: { en: "AI-Native Agency · Consumer Brand GTM", zh: "AI 原生代理商 · 消费品牌增长" },
+    heroTitle1: { en: "From competitor insight to", zh: "从竞品洞察到" },
+    heroTitle2: { en: "shipped work — in days", zh: "成品上线——按天计算" },
     heroSubtitle: {
-      en: "Rebase gives Chinese SMBs a dedicated AI team — market intelligence, competitor tracking, content creation, and operations automation — all in one workspace built around your business.",
-      zh: "Rebase 为中国中小企业提供专属AI团队——市场情报、竞品追踪、内容创作、运营自动化——所有功能围绕您的业务定制，集于一个工作台。",
+      en: "Rebase tracks your competitors across XHS, Douyin, and Tmall, scores them on 12 GTM indices, and delivers a weekly Brief with three quantified moves your team can execute by Friday. The work brand-strategy consultants charge $500K for — productized as software.",
+      zh: "Rebase 追踪小红书、抖音、天猫上的竞品动态，用 12 项 GTM 指标打分，每周输出一份带三条量化动作的简报——您的团队本周即可执行。咨询公司收费 50 万美金的工作，软件化交付。",
     },
     ctaAccess: { en: "Start free →", zh: "免费开始 →" },
     ctaContinue: { en: "Continue to Dashboard →", zh: "进入工作台 →" },
@@ -279,48 +280,48 @@ export const T = {
     whatWeDoLabel: { en: "What We Do", zh: "我们做什么" },
     whatWeDoTitle: { en: "Four AI agents. One workspace.", zh: "四大智能体，一个工作台。" },
     whatWeDoSub: {
-      en: "Each agent is pre-loaded with your company profile so it works for your business from day one — not a generic tool you have to train.",
-      zh: "每个智能体均预载您的公司档案，从第一天起就为您的业务服务——不是需要您从头训练的通用工具。",
+      en: "Rebase replaces three line items in your budget: your CI subscription, your strategy consultants, and your one-off agency contracts. The output is the playbook plus the work — not a dashboard.",
+      zh: "Rebase 取代您预算中的三项支出：竞品分析订阅、战略咨询、单次代理项目。我们交付策略加上完成品——不只是仪表盘。",
     },
     pillars: [
       {
-        icon: "📡",
-        title: { en: "Market Intelligence", zh: "市场情报" },
+        icon: "Radar",
+        title: { en: "Track", zh: "追踪" },
         desc: {
-          en: "Daily AI-powered reports aggregating competitor moves, industry trends, and opportunity signals across 6 data sources — delivered before you start your day.",
-          zh: "每日AI报告，汇聚6大数据源的竞品动态、行业趋势和机会信号——在您开始新一天前送达。",
+          en: "Daily scrape of your competitors across XHS, Douyin, and Tmall — products, prices, content, KOL deployment, brand sentiment. Replaces your Charm.io / Particl / Similarweb subscription.",
+          zh: "每日抓取小红书、抖音、天猫上的竞品数据——产品、价格、内容、达人投放、品牌情绪。取代您的 Charm.io / Particl / Similarweb 订阅。",
         },
       },
       {
-        icon: "🎯",
-        title: { en: "Competitor Tracking", zh: "竞品追踪" },
+        icon: "Gauge",
+        title: { en: "Score", zh: "评分" },
         desc: {
-          en: "7-dimension brand equity tracking across your key competitors on XHS, Douyin, and Tmall. Updated every 3 days.",
-          zh: "7维品牌资产追踪，覆盖小红书、抖音、天猫上的核心竞品，每3天更新一次。",
+          en: "12-index GTM Engine — brand equity, content velocity, launch cadence, KOL strategy, pricing power. The framework we used in $500K consulting engagements, automated.",
+          zh: "12 项 GTM 引擎指标——品牌资产、内容速度、上新节奏、达人策略、定价能力。我们 50 万美金咨询项目使用的框架，已自动化。",
         },
       },
       {
-        icon: "✍️",
-        title: { en: "Content Creation", zh: "内容创作" },
+        icon: "Compass",
+        title: { en: "Plan", zh: "策略" },
         desc: {
-          en: "From competitor analysis to publish-ready XHS notes in minutes. AI-powered pipeline that understands Chinese consumer psychology.",
-          zh: "从竞品分析到可发布的小红书笔记，数分钟内完成。AI流水线深度理解中国消费者心理。",
+          en: "Weekly Brief — one verdict on your competitive position, three quantified moves your team can execute by Friday. The strategy-consultant deliverable, weekly instead of quarterly.",
+          zh: "每周简报——一个对您竞争位置的判断，三条本周可执行的量化动作。咨询交付物的形式，但是每周而非每季度。",
         },
       },
       {
-        icon: "⚙️",
-        title: { en: "Operations Automation", zh: "运营自动化" },
+        icon: "Rocket",
+        title: { en: "Ship", zh: "落地" },
         desc: {
-          en: "AI agents that handle order syncing, inventory tracking, reconciliation, and invoicing — so your team focuses on growth.",
-          zh: "AI智能体处理订单同步、库存追踪、对账和开票——让您的团队专注于增长。",
+          en: "One-click outputs: content drafts ready for XHS, product opportunity briefs, white-space cards. Replaces your one-off agency budget.",
+          zh: "一键产出：可发布的小红书内容草稿、产品机会简报、白空间卡片。取代您的单次代理预算。",
         },
       },
     ],
     diagLabel: { en: "Free Tool", zh: "免费工具" },
-    diagTitle: { en: "How much could AI unlock for your business?", zh: "AI能为您的企业释放多少潜力？" },
+    diagTitle: { en: "How much could AI unlock for your business?", zh: "AI 能为您的企业释放多少潜力？" },
     diagDesc: {
       en: "Answer 10 questions about your operations. Our diagnostic calculates your AI opportunity — in hours saved, cost reduced, and revenue unlocked.",
-      zh: "回答10个关于您运营的问题，我们的诊断工具将计算您的AI机会——节省的时间、降低的成本、释放的营收。",
+      zh: "回答 10 个关于您运营的问题，我们的诊断工具将计算您的 AI 机会——节省的时间、降低的成本、释放的营收。",
     },
     diagCta: { en: "Run Free Diagnostic →", zh: "立即运行免费诊断 →" },
     diagNote: { en: "No account needed", zh: "无需注册账号" },
@@ -359,10 +360,10 @@ export const T = {
     },
     whatNextTitle: { en: "What happens next", zh: "接下来会发生什么" },
     steps: [
-      { icon: "📋", title: { en: "Your profile is saved", zh: "您的档案已保存" }, desc: { en: "Your business information is securely stored and ready for agent configuration.", zh: "您的业务信息已安全保存，随时可为智能体配置。" } },
-      { icon: "🔍", title: { en: "We review your application", zh: "我们审核您的申请" }, desc: { en: "Will and Joanna personally review every application — usually within a few hours.", zh: "Will 和 Joanna 亲自审核每份申请——通常在几小时内完成。" } },
-      { icon: "🔑", title: { en: "You receive your invite code", zh: "您收到邀请码" }, desc: { en: "We'll reach out with a unique invite code personalised to your business within 24 hours.", zh: "我们将在24小时内为您发送专属邀请码，完全为您的业务量身定制。" } },
-      { icon: "🚀", title: { en: "Your AI workspace is ready", zh: "您的AI工作台就绪" }, desc: { en: "Log in and access agents pre-loaded with your company profile, competitors, and goals.", zh: "登录后即可访问已预载您的公司档案、竞品信息和目标的智能体。" } },
+      { icon: "ClipboardList", title: { en: "Your profile is saved", zh: "您的档案已保存" }, desc: { en: "Your business information is securely stored and ready for agent configuration.", zh: "您的业务信息已安全保存，随时可为智能体配置。" } },
+      { icon: "Search", title: { en: "We review your application", zh: "我们审核您的申请" }, desc: { en: "Will and Joanna personally review every application — usually within a few hours.", zh: "Will 和 Joanna 亲自审核每份申请——通常在几小时内完成。" } },
+      { icon: "KeyRound", title: { en: "You receive your invite code", zh: "您收到邀请码" }, desc: { en: "We'll reach out with a unique invite code personalised to your business within 24 hours.", zh: "我们将在24小时内为您发送专属邀请码，完全为您的业务量身定制。" } },
+      { icon: "Rocket", title: { en: "Your AI workspace is ready", zh: "您的AI工作台就绪" }, desc: { en: "Log in and access agents pre-loaded with your company profile, competitors, and goals.", zh: "登录后即可访问已预载您的公司档案、竞品信息和目标的智能体。" } },
     ],
     aboutTitle: { en: "What is Rebase?", zh: "什么是 Rebase？" },
     aboutDesc: {

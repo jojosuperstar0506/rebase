@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { Inbox } from "lucide-react";
 import { useApp } from "../context/AppContext";
 
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || "rebase-admin-2026";
@@ -175,7 +176,19 @@ export default function Admin() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Approval failed");
-      fetchApplicants();
+      // Surface the workspace re-key outcome to the admin so they know whether
+      // the user will land on a populated dashboard. Three states:
+      //   - rekey.attempted=false: applicant onboarded with no phone/email
+      //     keys; nothing to re-key. Fine.
+      //   - rekey.rekeyedRows>0: success.
+      //   - rekey.error: DB UPDATE failed; admin should run the backfill script.
+      if (data.rekey && data.rekey.error) {
+        console.warn(`[Admin] Workspace re-key failed for ${name}: ${data.rekey.error}`);
+        alert(`Approved, but workspace re-key failed (${data.rekey.error}). Run \`node backend/scripts/migrate_workspaces_to_invitecode.js --apply\` on ECS to fix.`);
+      }
+      // Await the refresh so the UI reflects the new approved state before
+      // returning. Without await, rapid double-clicks could see a stale list.
+      await fetchApplicants();
       return { inviteCode: data.inviteCode };
     } catch (e) {
       alert(e instanceof Error ? e.message : "Approval failed");
@@ -302,7 +315,7 @@ export default function Admin() {
 
         {!loading && !error && shown.length === 0 && (
           <div style={{ color: C.t2, textAlign: "center", padding: 40, background: C.s1, borderRadius: 10, border: `1px solid ${C.bd}` }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>📭</div>
+            <Inbox size={32} strokeWidth={1.5} color={C.t3} style={{ marginBottom: 12 }} />
             <div style={{ fontSize: 15, fontWeight: 600, color: C.tx, marginBottom: 8 }}>
               {filter === "pending" ? "No pending applicants right now." : filter === "approved" ? "No approved users yet." : "No applicants yet."}
             </div>
