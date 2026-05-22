@@ -23,7 +23,6 @@ export default function SignupWizard() {
   const [step, setStep] = useState<StepKey>(isValidStep(stepParam) ? stepParam : "account");
   const [completed, setCompleted] = useState<Set<StepKey>>(new Set());
   const [brandName, setBrandName] = useState<string>("");
-  const [category, setCategory] = useState<string>("女包");
   const [bootstrapping, setBootstrapping] = useState(true);
 
   // On mount: if a token exists, ask the backend where we are. Lets users
@@ -137,15 +136,11 @@ export default function SignupWizard() {
               <BrandStep
                 brandName={brandName}
                 onBack={() => goTo("account")}
-                onComplete={(c) => {
-                  setCategory(c);
-                  markCompleteAnd("competitors");
-                }}
+                onComplete={() => markCompleteAnd("competitors")}
               />
             )}
             {step === "competitors" && (
               <CompetitorsStep
-                category={category}
                 onBack={() => goTo("brand")}
                 onComplete={() => markCompleteAnd("goals")}
               />

@@ -1,19 +1,12 @@
-import { useState, type FormEvent } from "react";
+import { useState, useMemo, type FormEvent } from "react";
+import { useApp } from "../../../context/AppContext";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { Heading } from "@/components/ui/Heading";
 import { Highlight } from "@/components/ui/Highlight";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { saveBrandStep } from "@/services/onboardingApi";
-
-const CATEGORIES = [
-  { value: "女包", label: "女包", en: "Women's Bags" },
-  { value: "男包", label: "男包", en: "Men's Bags" },
-  { value: "双肩包", label: "双肩包", en: "Backpacks" },
-  { value: "钱包", label: "钱包", en: "Wallets" },
-  { value: "行李箱", label: "行李箱", en: "Luggage" },
-  { value: "其他", label: "其他", en: "Other" },
-];
+import { CATEGORY_TAXONOMY, type MajorCategory } from "@/data/categoryTaxonomy";
 
 const PRICE_TIERS = [
   { value: "value", label: "value", range: "≤ ¥500", min: 0, max: 500 },
@@ -22,19 +15,52 @@ const PRICE_TIERS = [
   { value: "luxury", label: "luxury", range: "¥5,000+", min: 5000, max: 99999 },
 ];
 
+const PLATFORMS = [
+  { value: "xhs", en: "Xiaohongshu", zh: "小红书" },
+  { value: "douyin", en: "Douyin", zh: "抖音" },
+  { value: "tmall", en: "Tmall", zh: "天猫" },
+  { value: "taobao", en: "Taobao", zh: "淘宝" },
+  { value: "jd", en: "JD.com", zh: "京东" },
+  { value: "kuaishou", en: "Kuaishou", zh: "快手" },
+];
+
 interface Props {
   brandName: string;
-  onComplete: (category: string) => void;
+  onComplete: () => void;
   onBack: () => void;
 }
 
 export function BrandStep({ brandName, onComplete, onBack }: Props) {
-  const [category, setCategory] = useState<string>("");
+  const { lang } = useApp();
+  const isZh = lang === "zh";
+
+  const [majorValue, setMajorValue] = useState<string>("");
+  const [subs, setSubs] = useState<string[]>([]);
   const [priceTier, setPriceTier] = useState<string>("");
+  const [platforms, setPlatforms] = useState<string[]>(["xhs", "douyin", "tmall"]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const canSubmit = category && priceTier && !submitting;
+  const major: MajorCategory | undefined = useMemo(
+    () => CATEGORY_TAXONOMY.find((m) => m.value === majorValue),
+    [majorValue]
+  );
+
+  const canSubmit =
+    majorValue && subs.length > 0 && priceTier && platforms.length > 0 && !submitting;
+
+  function selectMajor(value: string) {
+    setMajorValue(value);
+    setSubs([]); // sub-categories belong to a major — reset on change
+  }
+  function toggleSub(value: string) {
+    setSubs((s) => (s.includes(value) ? s.filter((x) => x !== value) : [...s, value]));
+  }
+  function togglePlatform(value: string) {
+    setPlatforms((p) =>
+      p.includes(value) ? p.filter((x) => x !== value) : [...p, value]
+    );
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -43,12 +69,14 @@ export function BrandStep({ brandName, onComplete, onBack }: Props) {
     try {
       const tier = PRICE_TIERS.find((t) => t.value === priceTier);
       await saveBrandStep({
-        brand_category: category,
+        brand_category_l1: majorValue,
+        brand_subcategories: subs,
         brand_price_range: tier
           ? { tier: tier.value, min: tier.min, max: tier.max }
           : null,
+        brand_platforms: Object.fromEntries(platforms.map((p) => [p, ""])),
       });
-      onComplete(category);
+      onComplete();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save");
     } finally {
@@ -67,21 +95,22 @@ export function BrandStep({ brandName, onComplete, onBack }: Props) {
           className="text-base text-[var(--color-text-muted)]"
           style={{ fontFamily: "var(--font-mono)" }}
         >
-          // category + price tier shape what we track and who we compare you against
+          // category, price tier + platforms shape what we track and who we compare you against
         </p>
       </div>
 
       <form onSubmit={onSubmit} className="flex flex-col gap-8">
+        {/* ── Major category ─────────────────────────────────────────── */}
         <section className="flex flex-col gap-3">
           <Eyebrow>category</Eyebrow>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            {CATEGORIES.map((c) => {
-              const active = category === c.value;
+            {CATEGORY_TAXONOMY.map((m) => {
+              const active = majorValue === m.value;
               return (
                 <button
-                  key={c.value}
+                  key={m.value}
                   type="button"
-                  onClick={() => setCategory(c.value)}
+                  onClick={() => selectMajor(m.value)}
                   className={cn(
                     "flex flex-col items-start gap-1 px-4 py-3 text-left",
                     "border rounded-[var(--radius-xs)] transition-all",
@@ -94,16 +123,18 @@ export function BrandStep({ brandName, onComplete, onBack }: Props) {
                     className="text-base font-medium"
                     style={{ fontFamily: "var(--font-display)" }}
                   >
-                    {c.label}
+                    {isZh ? m.zh : m.en}
                   </span>
                   <span
                     className={cn(
                       "text-xs",
-                      active ? "text-[var(--color-canvas)]/70" : "text-[var(--color-text-subtle)]"
+                      active
+                        ? "text-[var(--color-canvas)]/70"
+                        : "text-[var(--color-text-subtle)]"
                     )}
                     style={{ fontFamily: "var(--font-mono)" }}
                   >
-                    {c.en}
+                    {isZh ? m.en : m.zh}
                   </span>
                 </button>
               );
@@ -111,6 +142,55 @@ export function BrandStep({ brandName, onComplete, onBack }: Props) {
           </div>
         </section>
 
+        {/* ── Sub-categories (multi-select, appears after a major pick) ─ */}
+        {major && (
+          <section className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <Eyebrow>sub-categories · pick all that apply</Eyebrow>
+              <span
+                className="text-xs text-[var(--color-text-muted)]"
+                style={{ fontFamily: "var(--font-mono)" }}
+              >
+                {subs.length} selected
+              </span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {major.subcategories.map((s) => {
+                const active = subs.includes(s.value);
+                return (
+                  <button
+                    key={s.value}
+                    type="button"
+                    onClick={() => toggleSub(s.value)}
+                    className={cn(
+                      "flex items-center gap-2.5 px-3 py-2.5 text-left",
+                      "border rounded-[var(--radius-xs)] transition-all",
+                      active
+                        ? "border-[var(--color-text-primary)] bg-[var(--color-accent-soft)]"
+                        : "border-[var(--color-border-hairline)] bg-[var(--color-raised)] hover:border-[var(--color-text-primary)]"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "inline-grid place-items-center w-4 h-4 rounded-[2px] border flex-shrink-0 text-[11px]",
+                        active
+                          ? "bg-[var(--color-text-primary)] border-[var(--color-text-primary)] text-[var(--color-accent)]"
+                          : "bg-transparent border-[var(--color-border-strong)]"
+                      )}
+                    >
+                      {active ? "✓" : ""}
+                    </span>
+                    <span className="flex flex-col min-w-0">
+                      <span className="text-sm font-medium">{isZh ? s.zh : s.en}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* ── Price tier ─────────────────────────────────────────────── */}
         <section className="flex flex-col gap-3">
           <Eyebrow>price tier</Eyebrow>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -138,12 +218,50 @@ export function BrandStep({ brandName, onComplete, onBack }: Props) {
                   <span
                     className={cn(
                       "text-xs",
-                      active ? "text-[var(--color-canvas)]/70" : "text-[var(--color-text-subtle)]"
+                      active
+                        ? "text-[var(--color-canvas)]/70"
+                        : "text-[var(--color-text-subtle)]"
                     )}
                     style={{ fontFamily: "var(--font-mono)" }}
                   >
                     {t.range}
                   </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* ── Platforms ──────────────────────────────────────────────── */}
+        <section className="flex flex-col gap-3">
+          <Eyebrow>platforms to track</Eyebrow>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {PLATFORMS.map((p) => {
+              const active = platforms.includes(p.value);
+              return (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => togglePlatform(p.value)}
+                  className={cn(
+                    "flex items-center gap-2.5 px-3 py-2.5 text-left",
+                    "border rounded-[var(--radius-xs)] transition-all",
+                    active
+                      ? "border-[var(--color-text-primary)] bg-[var(--color-accent-soft)]"
+                      : "border-[var(--color-border-hairline)] bg-[var(--color-raised)] hover:border-[var(--color-text-primary)]"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "inline-grid place-items-center w-4 h-4 rounded-[2px] border flex-shrink-0 text-[11px]",
+                      active
+                        ? "bg-[var(--color-text-primary)] border-[var(--color-text-primary)] text-[var(--color-accent)]"
+                        : "bg-transparent border-[var(--color-border-strong)]"
+                    )}
+                  >
+                    {active ? "✓" : ""}
+                  </span>
+                  <span className="text-sm font-medium">{isZh ? p.zh : p.en}</span>
                 </button>
               );
             })}
