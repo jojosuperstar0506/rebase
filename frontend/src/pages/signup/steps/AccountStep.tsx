@@ -20,12 +20,30 @@ export function AccountStep({ initialBrandName, onComplete }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
+  // Per-field validity — drives both the submit gate and the inline hints
+  // below each field so the user always sees *why* "continue" is disabled.
+  const emailValid = /\S+@\S+\.\S+/.test(email.trim());
+  const passwordValid = password.length >= 8;
+  const confirmValid = confirm.length > 0 && password === confirm;
+  const brandValid = brandName.trim().length > 0;
+
   const canSubmit =
-    email.includes("@") &&
-    password.length >= 8 &&
-    password === confirm &&
-    brandName.trim().length > 0 &&
-    !submitting;
+    emailValid && passwordValid && confirmValid && brandValid && !submitting;
+
+  // Hint shown next to a field: only once the user has typed something there.
+  const emailHint =
+    email.length > 0 && !emailValid ? "enter a valid email address" : "";
+  const passwordHint =
+    password.length > 0 && !passwordValid ? "at least 8 characters" : "";
+  const confirmHint =
+    confirm.length > 0 && !confirmValid ? "passwords don't match" : "";
+
+  // One-line summary of what's still missing, shown by the disabled button.
+  const missing: string[] = [];
+  if (!emailValid) missing.push("email");
+  if (!passwordValid) missing.push("password (8+ chars)");
+  if (!confirmValid) missing.push("matching confirmation");
+  if (!brandValid) missing.push("brand name");
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -73,6 +91,7 @@ export function AccountStep({ initialBrandName, onComplete }: Props) {
             placeholder="you@brand.com"
             required
           />
+          <FieldHint text={emailHint} />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -87,6 +106,7 @@ export function AccountStep({ initialBrandName, onComplete }: Props) {
               placeholder="8+ characters"
               required
             />
+            <FieldHint text={passwordHint} />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="confirm">confirm password</Label>
@@ -99,6 +119,7 @@ export function AccountStep({ initialBrandName, onComplete }: Props) {
               placeholder="repeat it"
               required
             />
+            <FieldHint text={confirmHint} />
           </div>
         </div>
 
@@ -128,16 +149,39 @@ export function AccountStep({ initialBrandName, onComplete }: Props) {
           </div>
         )}
 
-        <Button
-          type="submit"
-          variant="accent"
-          size="lg"
-          disabled={!canSubmit}
-          className="w-full md:w-auto md:self-start"
-        >
-          {submitting ? "creating account…" : "→ continue"}
-        </Button>
+        <div className="flex flex-col gap-2">
+          <Button
+            type="submit"
+            variant="accent"
+            size="lg"
+            disabled={!canSubmit}
+            className="w-full md:w-auto md:self-start"
+          >
+            {submitting ? "creating account…" : "→ continue"}
+          </Button>
+          {!submitting && missing.length > 0 && (
+            <span
+              className="text-xs text-[var(--color-text-subtle)]"
+              style={{ fontFamily: "var(--font-mono)" }}
+            >
+              // still needed: {missing.join(", ")}
+            </span>
+          )}
+        </div>
       </form>
     </div>
+  );
+}
+
+/** Inline validation hint shown under a field once the user has typed. */
+function FieldHint({ text }: { text: string }) {
+  if (!text) return null;
+  return (
+    <span
+      className="text-xs text-[var(--color-danger)]"
+      style={{ fontFamily: "var(--font-mono)" }}
+    >
+      // {text}
+    </span>
   );
 }
