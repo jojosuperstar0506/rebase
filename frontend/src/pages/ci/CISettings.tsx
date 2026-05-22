@@ -22,19 +22,15 @@ import {
   type BrandResolution, type CompetitorSuggestion,
 } from '../../services/ciApi';
 import { categoryLabel } from '../../utils/categoryLabels';
+import { CATEGORY_TAXONOMY } from '../../data/categoryTaxonomy';
 
 // Category + platform values stay Chinese — they're foreign keys into the
 // pipeline's INDEX_HIERARCHY weighting + scraper routing. The label is the
 // only thing that switches with lang. The value never gets translated, or
 // the backend's category-keyed lookups silently return zero rows.
-const CATEGORIES: { value: string; label: { en: string; zh: string } }[] = [
-  { value: '女包',     label: { en: "Women's bags",         zh: '女包' } },
-  { value: '男包',     label: { en: "Men's bags",           zh: '男包' } },
-  { value: '箱包配件', label: { en: 'Bags & accessories',   zh: '箱包配件' } },
-  { value: '鞋类',     label: { en: 'Footwear',             zh: '鞋类' } },
-  { value: '服饰',     label: { en: 'Apparel',              zh: '服饰' } },
-  { value: '其他',     label: { en: 'Other',                zh: '其他' } },
-];
+// Category options now come from the shared two-level taxonomy
+// (src/data/categoryTaxonomy.ts) — see the grouped <select> in
+// BrandProfileSection. The old flat CATEGORIES list was bags-only.
 const PLATFORM_OPTIONS: { value: string; label: { en: string; zh: string } }[] = [
   { value: '淘宝/天猫', label: { en: 'Taobao / Tmall', zh: '淘宝/天猫' } },
   { value: '京东',      label: { en: 'JD',             zh: '京东' } },
@@ -112,7 +108,13 @@ function Section({ title, children, C }: { title: string; children: React.ReactN
       padding: 24,
       marginBottom: 24,
     }}>
-      <h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 20, marginTop: 0 }}>{title}</h2>
+      <h2 style={{
+        fontSize: 12, fontWeight: 600, marginBottom: 20, marginTop: 0,
+        fontFamily: 'var(--font-mono)', letterSpacing: '0.16em',
+        textTransform: 'uppercase', color: C.t3,
+      }}>
+        // {title}
+      </h2>
       {children}
     </div>
   );
@@ -203,7 +205,7 @@ function BrandProfileSection({ C, lang, isMobile }: { C: ReturnType<typeof useAp
     outline: 'none',
   };
 
-  const labelStyle = { fontSize: 12, fontWeight: 600, color: C.t2, marginBottom: 6, display: 'block', textTransform: 'uppercase' as const, letterSpacing: 0.5 };
+  const labelStyle = { fontSize: 11, fontWeight: 500, color: C.t3, marginBottom: 6, display: 'block', textTransform: 'uppercase' as const, letterSpacing: '0.12em', fontFamily: 'var(--font-mono)' };
 
   return (
     <Section title={t(T.ci.brandProfile, lang as any)} C={C}>
@@ -219,7 +221,7 @@ function BrandProfileSection({ C, lang, isMobile }: { C: ReturnType<typeof useAp
           />
         </div>
 
-        {/* Category */}
+        {/* Category — two-level taxonomy, grouped by major category */}
         <div>
           <label style={labelStyle}>{t(T.ci.category, lang as any)}</label>
           <select
@@ -228,10 +230,14 @@ function BrandProfileSection({ C, lang, isMobile }: { C: ReturnType<typeof useAp
             onChange={e => setForm(f => ({ ...f, brand_category: e.target.value }))}
           >
             <option value="">-- select --</option>
-            {CATEGORIES.map(c => (
-              <option key={c.value} value={c.value}>
-                {c.label[lang as 'en' | 'zh'] ?? c.label.en}
-              </option>
+            {CATEGORY_TAXONOMY.map(major => (
+              <optgroup key={major.value} label={lang === 'zh' ? major.zh : major.en}>
+                {major.subcategories.map(sub => (
+                  <option key={sub.value} value={sub.value}>
+                    {lang === 'zh' ? sub.zh : sub.en}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>
@@ -1939,16 +1945,19 @@ export default function CISettings() {
   const showStartCard = !!(workspace?.brand_name) && competitors.length > 0 && !analysisStarted;
 
   return (
-    <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: isMobile ? '16px 12px' : '32px 24px', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: isMobile ? '16px 12px' : '32px 24px', fontFamily: 'var(--font-sans)' }}>
       <div style={{ maxWidth: 860, margin: '0 auto' }}>
         <CISubNav />
 
-        <div style={{ marginBottom: isMobile ? 20 : 28 }}>
-          <h1 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, marginBottom: 8, marginTop: 0 }}>
+        <div style={{ marginBottom: isMobile ? 20 : 28, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.t3 }}>
+            {lang === 'zh' ? '// 设置 · 工作区' : '// settings · workspace'}
+          </span>
+          <h1 style={{ fontSize: isMobile ? 26 : 36, fontWeight: 700, margin: 0, fontFamily: 'var(--font-display)', letterSpacing: -0.5 }}>
             {t(T.ci.settings, lang)}
           </h1>
-          <p style={{ color: C.t2, fontSize: 15, margin: 0 }}>
-            {t(T.ci.subtitle, lang)}
+          <p style={{ color: C.t2, fontSize: 14, margin: 0, fontFamily: 'var(--font-mono)' }}>
+            // {t(T.ci.subtitle, lang)}
           </p>
         </div>
 
