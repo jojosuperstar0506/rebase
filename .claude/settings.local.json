@@ -58,7 +58,31 @@
       "Bash(grep -r \"ECS_URL\\\\|API_SECRET\" \"/c/Users/wchiang/Deloitte \\(O365D\\)/Internal Development - Will''''s Folder/Will & Joanna''''s SMB idea\" --include=*.js --include=*.ts --include=*.tsx)",
       "Bash(mkdir -p \"C:\\\\Users\\\\wchiang\\\\Deloitte \\(O365D\\)\\\\Internal Development - Will''s Folder\\\\Will & Joanna''s SMB idea\\\\frontend\\\\src\\\\context\")",
       "Bash(mkdir -p \"C:\\\\Users\\\\wchiang\\\\Deloitte \\(O365D\\)\\\\Internal Development - Will''s Folder\\\\Will & Joanna''s SMB idea\\\\frontend\\\\src\\\\theme\")",
-      "Bash(mkdir -p \"C:\\\\Users\\\\wchiang\\\\Deloitte \\(O365D\\)\\\\Internal Development - Will''s Folder\\\\Will & Joanna''s SMB idea\\\\frontend\\\\src\\\\i18n\")"
+      "Bash(mkdir -p \"C:\\\\Users\\\\wchiang\\\\Deloitte \\(O365D\\)\\\\Internal Development - Will''s Folder\\\\Will & Joanna''s SMB idea\\\\frontend\\\\src\\\\i18n\")",
+      "Bash(git -C /Users/joannazhang/rebase log --oneline --all -20)",
+      "WebFetch(domain:hex.tech)",
+      "Bash(git -C /Users/joannazhang/rebase log --oneline --all)",
+      "WebFetch(domain:hilberts.ai)",
+      "Bash(curl -sL \"https://hex.tech/enterprise/\" -A \"Mozilla/5.0\" -o /tmp/hex.html)",
+      "Bash(curl -sL \"https://hilberts.ai/\" -A \"Mozilla/5.0\" -o /tmp/hilberts.html)",
+      "Read(//tmp/**)",
+      "Bash(grep -oE 'href=\"[^\"]*\\\\.css[^\"]*\"' /tmp/hex.html | head -20 && echo \"---\" && grep -oE 'href=\"[^\"]*\\\\.css[^\"]*\"' /tmp/hilberts.html | head -20)",
+      "Bash(curl -sL \"https://hex.tech/styles/brand-refresh-fonts.css\" -o /tmp/hex-fonts.css)",
+      "Bash(curl -sL \"https://hex.tech/styles/fonts-editorial.css\" -o /tmp/hex-editorial.css)",
+      "Bash(curl -sL \"https://cdn.prod.website-files.com/69241c9125ae02b952e6e87e/css/hilberts-ai-v.webflow.shared.a443b30c1.min.css\" -o /tmp/hilberts.css)",
+      "Bash(git -C /Users/joannazhang/rebase show 5b1c773 --stat)",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(grep -E \"\\\\.js$\")",
+      "Bash(xargs cat)",
+      "mcp__joanna-memory__save_memory",
+      "Bash(node --check /Users/joannazhang/rebase/backend/server.js)",
+      "Bash(node -e \"require\\('dotenv'\\).config\\(\\); const {Pool}=require\\('pg'\\); const p=new Pool\\({connectionString:process.env.DATABASE_URL, connectionTimeoutMillis:3000}\\); p.query\\('SELECT NOW\\(\\)'\\).then\\(r=>{console.log\\('CONNECTED', r.rows[0].now\\); process.exit\\(0\\);}\\).catch\\(e=>{console.log\\('FAILED:', e.message\\); process.exit\\(1\\);}\\);\")",
+      "Bash(node -e \"require\\('dotenv'\\).config\\({path:'../.env'}\\); const {Pool}=require\\('pg'\\); const p=new Pool\\({connectionString:process.env.DATABASE_URL, connectionTimeoutMillis:4000}\\); p.query\\('SELECT NOW\\(\\)'\\).then\\(r=>{console.log\\('CONNECTED', r.rows[0].now\\); process.exit\\(0\\);}\\).catch\\(e=>{console.log\\('FAILED:', e.message\\); process.exit\\(1\\);}\\);\")",
+      "Bash(node -e \"require\\('dotenv'\\).config\\({path:'../.env'}\\); const {Pool}=require\\('pg'\\); const p=new Pool\\({connectionString:process.env.DATABASE_URL, connectionTimeoutMillis:5000}\\); p.query\\('SELECT NOW\\(\\)'\\).then\\(r=>{console.log\\('CONNECTED'\\); process.exit\\(0\\);}\\).catch\\(e=>{console.log\\('FAILED:', e.message\\); process.exit\\(1\\);}\\);\")",
+      "Bash(grep -E \"^[0-9]+\\\\.css$\")",
+      "Bash(gh repo *)"
     ]
   }
 }

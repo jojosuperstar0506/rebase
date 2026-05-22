@@ -483,11 +483,11 @@ export default function CIBrief() {
   const pageStyle: CSSProperties = {
     background: C.bg, color: C.tx, minHeight: '100vh',
     padding: isMobile ? '16px 12px' : '32px 24px',
-    fontFamily: 'system-ui, -apple-system, sans-serif',
+    fontFamily: 'var(--font-sans)',
   };
   const container: CSSProperties = { maxWidth: 840, margin: '0 auto' };
   const card: CSSProperties = {
-    background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 14,
+    background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 6,
     padding: isMobile ? 16 : 24,
   };
 
@@ -581,14 +581,14 @@ export default function CIBrief() {
 
         {/* Page header — masthead style */}
         <header style={{ margin: '20px 0 28px', textAlign: isMobile ? 'left' : 'center' }}>
-          <div style={{ fontSize: 11, color: C.t3, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 6 }}>
-            {lang === 'zh' ? '每周竞品行动简报' : 'Weekly Action Brief'}
+          <div style={{ fontSize: 11, color: C.t3, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 8, fontFamily: 'var(--font-mono)' }}>
+            {lang === 'zh' ? '// 每周竞品行动简报' : '// weekly action brief'}
           </div>
-          <h1 style={{ fontSize: isMobile ? 26 : 34, fontWeight: 800, margin: 0, letterSpacing: -0.5 }}>
+          <h1 style={{ fontSize: isMobile ? 26 : 38, fontWeight: 700, margin: 0, letterSpacing: -0.5, fontFamily: 'var(--font-display)' }}>
             {formatWeek(brief.week_of, lang)}
           </h1>
-          <div style={{ marginTop: 8, fontSize: 13, color: C.t3 }}>
-            {brief.workspace_brand_name} · {lang === 'zh' ? '更新于' : 'Updated'} {formatRelativeTime(brief.generated_at, lang)}
+          <div style={{ marginTop: 8, fontSize: 13, color: C.t3, fontFamily: 'var(--font-mono)' }}>
+            {brief.workspace_brand_name} · {lang === 'zh' ? '更新于' : 'updated'} {formatRelativeTime(brief.generated_at, lang)}
           </div>
           {workspace?.brand_name && competitors.length > 0 && (
             <div style={{

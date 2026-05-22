@@ -1,0 +1,151 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/*
+ * Rebase design system — light-primary, Hex-leaning.
+ * Source of truth: src/theme/tokens.ts mirrors these values for TS consumers.
+ * Section schemes swap fg/bg/accent roles via [data-scheme] on <Section>.
+ */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme static {
+  /* ─── Color ─────────────────────────────────────────────────────────── */
+  /* Canvas (warm off-white, primary surface) */
+  --color-canvas: #fcf8f8;
+  --color-raised: #ffffff;
+  --color-sunken: #f5f1f2;
+  --color-inverse: #14141c;
+
+  /* Text — warm near-black, no pure black */
+  --color-text-primary: #1a1416;
+  --color-text-muted: #6b6266;
+  --color-text-subtle: #968d90;
+  --color-text-inverse: #f5f1f2;
+
+  /* Borders — hairline by default */
+  --color-border-hairline: #e8e0e2;
+  --color-border-strong: #1a1416;
+
+  /* Signature accent — chartreuse / builder-energy lime.
+     Gender-neutral, syntax-highlighter feel, pairs with warm neutrals. */
+  --color-accent: #c5e832;
+  --color-accent-deep: #1a2e05;
+  --color-accent-soft: #f0fadc;
+
+  /* Secondary "highlighter" — amber marker behind key phrases */
+  --color-highlight: #fde68a;
+  --color-highlight-strong: #fbbf24;
+
+  /* Data accents — electric blue for charts, cyan for code-like UI */
+  --color-data-blue: #2563eb;
+  --color-data-cyan: #06b6d4;
+
+  /* 12-step warm neutral ramp */
+  --color-neutral-50: #fcf8f8;
+  --color-neutral-100: #f5f1f2;
+  --color-neutral-200: #e8e0e2;
+  --color-neutral-300: #d4cacc;
+  --color-neutral-400: #b0a4a7;
+  --color-neutral-500: #8a7d80;
+  --color-neutral-600: #6b6266;
+  --color-neutral-700: #4f4548;
+  --color-neutral-800: #312a2c;
+  --color-neutral-900: #1a1416;
+  --color-neutral-950: #0d090a;
+
+  /* Functional */
+  --color-success: #2d8659;
+  --color-warning: #b8741a;
+  --color-danger: #c44848;
+  --color-info: #3b6bb0;
+
+  /* ─── Typography — mono-driven for builder energy ──────────────────── */
+  /* All self-hosted via @fontsource (src/main.tsx). Display IS mono —
+     hero headlines feel like a code editor / terminal. */
+  --font-display: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  /* Serif kept for rare editorial moments only — not the default brand voice */
+  --font-serif: "Instrument Serif", Georgia, serif;
+
+  --text-eyebrow: 0.75rem;       /* 12px */
+  --text-mono-sm: 0.8125rem;     /* 13px */
+  --text-sm: 0.875rem;           /* 14px */
+  --text-base: 1rem;             /* 16px */
+  --text-lg: 1.125rem;           /* 18px */
+  --text-xl: 1.5rem;             /* 24px */
+  --text-2xl: 2rem;              /* 32px */
+  --text-3xl: 2.5rem;            /* 40px */
+  --text-4xl: 3.5rem;            /* 56px */
+  --text-5xl: 4.5rem;            /* 72px */
+
+  /* ─── Radii — tight, Hex-leaning ────────────────────────────────────── */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  /* ─── Spacing rhythm anchor ─────────────────────────────────────────── */
+  --spacing-grid: 10rem;
+}
+
+/* ─── Section color schemes (data-scheme on <Section>) ─────────────────── */
+
+[data-scheme="canvas"] {
+  --bg: var(--color-canvas);
+  --bg-raised: var(--color-raised);
+  --fg: var(--color-text-primary);
+  --fg-muted: var(--color-text-muted);
+  --border: var(--color-border-hairline);
+  --accent: var(--color-accent);
+}
+
+[data-scheme="inverse"] {
+  --bg: var(--color-inverse);
+  --bg-raised: #1f1d27;
+  --fg: var(--color-text-inverse);
+  --fg-muted: #968d90;
+  --border: #2b252c;
+  --accent: var(--color-accent);
+}
+
+[data-scheme="accent"] {
+  --bg: var(--color-accent-soft);
+  --bg-raised: #f6fce4;
+  --fg: var(--color-text-primary);
+  --fg-muted: var(--color-text-muted);
+  --border: #d4e683;
+  --accent: var(--color-accent-deep);
+}
+
+/* ─── Base styles ──────────────────────────────────────────────────────── */
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background: var(--color-canvas);
+    color: var(--color-text-primary);
+  }
+
+  /* Hairline grid utility — 10rem vertical rhythm, applied as a class */
+  .grid-hairline {
+    background-image: linear-gradient(
+      to bottom,
+      var(--color-border-hairline) 1px,
+      transparent 1px
+    );
+    background-size: 100% var(--spacing-grid);
+    background-position: 0 0;
+  }
+}

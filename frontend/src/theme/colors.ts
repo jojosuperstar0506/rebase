@@ -17,24 +17,39 @@ export interface ColorSet {
   platformDouyin: string; platformXhs: string; platformTmall: string;
 }
 
-export const DARK: ColorSet = {
-  bg: "#0c0c14", s1: "#14141e", s2: "#1a1a28", bd: "#2a2a3a",
-  tx: "#e4e4ec", t2: "#9898a8", t3: "#5a5a72",
-  ac: "#06b6d4", ac2: "#8b5cf6",
-  navBg: "#0c0c14", navBd: "#2a2a3a",
-  inputBg: "#0c0c14", inputBd: "#2a2a3a",
-  danger: "#f87171", success: "#22c55e", warning: "#f59e0b", info: "#3b82f6",
-  domainConsumer: "#ec4899", domainProduct: "#f97316", domainMarketing: "#0ea5e9",
+/**
+ * LIGHT — the Rebase design system (builder-energy, Hex-leaning).
+ *
+ * This is the primary theme. Surfaces are warm off-white, text is warm
+ * near-black, borders are hairlines. `ac` is intentionally near-black so
+ * primary buttons read as confident dark blocks (and accent *text* stays
+ * legible); `ac2` carries the chartreuse "pop" for highlights and badges.
+ * The mono/amber/cyan signature pops live in semantic + domain colors.
+ *
+ * Canonical token values mirror src/index.css @theme + src/theme/tokens.ts.
+ */
+export const LIGHT: ColorSet = {
+  bg: "#fcf8f8", s1: "#ffffff", s2: "#f5f1f2", bd: "#e8e0e2",
+  tx: "#1a1416", t2: "#6b6266", t3: "#968d90",
+  ac: "#1a1416", ac2: "#c5e832",
+  navBg: "#ffffff", navBd: "#e8e0e2",
+  inputBg: "#ffffff", inputBd: "#e8e0e2",
+  danger: "#c44848", success: "#2d8659", warning: "#b8741a", info: "#3b6bb0",
+  domainConsumer: "#2563eb", domainProduct: "#b8741a", domainMarketing: "#06b6d4",
   platformDouyin: "#fe2c55", platformXhs: "#ff2442", platformTmall: "#ff6a00",
 };
 
-export const LIGHT: ColorSet = {
-  bg: "#f8f9fb", s1: "#ffffff", s2: "#f0f4f8", bd: "#e2e8f0",
-  tx: "#1a202c", t2: "#4a5568", t3: "#a0aec0",
-  ac: "#0891b2", ac2: "#7c3aed",
-  navBg: "#ffffff", navBd: "#e2e8f0",
-  inputBg: "#ffffff", inputBd: "#cbd5e0",
-  danger: "#e53e3e", success: "#38a169", warning: "#d97706", info: "#2563eb",
-  domainConsumer: "#db2777", domainProduct: "#ea580c", domainMarketing: "#0284c7",
+/**
+ * DARK — Hex-style dark variant. Cool near-black canvas, chartreuse accent.
+ * Wired up properly in P3.1; kept here so the theme toggle never crashes.
+ */
+export const DARK: ColorSet = {
+  bg: "#14141c", s1: "#1f1d27", s2: "#252128", bd: "#2b252c",
+  tx: "#f5f1f2", t2: "#968d90", t3: "#6b6266",
+  ac: "#f5f1f2", ac2: "#c5e832",
+  navBg: "#14141c", navBd: "#2b252c",
+  inputBg: "#1f1d27", inputBd: "#2b252c",
+  danger: "#e07a7a", success: "#5cb98a", warning: "#d99a4a", info: "#6b9bd9",
+  domainConsumer: "#5b8def", domainProduct: "#d99a4a", domainMarketing: "#22d3ee",
   platformDouyin: "#fe2c55", platformXhs: "#ff2442", platformTmall: "#ff6a00",
 };

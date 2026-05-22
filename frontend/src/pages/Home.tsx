@@ -1,203 +1,247 @@
-import { useNavigate } from "react-router-dom";
-import { Radar, Gauge, Compass, Rocket, ArrowRight, Sparkles } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { T, t } from "../i18n";
-
-const PILLAR_ICONS: Record<string, typeof Radar> = {
-  Radar,
-  Gauge,
-  Compass,
-  Rocket,
-};
-
-const MAX_W = 1200;
+import { Section } from "@/components/ui/Section";
+import { Eyebrow } from "@/components/ui/Eyebrow";
+import { Heading } from "@/components/ui/Heading";
+import { Highlight } from "@/components/ui/Highlight";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 
 export default function Home() {
-  const { colors: C, lang } = useApp();
+  const { lang, setLang } = useApp();
   const navigate = useNavigate();
   const h = T.home;
-  const isLoggedIn = !!localStorage.getItem("rebase_token") || !!localStorage.getItem("admin_authed");
+  const isLoggedIn =
+    !!localStorage.getItem("rebase_token") || !!localStorage.getItem("admin_authed");
+  const primaryHref = isLoggedIn ? "/ci" : "/signup";
 
   return (
-    <div style={{ background: C.bg, minHeight: "100vh", fontFamily: "system-ui, -apple-system, sans-serif", color: C.tx }}>
+    <div className="bg-[var(--color-canvas)] text-[var(--color-text-primary)] min-h-screen">
+      {/* ── Own header ── */}
+      <header className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border-hairline)] sticky top-0 z-20 bg-[var(--color-canvas)]">
+        <Link
+          to="/"
+          className="text-base font-bold text-[var(--color-text-primary)] no-underline"
+          style={{ fontFamily: "var(--font-mono)" }}
+        >
+          rebase
+        </Link>
+        <nav className="flex items-center gap-2" style={{ fontFamily: "var(--font-mono)" }}>
+          <a
+            href="/calculator.html"
+            className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] px-3 py-1.5"
+          >
+            diagnostics
+          </a>
+          <button
+            onClick={() => setLang(lang === "en" ? "zh" : "en")}
+            className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] px-3 py-1.5 border border-[var(--color-border-hairline)] rounded-[var(--radius-xs)]"
+          >
+            {lang === "en" ? "中文" : "EN"}
+          </button>
+          {!isLoggedIn && (
+            <Link
+              to="/login"
+              className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] px-3 py-1.5"
+            >
+              log in
+            </Link>
+          )}
+          <Button size="sm" variant="accent" onClick={() => navigate(primaryHref)}>
+            {isLoggedIn ? "dashboard →" : "start free →"}
+          </Button>
+        </nav>
+      </header>
 
       {/* ── Hero ── */}
-      <div style={{ maxWidth: MAX_W, margin: "0 auto", padding: "96px 32px 72px", textAlign: "center" }}>
-        <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, letterSpacing: 3, color: C.ac, background: C.ac + "18", border: `1px solid ${C.ac}44`, borderRadius: 20, padding: "5px 16px", marginBottom: 28, textTransform: "uppercase" }}>
-          {t(h.badge, lang)}
+      <Section scheme="inverse" size="md" hairlineGrid>
+        <div className="flex flex-col gap-7 max-w-3xl">
+          <div className="flex items-center gap-3">
+            <span
+              className="inline-block w-2 h-2 rounded-full"
+              style={{ background: "var(--color-accent)" }}
+            />
+            <Eyebrow>// {t(h.badge, lang)}</Eyebrow>
+          </div>
+          <Heading as={1} size="display">
+            {t(h.heroTitle1, lang)}{" "}
+            <Highlight color="amber">{t(h.heroTitle2, lang)}</Highlight>
+          </Heading>
+          <p className="text-lg text-[var(--fg-muted)] max-w-2xl leading-relaxed">
+            {t(h.heroSubtitle, lang)}
+          </p>
+          <div className="flex flex-wrap gap-3 pt-2">
+            <Button variant="accent" size="lg" onClick={() => navigate(primaryHref)}>
+              {t(isLoggedIn ? h.ctaContinue : h.ctaAccess, lang)}
+            </Button>
+            <a href="/calculator.html">
+              <Button
+                variant="outline"
+                size="lg"
+                className="text-[var(--fg)] border-[var(--fg)] hover:bg-[var(--bg-raised)]"
+              >
+                {t(h.ctaDiag, lang)}
+              </Button>
+            </a>
+          </div>
+          <p
+            className="text-sm text-[var(--fg-muted)] pt-1"
+            style={{ fontFamily: "var(--font-mono)" }}
+          >
+            // {t(h.earlyAccess, lang)}
+          </p>
         </div>
-        <style>{`
-          .rebase-hero-grad {
-            background: linear-gradient(135deg, ${C.ac}, ${C.ac2});
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-            color: transparent;
-          }
-        `}</style>
-        <h1 style={{ fontSize: "clamp(38px, 6.5vw, 68px)", fontWeight: 800, lineHeight: 1.1, margin: "0 0 24px", letterSpacing: -1.5, maxWidth: 920, marginLeft: "auto", marginRight: "auto" }}>
-          {t(h.heroTitle1, lang)}{" "}
-          <span className="rebase-hero-grad">{t(h.heroTitle2, lang)}</span>
-        </h1>
-        <p style={{ fontSize: 18, color: C.t2, lineHeight: 1.7, maxWidth: 720, margin: "0 auto 40px" }}>
-          {t(h.heroSubtitle, lang)}
-        </p>
-        <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
-          <button onClick={() => navigate(isLoggedIn ? "/ci" : "/onboarding")} style={{ padding: "14px 32px", background: `linear-gradient(135deg, ${C.ac}, ${C.ac2})`, border: "none", borderRadius: 8, color: "#fff", fontWeight: 700, fontSize: 15, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
-            {t(isLoggedIn ? h.ctaContinue : h.ctaAccess, lang).replace(/\s*→\s*$/, "")}
-            <ArrowRight size={16} strokeWidth={2.5} />
-          </button>
-          <a href="/calculator.html" style={{ padding: "14px 32px", background: "transparent", border: `1px solid ${C.bd}`, borderRadius: 8, color: C.tx, fontWeight: 600, fontSize: 15, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 8 }}>
-            <Sparkles size={15} />
-            {t(h.ctaDiag, lang)}
-          </a>
-        </div>
-        <p style={{ fontSize: 13, color: C.t3, marginTop: 22 }}>{t(h.earlyAccess, lang)}</p>
-      </div>
-
-      <div style={{ borderTop: `1px solid ${C.bd}` }} />
+      </Section>
 
       {/* ── Pillars ── */}
-      <div style={{ maxWidth: MAX_W, margin: "0 auto", padding: "80px 32px" }}>
-        <div style={{ textAlign: "center", marginBottom: 56 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 3, color: C.ac2, textTransform: "uppercase", marginBottom: 14 }}>{t(h.whatWeDoLabel, lang)}</div>
-          <h2 style={{ fontSize: "clamp(28px, 3.5vw, 36px)", fontWeight: 800, margin: "0 0 18px", letterSpacing: -0.5 }}>{t(h.whatWeDoTitle, lang)}</h2>
-          <p style={{ fontSize: 16, color: C.t2, maxWidth: 640, margin: "0 auto", lineHeight: 1.65 }}>{t(h.whatWeDoSub, lang)}</p>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 18 }}>
-          {h.pillars.map((p) => {
-            const Icon = PILLAR_ICONS[p.icon] || Radar;
-            return (
-              <div key={p.icon} style={{ background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 14, padding: 28 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 10, background: C.ac + "14", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 18, color: C.ac }}>
-                  <Icon size={22} strokeWidth={1.75} />
-                </div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: C.tx, marginBottom: 4 }}>{t(p.title, lang)}</div>
-                <div style={{ fontSize: 12, color: C.ac, fontWeight: 600, marginBottom: 12 }}>{t(p.title, lang === "en" ? "zh" : "en")}</div>
-                <p style={{ fontSize: 14, color: C.t2, lineHeight: 1.65, margin: 0 }}>{t(p.desc, lang)}</p>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* CI vFinal spotlight card */}
-        <div style={{
-          background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 14,
-          padding: 28, textAlign: "center", marginTop: 24,
-          borderTop: `3px solid ${C.ac}`,
-        }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 3, color: C.ac, textTransform: "uppercase", marginBottom: 10 }}>
-            {lang === "zh" ? "现已上线" : "Now Live"}
-          </div>
-          <h3 style={{ fontSize: 19, fontWeight: 700, marginBottom: 8, marginTop: 0 }}>
-            {t(T.ci.homeTitle, lang)}
-          </h3>
-          <p style={{ color: C.t2, fontSize: 14, marginBottom: 18, maxWidth: 560, margin: "0 auto 18px", lineHeight: 1.65 }}>
-            {t(T.ci.homeDesc, lang)}
+      <Section scheme="canvas" size="lg">
+        <div className="flex flex-col gap-3 mb-12">
+          <Eyebrow>01 / {t(h.whatWeDoLabel, lang)}</Eyebrow>
+          <Heading as={2} size="section">
+            {t(h.whatWeDoTitle, lang)}
+          </Heading>
+          <p className="text-base text-[var(--color-text-muted)] max-w-2xl">
+            {t(h.whatWeDoSub, lang)}
           </p>
-          <a href="/ci" style={{
-            display: "inline-flex", alignItems: "center", gap: 8,
-            background: `linear-gradient(135deg, ${C.ac}, ${C.ac2})`,
-            color: "#fff", padding: "10px 24px", borderRadius: 8,
-            textDecoration: "none", fontWeight: 600, fontSize: 14,
-          }}>
-            {t(T.ci.homeButton, lang).replace(/\s*→\s*$/, "")}
-            <ArrowRight size={14} strokeWidth={2.5} />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {h.pillars.map((p, i) => (
+            <Card key={i} className="flex flex-col gap-3">
+              <div className="flex items-baseline justify-between">
+                <span
+                  className="text-base font-semibold"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  {t(p.title, lang)}
+                </span>
+                <span
+                  className="text-xs text-[var(--color-text-subtle)]"
+                  style={{ fontFamily: "var(--font-mono)" }}
+                >
+                  0{i + 1}
+                </span>
+              </div>
+              <span
+                className="text-xs text-[var(--color-text-muted)]"
+                style={{ fontFamily: "var(--font-mono)" }}
+              >
+                {t(p.title, lang === "en" ? "zh" : "en")}
+              </span>
+              <p className="text-sm text-[var(--color-text-muted)] leading-relaxed">
+                {t(p.desc, lang)}
+              </p>
+            </Card>
+          ))}
+        </div>
+      </Section>
+
+      {/* ── CI spotlight ── */}
+      <Section scheme="accent" size="md">
+        <div className="flex flex-col md:flex-row md:items-center gap-6 justify-between">
+          <div className="flex flex-col gap-3 max-w-xl">
+            <Eyebrow>// {lang === "zh" ? "现已上线" : "now live"}</Eyebrow>
+            <Heading as={3} size="card">
+              {t(T.ci.homeTitle, lang)}
+            </Heading>
+            <p className="text-sm text-[var(--color-text-muted)] leading-relaxed">
+              {t(T.ci.homeDesc, lang)}
+            </p>
+          </div>
+          <a href="/ci" className="flex-shrink-0">
+            <Button variant="primary" size="lg">
+              {t(T.ci.homeButton, lang)}
+            </Button>
           </a>
         </div>
-      </div>
-
-      <div style={{ borderTop: `1px solid ${C.bd}` }} />
+      </Section>
 
       {/* ── Diagnostic CTA ── */}
-      <div style={{ maxWidth: MAX_W, margin: "0 auto", padding: "80px 32px" }}>
-        <div style={{ background: C.s2, border: `1px solid ${C.bd}`, borderRadius: 16, padding: "56px 44px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 32, flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: 280 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 3, color: C.ac, textTransform: "uppercase", marginBottom: 14 }}>{t(h.diagLabel, lang)}</div>
-            <h2 style={{ fontSize: "clamp(22px, 2.6vw, 28px)", fontWeight: 800, margin: "0 0 14px", letterSpacing: -0.5 }}>{t(h.diagTitle, lang)}</h2>
-            <p style={{ fontSize: 15, color: C.t2, lineHeight: 1.65, margin: 0 }}>{t(h.diagDesc, lang)}</p>
+      <Section scheme="canvas" size="md">
+        <Card className="flex flex-col md:flex-row md:items-center gap-6 justify-between !p-8 md:!p-10">
+          <div className="flex flex-col gap-3 max-w-xl">
+            <Eyebrow>02 / {t(h.diagLabel, lang)}</Eyebrow>
+            <Heading as={2} size="card">
+              {t(h.diagTitle, lang)}
+            </Heading>
+            <p className="text-sm text-[var(--color-text-muted)] leading-relaxed">
+              {t(h.diagDesc, lang)}
+            </p>
           </div>
-          <div style={{ flexShrink: 0 }}>
-            <a href="/calculator.html" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "14px 28px", background: C.s1, border: `1px solid ${C.ac}`, borderRadius: 8, color: C.ac, fontWeight: 700, fontSize: 15, textDecoration: "none", whiteSpace: "nowrap" }}>
-              {t(h.diagCta, lang).replace(/\s*→\s*$/, "")}
-              <ArrowRight size={15} strokeWidth={2.5} />
+          <div className="flex flex-col gap-2 flex-shrink-0">
+            <a href="/calculator.html">
+              <Button variant="outline" size="lg" className="w-full">
+                {t(h.diagCta, lang)}
+              </Button>
             </a>
-            <p style={{ fontSize: 12, color: C.t3, textAlign: "center", marginTop: 10 }}>{t(h.diagNote, lang)}</p>
+            <span
+              className="text-xs text-[var(--color-text-subtle)] text-center"
+              style={{ fontFamily: "var(--font-mono)" }}
+            >
+              // {t(h.diagNote, lang)}
+            </span>
           </div>
-        </div>
-      </div>
+        </Card>
+      </Section>
 
-      <div style={{ borderTop: `1px solid ${C.bd}` }} />
-
-      {/* ── How it Works ── */}
-      <div style={{ maxWidth: MAX_W, margin: "0 auto", padding: "80px 32px" }}>
-        <div style={{ textAlign: "center", marginBottom: 56 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 3, color: C.ac2, textTransform: "uppercase", marginBottom: 14 }}>{t(h.howLabel, lang)}</div>
-          <h2 style={{ fontSize: "clamp(28px, 3.5vw, 36px)", fontWeight: 800, margin: 0, letterSpacing: -0.5 }}>{t(h.howTitle, lang)}</h2>
+      {/* ── How it works ── */}
+      <Section scheme="canvas" size="lg">
+        <div className="flex flex-col gap-3 mb-12">
+          <Eyebrow>03 / {t(h.howLabel, lang)}</Eyebrow>
+          <Heading as={2} size="section">
+            {t(h.howTitle, lang)}
+          </Heading>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 18 }}>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {h.steps.map((s) => (
-            <div key={s.step} style={{ background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 14, padding: 30 }}>
-              <div style={{ fontSize: 36, fontWeight: 800, color: C.bd, marginBottom: 18, fontVariantNumeric: "tabular-nums" }}>{s.step}</div>
-              <div style={{ fontSize: 17, fontWeight: 700, color: C.tx, marginBottom: 12 }}>{t(s.title, lang)}</div>
-              <p style={{ fontSize: 14, color: C.t2, lineHeight: 1.65, margin: 0 }}>{t(s.desc, lang)}</p>
-            </div>
+            <Card key={s.step} className="flex flex-col gap-3">
+              <span
+                className="text-3xl font-bold text-[var(--color-accent)]"
+                style={{ fontFamily: "var(--font-display)" }}
+              >
+                {s.step}
+              </span>
+              <span
+                className="text-base font-semibold"
+                style={{ fontFamily: "var(--font-display)" }}
+              >
+                {t(s.title, lang)}
+              </span>
+              <p className="text-sm text-[var(--color-text-muted)] leading-relaxed">
+                {t(s.desc, lang)}
+              </p>
+            </Card>
           ))}
         </div>
-      </div>
-
-      <div style={{ borderTop: `1px solid ${C.bd}` }} />
-
-      {/* ── Founders ── */}
-      <div style={{ maxWidth: MAX_W, margin: "0 auto", padding: "80px 32px" }}>
-        <div style={{ textAlign: "center", marginBottom: 48 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 3, color: C.ac2, textTransform: "uppercase", marginBottom: 14 }}>{t(h.foundersLabel, lang)}</div>
-          <h2 style={{ fontSize: "clamp(24px, 3vw, 32px)", fontWeight: 800, margin: "0 0 18px", letterSpacing: -0.5 }}>{t(h.foundersTitle, lang)}</h2>
-          <p style={{ fontSize: 15, color: C.t2, maxWidth: 640, margin: "0 auto", lineHeight: 1.65 }}>{t(h.foundersSub, lang)}</p>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 20, maxWidth: 880, margin: "0 auto" }}>
-          {h.founders.map((f) => (
-            <div key={f.initial} style={{ background: C.s1, border: `1px solid ${C.bd}`, borderRadius: 14, padding: 28, display: "flex", gap: 18, alignItems: "flex-start" }}>
-              <div style={{
-                flexShrink: 0,
-                width: 56, height: 56, borderRadius: "50%",
-                background: `linear-gradient(135deg, ${C.ac}, ${C.ac2})`,
-                color: "#fff", fontSize: 22, fontWeight: 700,
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}>
-                {f.initial}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
-                  <div style={{ fontSize: 17, fontWeight: 700 }}>{t(f.name, lang)}</div>
-                  <div style={{ fontSize: 12, color: C.ac, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase" }}>{t(f.role, lang)}</div>
-                </div>
-                <ul style={{ fontSize: 14, color: C.t2, lineHeight: 1.6, margin: 0, paddingLeft: 18 }}>
-                  {(f.bio[lang] as readonly string[]).map((point, idx) => (
-                    <li key={idx} style={{ marginBottom: 4 }}>{point}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      </Section>
 
       {/* ── Final CTA ── */}
-      <div style={{ borderTop: `1px solid ${C.bd}` }} />
-      <div style={{ maxWidth: MAX_W, margin: "0 auto", padding: "80px 32px", textAlign: "center" }}>
-        <h2 style={{ fontSize: "clamp(26px, 3.2vw, 34px)", fontWeight: 800, margin: "0 0 18px", letterSpacing: -0.5 }}>{t(h.finalTitle, lang)}</h2>
-        <p style={{ fontSize: 16, color: C.t2, marginBottom: 32 }}>{t(h.finalSub, lang)}</p>
-        <button onClick={() => navigate(isLoggedIn ? "/ci" : "/onboarding")} style={{ padding: "16px 40px", background: `linear-gradient(135deg, ${C.ac}, ${C.ac2})`, border: "none", borderRadius: 8, color: "#fff", fontWeight: 700, fontSize: 16, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
-          {t(isLoggedIn ? h.ctaContinue : h.finalCta, lang).replace(/\s*→\s*$/, "")}
-          <ArrowRight size={17} strokeWidth={2.5} />
-        </button>
-      </div>
+      <Section scheme="inverse" size="lg" hairlineGrid>
+        <div className="flex flex-col items-start gap-6 max-w-2xl">
+          <Heading as={2} size="section">
+            {t(h.finalTitle, lang)}
+          </Heading>
+          <p
+            className="text-base text-[var(--fg-muted)]"
+            style={{ fontFamily: "var(--font-mono)" }}
+          >
+            // {t(h.finalSub, lang)}
+          </p>
+          <Button variant="accent" size="lg" onClick={() => navigate(primaryHref)}>
+            {t(isLoggedIn ? h.ctaContinue : h.finalCta, lang)}
+          </Button>
+        </div>
+      </Section>
 
       {/* ── Footer ── */}
-      <div style={{ borderTop: `1px solid ${C.bd}`, padding: "28px", textAlign: "center" }}>
-        <p style={{ fontSize: 13, color: C.t3, margin: 0 }}>{t(h.footer, lang)}</p>
-      </div>
+      <Section scheme="canvas" size="sm">
+        <div
+          className="border-t border-[var(--color-border-hairline)] pt-8 text-sm text-[var(--color-text-subtle)]"
+          style={{ fontFamily: "var(--font-mono)" }}
+        >
+          {t(h.footer, lang)}
+        </div>
+      </Section>
     </div>
   );
 }

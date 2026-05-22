@@ -4,6 +4,7 @@ import { Routes, Route, Link, useNavigate, useLocation } from "react-router-dom"
 import { Sun, Moon } from "lucide-react";
 
 import { AppProvider, useApp } from "./context/AppContext";
+import { BrandChip } from "@/components/ui/BrandChip";
 import { getWorkspace } from "./services/ciApi";
 import { useCIAlertCount } from "./hooks/useCIAlertCount";
 import { T, t } from "./i18n";
@@ -16,12 +17,14 @@ import AgentMonitor from "./pages/AgentMonitor";
 import CostDashboard from "./pages/CostDashboard";
 import XhsWarroom from "./pages/XhsWarroom";
 import MarketIntelligence from "./pages/MarketIntelligence";
-import Onboarding from "./pages/Onboarding";
+// /onboarding (legacy anonymous lead form) is retired — replaced by /signup wizard.
+// We keep the route but redirect it so old emails / shared links keep working.
+import { Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import Admin from "./pages/Admin";
 import Success from "./pages/Success";
 import ProtectedRoute from "./components/ProtectedRoute";
-import Signup from "./pages/Signup";
+import SignupWizard from "./pages/signup/SignupWizard";
 // CI vFinal — Brief-centric redesign.
 // /ci now lands on the Brief (weekly action kit). Library is new. Dashboard,
 // Intelligence, Landscape, DeepDive are retired — their content is folded
@@ -39,22 +42,27 @@ import { CIErrorBoundary } from "./components/ci/CIErrorBoundary";
 const Calculator = lazy(() => import("./pages/Calculator"));
 
 // Pages where nav is hidden (full-screen standalone pages)
-const HIDE_NAV_ON = ["/login", "/onboarding", "/signup"];
+const HIDE_NAV_ON = ["/", "/login", "/onboarding", "/signup", "/design-system"];
+
+const DesignSystem = lazy(() => import("./pages/DesignSystem"));
 
 function NavLink({ to, label, highlight }: { to: string; label: string; highlight?: boolean }) {
-  const { colors: C } = useApp();
   const location = useLocation();
   const active = location.pathname === to || (to !== "/" && location.pathname.startsWith(to + "/"));
   return (
     <Link to={to} style={{
-      textDecoration: "none", fontSize: 14,
+      textDecoration: "none", fontSize: 13,
+      fontFamily: "var(--font-mono)",
       fontWeight: active ? 600 : 400,
-      color: highlight ? C.ac : active ? C.tx : C.t2,
+      color: active ? "var(--color-text-primary)" : "var(--color-text-muted)",
       padding: "6px 2px",
-      borderBottom: active ? `2px solid ${C.ac}` : "2px solid transparent",
+      borderBottom: active
+        ? "2px solid var(--color-accent)"
+        : "2px solid transparent",
       whiteSpace: "nowrap" as CSSProperties["whiteSpace"],
+      ...(highlight ? { color: "var(--color-text-primary)", fontWeight: 600 } : {}),
     }}>
-      {label}
+      {label.toLowerCase()}
     </Link>
   );
 }
@@ -75,6 +83,7 @@ function Nav() {
 
   // CI workspace ID — fetched lazily for alert badge
   const [ciWorkspaceId, setCiWorkspaceId] = useState<string | null>(null);
+  const [brand, setBrand] = useState<{ name: string; category?: string | null } | null>(null);
   const alertCount = useCIAlertCount(ciWorkspaceId);
 
   // CI dot indicator: show when user hasn't visited /ci yet, or there's newer CI data
@@ -98,10 +107,14 @@ function Nav() {
     setIsLoggedIn(loggedIn);
     setIsAdmin(checkIsAdmin());
 
-    // Fetch CI workspace ID (for alert badge) once when logged in
+    // Fetch CI workspace ID (for alert badge) + brand info (for nav chip)
+    // once when logged in. Same single call powers both.
     if (loggedIn && !ciWorkspaceId) {
       getWorkspace().then(ws => {
         if (ws.data?.id) setCiWorkspaceId(ws.data.id);
+        if (ws.data?.brand_name) {
+          setBrand({ name: ws.data.brand_name, category: ws.data.brand_category });
+        }
       }).catch(() => {});
     }
 
@@ -129,29 +142,36 @@ function Nav() {
   function handleLogout() {
     localStorage.removeItem("rebase_token");
     localStorage.removeItem("admin_authed");
+    sessionStorage.removeItem("rebase_onboarded");
     setIsLoggedIn(false);
     setIsAdmin(false);
     navigate("/");
   }
 
   const btnStyle: CSSProperties = {
-    background: C.s2, border: `1px solid ${C.bd}`, borderRadius: 6,
-    padding: "5px 11px", cursor: "pointer", color: C.t2,
-    fontSize: 12, fontWeight: 600,
+    background: "transparent", border: "1px solid var(--color-border-hairline)",
+    borderRadius: 2, padding: "5px 11px", cursor: "pointer",
+    color: "var(--color-text-muted)", fontSize: 12, fontWeight: 500,
+    fontFamily: "var(--font-mono)",
   };
 
   return (
     <nav style={{
       display: "flex", alignItems: "center", padding: "0 24px", height: 56,
-      background: C.navBg, borderBottom: `1px solid ${C.navBd}`,
-      fontFamily: "system-ui, sans-serif", position: "sticky", top: 0, zIndex: 100,
+      background: "var(--color-canvas)",
+      borderBottom: "1px solid var(--color-border-hairline)",
+      fontFamily: "var(--font-mono)", position: "sticky", top: 0, zIndex: 100,
     }}>
       {/* Spinner keyframes — used by the language toggle's loading indicator. */}
       <style>{`@keyframes rebase-spin { to { transform: rotate(360deg); } }`}</style>
 
       {/* Logo */}
-      <Link to="/" style={{ textDecoration: "none", fontSize: 18, fontWeight: 800, color: C.ac, marginRight: 28, letterSpacing: -0.5, flexShrink: 0 }}>
-        Rebase
+      <Link to="/" style={{
+        textDecoration: "none", fontSize: 16, fontWeight: 700,
+        color: "var(--color-text-primary)", marginRight: 28,
+        fontFamily: "var(--font-mono)", flexShrink: 0,
+      }}>
+        rebase
       </Link>
 
       {/* Left nav links — slimmed 2026-05-04. The platform now centers on
@@ -163,7 +183,7 @@ function Nav() {
           re-add them later if needed. */}
       <div style={{ display: "flex", gap: 22, alignItems: "center", overflow: "hidden" }}>
         {!isLoggedIn && (
-          <NavLink to="/onboarding" label={t(nav.requestAccess, lang)} highlight />
+          <NavLink to="/signup" label={t(nav.requestAccess, lang)} highlight />
         )}
 
         {isLoggedIn && (
@@ -206,6 +226,12 @@ function Nav() {
 
       {/* Right controls */}
       <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+        {/* Brand chip — visible when logged in, surfaces current workspace */}
+        {isLoggedIn && brand && (
+          <Link to="/ci/settings" style={{ textDecoration: "none" }}>
+            <BrandChip name={brand.name} category={brand.category || undefined} />
+          </Link>
+        )}
 
         {/* Theme toggle */}
         <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} style={{ ...btnStyle, display: "inline-flex", alignItems: "center", gap: 6 }} title="Toggle theme">
@@ -244,15 +270,16 @@ function Nav() {
 
         {/* Login / Logout */}
         {isLoggedIn ? (
-          <button onClick={handleLogout} style={{ ...btnStyle, color: C.t2 }}>
-            {t(nav.logout, lang)}
+          <button onClick={handleLogout} style={btnStyle}>
+            {t(nav.logout, lang).toLowerCase()}
           </button>
         ) : (
           <Link to="/login" style={{
-            background: C.ac, borderRadius: 6, padding: "6px 14px",
-            color: "#000", fontSize: 13, fontWeight: 700, textDecoration: "none",
+            background: "var(--color-accent)", borderRadius: 2, padding: "7px 16px",
+            color: "var(--color-neutral-900)", fontSize: 13, fontWeight: 600,
+            fontFamily: "var(--font-mono)", textDecoration: "none",
           }}>
-            {t(nav.login, lang)}
+            {t(nav.login, lang).toLowerCase()}
           </Link>
         )}
       </div>
@@ -297,20 +324,26 @@ function LangSwitchingToast() {
 
 function AppRoutes() {
   const { colors: C } = useApp();
+  const location = useLocation();
+  // Standalone full-screen pages own their own background (new design system).
+  // Everything else keeps the legacy themed wrapper until P2 migrates them.
+  const standalone = HIDE_NAV_ON.includes(location.pathname);
   return (
-    <div style={{ background: C.bg, minHeight: "100vh" }}>
+    <div style={{ background: standalone ? "var(--color-canvas)" : C.bg, minHeight: "100vh" }}>
       <Nav />
       <LangSwitchingToast />
       <Routes>
         {/* Public */}
         <Route path="/" element={<Home />} />
         <Route path="/contact" element={<Contact />} />
-        <Route path="/onboarding" element={<Onboarding />} />
+        {/* Legacy lead-form retired — redirect to the self-serve signup wizard */}
+        <Route path="/onboarding" element={<Navigate to="/signup" replace />} />
         <Route path="/success" element={<Success />} />
         <Route path="/login" element={<Login />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/demo" element={<DiagnosticDashboard />} />
         <Route path="/calculator" element={<Suspense fallback={<div style={{ padding: 40, textAlign: "center" }}>加载中...</div>}><Calculator /></Suspense>} />
+        <Route path="/design-system" element={<Suspense fallback={<div style={{ padding: 40, textAlign: "center" }}>Loading…</div>}><DesignSystem /></Suspense>} />
         <Route path="/workflows" element={<ProtectedRoute><WorkflowScout /></ProtectedRoute>} />
 
         {/* Protected — require invite code */}
@@ -319,8 +352,8 @@ function AppRoutes() {
         <Route path="/agents/market-intelligence" element={<ProtectedRoute><MarketIntelligence /></ProtectedRoute>} />
         <Route path="/costs" element={<ProtectedRoute><CostDashboard /></ProtectedRoute>} />
 
-        {/* Self-serve signup (public — customer applies for access) */}
-        <Route path="/signup" element={<Signup />} />
+        {/* Self-serve signup wizard — multi-step, gates the dashboard */}
+        <Route path="/signup" element={<SignupWizard />} />
 
         {/* CI vFinal — Brief-centric routes.
             Deleted: /ci/intelligence, /ci/landscape, /ci/competitors/:brandName (DeepDive).

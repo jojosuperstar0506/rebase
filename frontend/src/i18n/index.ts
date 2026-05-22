@@ -134,7 +134,7 @@ export const T = {
     yourIntelReady: { en: "Your competitive intelligence is being set up", zh: "您的竞品情报正在配置中" },
     onboardingCIHint: { en: "We're analyzing your competitors. View your dashboard to see initial insights.", zh: "我们正在分析您的竞品。查看仪表盘以获取初步洞察。" },
     viewDashboard: { en: "View CI Dashboard", zh: "查看竞品情报" },
-    welcomeBanner: { en: "Welcome to Competitive Intelligence! Your competitors are plotted on the bubble chart below by threat and momentum. Check the Market Landscape tab for a full category view, or visit Settings to add more competitors.", zh: "欢迎使用竞品情报！您的竞品已按威胁指数和增长势能绘制在下方气泡图中。前往「市场全景」查看全品类视图，或在「设置」中添加更多竞品。" },
+    welcomeBanner: { en: "Welcome to Competitive Intelligence. Your competitors are plotted by threat and momentum. Check the Analytics tab for a full category view, or visit Settings to add more competitors.", zh: "欢迎使用竞品情报。您的竞品已按威胁指数和增长势能绘制。前往「分析」查看全品类视图，或在「设置」中添加更多竞品。" },
     gotIt: { en: "Got it", zh: "知道了" },
     newUpdates: { en: "New updates available", zh: "有新的更新" },
     tryNew: { en: "Try our new Competitive Intelligence tool", zh: "试试全新的竞品情报工具" },
@@ -273,15 +273,12 @@ export const T = {
       en: "Rebase tracks your competitors across XHS, Douyin, and Tmall, scores them on 12 GTM indices, and delivers a weekly Brief with three quantified moves your team can execute by Friday. The work brand-strategy consultants charge $500K for — productized as software.",
       zh: "Rebase 追踪小红书、抖音、天猫上的竞品动态，用 12 项 GTM 指标打分，每周输出一份带三条量化动作的简报——您的团队本周即可执行。咨询公司收费 50 万美金的工作，软件化交付。",
     },
-    ctaAccess: { en: "Request Access →", zh: "申请使用 →" },
-    ctaContinue: { en: "Continue to Workspace →", zh: "进入工作台 →" },
-    ctaDiag: { en: "Run AI Diagnostic", zh: "运行 AI 诊断" },
-    earlyAccess: {
-      en: "Built by ex-McKinsey + ex-Deloitte operators · In private beta with select consumer brands",
-      zh: "由前麦肯锡、前德勤运营人构建 · 与精选消费品牌私域内测中",
-    },
-    whatWeDoLabel: { en: "What You Get", zh: "您将获得什么" },
-    whatWeDoTitle: { en: "From data to shipped work — one stack.", zh: "从数据到成品——一站式。" },
+    ctaAccess: { en: "Start free →", zh: "免费开始 →" },
+    ctaContinue: { en: "Continue to Dashboard →", zh: "进入工作台 →" },
+    ctaDiag: { en: "Run AI Diagnostic", zh: "运行AI诊断" },
+    earlyAccess: { en: "Free during beta · No credit card · Set up in 3 minutes", zh: "测试期免费 · 无需信用卡 · 3分钟完成配置" },
+    whatWeDoLabel: { en: "What We Do", zh: "我们做什么" },
+    whatWeDoTitle: { en: "Four AI agents. One workspace.", zh: "四大智能体，一个工作台。" },
     whatWeDoSub: {
       en: "Rebase replaces three line items in your budget: your CI subscription, your strategy consultants, and your one-off agency contracts. The output is the playbook plus the work — not a dashboard.",
       zh: "Rebase 取代您预算中的三项支出：竞品分析订阅、战略咨询、单次代理项目。我们交付策略加上完成品——不只是仪表盘。",
@@ -328,88 +325,29 @@ export const T = {
     },
     diagCta: { en: "Run Free Diagnostic →", zh: "立即运行免费诊断 →" },
     diagNote: { en: "No account needed", zh: "无需注册账号" },
-    howLabel: { en: "Onboarding", zh: "如何开始" },
-    howTitle: { en: "From signup to seeded workspace in 24 hours.", zh: "从注册到工作台就绪，24 小时内完成。" },
+    howLabel: { en: "How It Works", zh: "如何使用" },
+    howTitle: { en: "Sign up to first brief in 3 minutes", zh: "从注册到首份简报，仅需3分钟" },
     steps: [
       {
         step: "01",
-        title: { en: "Tell us your brand", zh: "告诉我们您的品牌" },
-        desc: {
-          en: "2-minute form: your brand profile, category, top competitors, and what you want Rebase to focus on.",
-          zh: "2 分钟表单：您的品牌档案、品类、主要竞品，以及您希望 Rebase 重点关注的方向。",
-        },
+        title: { en: "Create your account", zh: "创建账户" },
+        desc: { en: "Email, password, brand name. No invite code, no waiting for approval.", zh: "邮箱、密码、品牌名称。无需邀请码，无需等待审核。" },
       },
       {
         step: "02",
-        title: { en: "We build your competitor set", zh: "我们构建您的竞品集" },
-        desc: {
-          en: "Within ~24 hours: 6+ competitors auto-onboarded, scored across all 12 GTM indices, weekly Brief generated.",
-          zh: "约 24 小时内：6 个以上竞品自动配置，按 12 项 GTM 指标打分完毕，首份每周简报生成。",
-        },
+        title: { en: "Set up your brand", zh: "配置您的品牌" },
+        desc: { en: "Pick your category, price tier, and the 3-12 competitors you want to track.", zh: "选择您的品类、价格区间，以及您想追踪的3-12个竞品。" },
       },
       {
         step: "03",
-        title: { en: "Ship the moves", zh: "执行动作" },
-        desc: {
-          en: "Brief lands in your workspace every Monday. Edit, dismiss, regenerate — or click straight through to the content drafts and ship.",
-          zh: "每周一简报送达工作台。编辑、撤回、重新生成——或直接点进内容草稿并发布。",
-        },
+        title: { en: "Get your first brief", zh: "获取首份简报" },
+        desc: { en: "Land straight in your dashboard. Your first competitive brief generates automatically.", zh: "直接进入工作台，首份竞品简报自动生成。" },
       },
     ],
-    foundersLabel: { en: "Built By", zh: "团队" },
-    foundersTitle: {
-      en: "Operators productizing the playbook we've sold for a decade.",
-      zh: "运营人在产品化我们做了十年的咨询工作。",
-    },
-    foundersSub: {
-      en: "Rebase isn't a tool we hope brand operators will find useful. It's the process we ran for our own clients — automated.",
-      zh: "Rebase 不是我们希望品牌运营人会觉得有用的工具——它就是我们为自己的客户跑过的流程，已自动化。",
-    },
-    founders: [
-      {
-        initial: "J",
-        name: { en: "Joanna", zh: "Joanna" },
-        role: { en: "CEO", zh: "首席执行官" },
-        bio: {
-          en: [
-            "Ex-McKinsey consultant",
-            "Brand operator — ran competitive teardowns and GTM playbooks for consumer companies",
-            "Owns product, design, and customer-facing operations at Rebase",
-          ],
-          zh: [
-            "前麦肯锡咨询顾问",
-            "品牌运营人——为消费品公司主持竞品拆解与 GTM 策略",
-            "在 Rebase 负责产品、设计与客户运营",
-          ],
-        },
-      },
-      {
-        initial: "W",
-        name: { en: "William", zh: "William" },
-        role: { en: "CTO", zh: "首席技术官" },
-        bio: {
-          en: [
-            "Ex-Deloitte M&A consumer practice",
-            "Founding member of Deloitte's M&A Consumer Data Analytics team — grew from $1M to $10M+ ARR in four years with a ~10-person team",
-            "Served PE clients on consumer GTM diligence and post-merger integration",
-            "Owns engineering, infrastructure, and the data pipeline at Rebase",
-          ],
-          zh: [
-            "前德勤并购消费业务",
-            "德勤并购消费数据分析团队创始成员——4 年带领约 10 人团队，将业务从 100 万美金做到 1000 万美金以上 ARR",
-            "服务 PE 客户进行消费品 GTM 尽调与并购后整合",
-            "在 Rebase 负责工程、基础设施与数据管道",
-          ],
-        },
-      },
-    ],
-    finalTitle: { en: "See your competitive position. Get a playbook by Friday.", zh: "查看您的竞争位置。本周拿到行动手册。" },
-    finalSub: { en: "Private beta. We onboard each brand personally.", zh: "私域内测中。每个品牌由我们亲自配置。" },
-    finalCta: { en: "Request Access →", zh: "申请使用 →" },
-    footer: {
-      en: "© 2026 Rebase · AI-Native Agency for Consumer Brand GTM · Built by Will & Joanna",
-      zh: "© 2026 Rebase · AI 原生消费品牌增长代理 · Will & Joanna 创建",
-    },
+    finalTitle: { en: "Ready to see what AI can do for your business?", zh: "准备好探索AI能为您的业务做什么了吗？" },
+    finalSub: { en: "Free during beta. Set up your workspace in 3 minutes.", zh: "测试期免费，3分钟完成工作台配置。" },
+    finalCta: { en: "Start free →", zh: "免费开始 →" },
+    footer: { en: "© 2026 Rebase · AI Intelligence for Chinese SMBs · Built by Will & Joanna", zh: "© 2026 Rebase · 专为中国中小企业的AI智能平台 · Will & Joanna 创建" },
   },
 
   // ── Success ─────────────────────────────────────────────────────
