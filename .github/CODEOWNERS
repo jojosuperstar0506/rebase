@@ -1,0 +1,37 @@
+# CODEOWNERS — auto-requests the right reviewer when a PR touches an area.
+#
+# Syntax: <path>  <owner(s)>. The LAST matching rule wins.
+# Human-readable version lives in CLAUDE.md → "Where things live".
+#
+# Joanna  = @jojosuperstar0506   (product, frontend, OMI agents)
+# William = @Chiangwill1209      (backend, gateway, diagnostics, infra)
+
+# Default — anything not matched below pings both founders
+*                             @jojosuperstar0506 @Chiangwill1209
+
+# ── Frontend — Joanna ───────────────────────────────────────────────
+/frontend/                    @jojosuperstar0506
+
+# ── Joanna's agents & pipelines ─────────────────────────────────────
+/services/competitor_intel/   @jojosuperstar0506
+/services/product-agent/      @jojosuperstar0506
+
+# ── Backend, gateway, serverless API — William ──────────────────────
+/api/                         @Chiangwill1209
+/backend/                     @Chiangwill1209
+/gateway/                     @Chiangwill1209
+
+# ── William's services & infra ──────────────────────────────────────
+/services/diagnostics/        @Chiangwill1209
+/services/agent-executor/     @Chiangwill1209
+/services/multi-agent/        @Chiangwill1209
+/services/workflow-engine/    @Chiangwill1209
+/services/cost-engine/        @Chiangwill1209
+/infra/                       @Chiangwill1209
+
+# ── Shared — both founders review ───────────────────────────────────
+/docs/                        @jojosuperstar0506 @Chiangwill1209
+/shared/                      @jojosuperstar0506 @Chiangwill1209
+/ROADMAP.md                   @jojosuperstar0506 @Chiangwill1209
+/README.md                    @jojosuperstar0506 @Chiangwill1209
+/CLAUDE.md                    @jojosuperstar0506 @Chiangwill1209
