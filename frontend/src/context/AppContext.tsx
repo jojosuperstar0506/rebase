@@ -55,11 +55,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }, 1500);
   }
 
-  // Apply body background so there's no white flash
+  // Apply body background so there's no white flash, and toggle the `.dark`
+  // class on <html> — that's what flips the design-system --color-* tokens
+  // (see the .dark block in index.css). The legacy C.* colorset switches via
+  // `colors` above; this keeps the token-based pages in sync.
   useEffect(() => {
     document.body.style.background = colors.bg;
     document.body.style.color = colors.tx;
-  }, [colors]);
+    document.documentElement.classList.toggle("dark", theme === "dark");
+  }, [colors, theme]);
 
   // Clean up the langSwitching timer on unmount.
   useEffect(() => {

@@ -120,6 +120,39 @@
   --accent: var(--color-accent-deep);
 }
 
+/* ─── Dark mode ─────────────────────────────────────────────────────────
+   Hex-style dark variant. The `.dark` class is toggled on <html> by
+   AppContext when theme === 'dark'. Overriding the base --color-* tokens
+   re-skins everything that reads them — including the canvas scheme,
+   which is defined purely in terms of those tokens. The accent and
+   neutral ramp are NOT flipped: lime stays lime (it works on dark), and
+   neutral-900 stays dark so the lime accent button keeps dark text. */
+.dark {
+  --color-canvas: #14141c;
+  --color-raised: #1f1d27;
+  --color-sunken: #252128;
+  --color-inverse: #0d090a;
+  --color-text-primary: #f5f1f2;
+  --color-text-muted: #968d90;
+  --color-text-subtle: #6b6266;
+  --color-border-hairline: #2b252c;
+  --color-border-strong: #f5f1f2;
+  --color-accent-soft: #1f2e09;
+  color-scheme: dark;
+}
+
+/* Accent scheme hardcodes light lime values — override for dark so the
+   band reads as a deep lime tint, not a bright slab. canvas + inverse
+   schemes follow the --color-* overrides above automatically. */
+.dark [data-scheme="accent"] {
+  --bg: #1c2b06;
+  --bg-raised: #243609;
+  --fg: var(--color-text-primary);
+  --fg-muted: var(--color-text-muted);
+  --border: #3a4f10;
+  --accent: var(--color-accent);
+}
+
 /* ─── Base styles ──────────────────────────────────────────────────────── */
 
 @layer base {
