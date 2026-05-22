@@ -1,5 +1,73 @@
 # Rebase Platform — Development Guidelines
 
+> The shared rulebook for everyone working in this repo — Joanna, William,
+> and every Claude Code session. Read this first. When conventions change,
+> update this file in the same PR.
+
+## Collaboration Rules
+
+### `main` is production
+`main` auto-deploys to Vercel. A push to `main` IS a production deploy.
+- **Never commit directly to `main`.** Every change goes through a branch + PR.
+- This holds even for one-line fixes, and even when working solo.
+- Self-merge is fine once the Vercel preview check is green — the PR is for
+  the preview URL and the permanent record, not for gatekeeping.
+
+### Branches
+- Name them `<owner>/<area>-<short-desc>` — e.g. `joanna/frontend-login-redesign`,
+  `will/backend-erp-connector`, `claude/agent-scoring-fix`.
+- One branch = one logical change. Keep branches short-lived.
+- Delete the branch after merge. Don't let branches pile up.
+
+### Pull Requests
+- Fill in the PR template: What changed / Why / How to test / Areas touched.
+- Link the issue it closes: `Fixes #123` (auto-closes the issue on merge).
+- The PR description is the changelog — write it for the other founder.
+
+### Where things live — update the RIGHT place
+| Path | What | Primary owner |
+|------|------|---------------|
+| `frontend/` | React + Vite SPA | Joanna |
+| `api/` | Vercel serverless functions — **the deployed ones** | William |
+| `backend/` | Node/Express API on ECS | William |
+| `gateway/` | FastAPI gateway | William |
+| `services/competitor_intel/` | OMI competitive-intel pipeline | Joanna |
+| `services/diagnostics/` | Intake + analysis + report | William |
+| `services/{agent-executor,multi-agent,workflow-engine,cost-engine,product-agent}/` | Python services | see CODEOWNERS |
+| `backend/migrations/` | Postgres schema — numbered SQL only | William |
+| `docs/`, `ROADMAP.md`, `README.md` | Shared docs | Both |
+
+- `.github/CODEOWNERS` auto-requests the right reviewer when you touch an
+  area. Trust it — if it pings the other founder, that area isn't yours.
+- There is exactly ONE deployed `api/` — the repo-root one. Do not add a
+  second copy elsewhere.
+
+### API changes
+- Changing a request/response shape = update the contract in the SAME PR.
+- Frontend ↔ backend request/response types live in `shared/`. Keep both
+  sides in sync; never let one drift.
+
+### Database
+- Schema changes ONLY via a new numbered migration in `backend/migrations/`.
+- Never edit a migration that has already been applied — always add a new
+  number.
+
+### Documentation — what lives where
+- **GitHub Issues** — the live task list. What to do next. Labelled by
+  `area:` and `owner:`. (This replaces the old `TODO.md`.)
+- **`ROADMAP.md`** — strategy. Quarter-level what & why. Not task-level.
+- **PR descriptions** — the changelog. Every merge documents itself.
+- **`CLAUDE.md`** (this file) — the rules. Update when conventions change.
+
+### Definition of done — PR checklist
+- [ ] Branched off latest `main`, named `<owner>/<area>-<desc>`
+- [ ] PR template filled in; linked issue (`Fixes #…`)
+- [ ] Build / tests pass; Vercel preview checked
+- [ ] Docs updated if behavior, API shape, or DB schema changed
+- [ ] Branch deleted after merge
+
+---
+
 ## Environment Variables — NEVER Hardcode
 
 All external service URLs, API keys, and region-specific config MUST come from environment variables (`.env` file), never hardcoded in source code.
@@ -19,9 +87,12 @@ This ensures we can switch from Alibaba Cloud Hong Kong to Guangzhou (or any oth
 
 ## Quick Reference
 
+- **GitHub Issues** — the live task board. What we're working on now.
+- **`.github/CODEOWNERS`** — who owns which directory; drives PR review routing.
+- **`CLAUDE.md`** — this file. The shared rulebook (humans + AI sessions).
 - **`.env.example`** — template with all variable names and comments. Copy to `.env` for local dev.
 - **`.env`** — your actual secrets. NEVER commit this (it's in `.gitignore`).
-- **`ROADMAP.md`** — single source of truth for sprint plans, task ownership, and cloud strategy.
+- **`ROADMAP.md`** — strategy: 5-layer product plan, sprints, cloud strategy. Not task-level tracking.
 - **`README.md`** — project overview, team roles, tech stack, quick start.
 
 ## Document Consistency
