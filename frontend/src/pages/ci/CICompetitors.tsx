@@ -585,8 +585,9 @@ export default function CICompetitors() {
     border: `1px solid ${C.bd}`,
     color: C.t2,
     padding: isMobile ? '8px 12px' : '6px 14px',
-    borderRadius: 6,
+    borderRadius: 2,
     fontSize: 12,
+    fontFamily: 'var(--font-mono)',
     cursor: 'pointer',
     minHeight: isMobile ? 44 : 32,
     display: 'flex',
@@ -596,27 +597,33 @@ export default function CICompetitors() {
   };
 
   const btnBase = (active: boolean): React.CSSProperties => ({
-    padding: '6px 14px', borderRadius: 8,
-    border: `1px solid ${active ? C.ac : C.bd}`,
-    background: active ? C.ac + '22' : 'transparent',
-    color: active ? C.ac : C.t2,
+    padding: '6px 14px', borderRadius: 2,
+    border: `1px solid ${active ? C.tx : C.bd}`,
+    background: active ? C.tx : 'transparent',
+    color: active ? C.bg : C.t2,
     cursor: 'pointer', fontSize: 13,
+    fontFamily: 'var(--font-mono)',
     fontWeight: active ? 600 : 400,
   });
 
   // Empty state
   if (rawCompetitors.length === 0) {
     return (
-      <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: isMobile ? '16px 12px' : '32px 24px', fontFamily: 'system-ui, sans-serif' }}>
+      <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: isMobile ? '16px 12px' : '32px 24px', fontFamily: 'var(--font-sans)' }}>
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
           <CISubNav />
-          <h1 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, marginBottom: 8, marginTop: 0 }}>{t(T.ci.competitors, lang)}</h1>
-          <div style={{ textAlign: 'center', padding: '80px 24px' }}>
-            <ClipboardList size={48} strokeWidth={1.5} color={C.t2} style={{ marginBottom: 16 }} />
-            <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>{t(T.ci.noCompetitorsYet, lang)}</h2>
-            <p style={{ color: C.t2, marginBottom: 24 }}>{t(T.ci.addInSettings, lang)}</p>
-            <Link to="/ci/settings" style={{ background: C.ac, color: '#fff', padding: '10px 24px', borderRadius: 8, textDecoration: 'none', fontWeight: 600 }}>
-              {t(T.ci.goToSettings, lang)}
+          <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'flex-start' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.t3 }}>
+              {lang === 'zh' ? '// 品牌 · 竞品追踪' : '// brands · competitor watchlist'}
+            </span>
+            <h1 style={{ fontSize: isMobile ? 26 : 38, fontWeight: 700, margin: 0, fontFamily: 'var(--font-display)', letterSpacing: -0.5 }}>
+              {t(T.ci.noCompetitorsYet, lang)}
+            </h1>
+            <p style={{ color: C.t2, margin: 0, fontFamily: 'var(--font-mono)', fontSize: 13 }}>
+              // {t(T.ci.addInSettings, lang)}
+            </p>
+            <Link to="/ci/settings" style={{ background: C.ac, color: C.bg, padding: '10px 20px', borderRadius: 2, textDecoration: 'none', fontWeight: 600, fontFamily: 'var(--font-mono)', fontSize: 13 }}>
+              {t(T.ci.goToSettings, lang)} →
             </Link>
           </div>
         </div>
@@ -625,15 +632,18 @@ export default function CICompetitors() {
   }
 
   return (
-    <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: isMobile ? '16px 12px' : '32px 24px', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: isMobile ? '16px 12px' : '32px 24px', fontFamily: 'var(--font-sans)' }}>
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
         <CISubNav />
 
         {/* Page header + view toggle + export */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: isMobile ? 14 : 20, flexWrap: 'wrap', gap: 12 }}>
-          <div>
-            <h1 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, marginBottom: 4, marginTop: 0 }}>{t(T.ci.competitors, lang)}</h1>
-            <span style={{ color: C.t3, fontSize: 13 }}>{filtered.length} {t(T.ci.xCompetitors, lang)}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.t3 }}>
+              {lang === 'zh' ? '// 品牌 · 竞品追踪' : '// brands · competitor watchlist'}
+            </span>
+            <h1 style={{ fontSize: isMobile ? 26 : 36, fontWeight: 700, margin: 0, fontFamily: 'var(--font-display)', letterSpacing: -0.5 }}>{t(T.ci.competitors, lang)}</h1>
+            <span style={{ color: C.t3, fontSize: 13, fontFamily: 'var(--font-mono)' }}>{filtered.length} {t(T.ci.xCompetitors, lang)}</span>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <button onClick={() => setViewMode('cards')} style={{ ...btnBase(viewMode === 'cards'), minHeight: 44 }}>{t(T.ci.cardView, lang)}</button>
