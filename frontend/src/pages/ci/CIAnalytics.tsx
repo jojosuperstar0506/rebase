@@ -138,7 +138,7 @@ export default function CIAnalytics() {
   const pageStyle: CSSProperties = {
     background: C.bg, color: C.tx, minHeight: '100vh',
     padding: isMobile ? '16px 12px' : '32px 24px',
-    fontFamily: 'system-ui, -apple-system, sans-serif',
+    fontFamily: 'var(--font-sans)',
   };
   const container: CSSProperties = { maxWidth: 960, margin: '0 auto' };
   const card: CSSProperties = {
@@ -185,15 +185,17 @@ export default function CIAnalytics() {
       <div style={pageStyle}>
         <div style={container}>
           <CISubNav />
-          <div style={{ ...card, textAlign: 'center', padding: 50, marginTop: 20 }}>
-            <BarChart3 size={32} strokeWidth={1.5} color={C.t2} style={{ marginBottom: 12 }} />
-            <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 8px' }}>
+          <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.t3 }}>
+              {lang === 'zh' ? '// 分析' : '// analytics'}
+            </span>
+            <h1 style={{ fontSize: isMobile ? 26 : 36, fontWeight: 700, margin: 0, letterSpacing: -0.5, fontFamily: 'var(--font-display)' }}>
               {lang === 'zh' ? '暂无分析数据' : 'No analytics yet'}
-            </h3>
-            <p style={{ fontSize: 12, color: C.t3, margin: 0, lineHeight: 1.6 }}>
-              {lang === 'zh'
-                ? '竞品数据抓取并分析完成后，分析报告将显示在这里。'
-                : 'Analytics will appear here after your first data sync and analysis run.'}
+            </h1>
+            <p style={{ fontSize: 13, color: C.t2, margin: 0, lineHeight: 1.6, fontFamily: 'var(--font-mono)' }}>
+              // {lang === 'zh'
+                ? '竞品数据抓取并分析完成后，分析报告将显示在这里'
+                : 'analytics appear here after your first data sync + analysis run'}
             </p>
           </div>
         </div>
@@ -209,14 +211,17 @@ export default function CIAnalytics() {
         <CISubNav />
 
         {/* Header — page title + 1-line orientation */}
-        <header style={{ margin: '20px 0 24px' }}>
-          <h1 style={{ fontSize: isMobile ? 24 : 30, fontWeight: 800, margin: 0, letterSpacing: -0.3 }}>
+        <header style={{ margin: '24px 0 28px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.t3 }}>
+            {lang === 'zh' ? '// 分析 · 竞争位置' : '// analytics · competitive position'}
+          </span>
+          <h1 style={{ fontSize: isMobile ? 26 : 36, fontWeight: 700, margin: 0, letterSpacing: -0.5, fontFamily: 'var(--font-display)' }}>
             {lang === 'zh' ? '分析' : 'Analytics'}
           </h1>
-          <p style={{ color: C.t2, fontSize: 14, margin: '6px 0 0', lineHeight: 1.6 }}>
-            {lang === 'zh'
+          <p style={{ color: C.t2, fontSize: 14, margin: 0, lineHeight: 1.6, fontFamily: 'var(--font-mono)' }}>
+            // {lang === 'zh'
               ? '本周竞争位置 + 各项指数与竞品对比'
-              : "Your competitive position + per-index comparison vs competitors"}
+              : 'your competitive position + per-index comparison vs competitors'}
           </p>
         </header>
 

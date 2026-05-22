@@ -125,7 +125,7 @@ export default function CILibrary() {
   const pageStyle: CSSProperties = {
     background: C.bg, color: C.tx, minHeight: '100vh',
     padding: isMobile ? '16px 12px' : '32px 24px',
-    fontFamily: 'system-ui, -apple-system, sans-serif',
+    fontFamily: 'var(--font-sans)',
   };
   const container: CSSProperties = { maxWidth: 900, margin: '0 auto' };
   const card: CSSProperties = {
@@ -134,11 +134,12 @@ export default function CILibrary() {
   };
 
   const tabBtn = (active: boolean): CSSProperties => ({
-    background: active ? C.ac : 'transparent',
-    color: active ? '#fff' : C.t2,
-    border: `1px solid ${active ? C.ac : C.bd}`,
-    borderRadius: 8, padding: '7px 14px',
+    background: active ? C.tx : 'transparent',
+    color: active ? C.bg : C.t2,
+    border: `1px solid ${active ? C.tx : C.bd}`,
+    borderRadius: 2, padding: '7px 14px',
     fontSize: 13, fontWeight: 600, cursor: 'pointer',
+    fontFamily: 'var(--font-mono)',
   });
 
   if (loading) {
@@ -182,14 +183,17 @@ export default function CILibrary() {
       <div style={container}>
         <CISubNav />
 
-        <header style={{ margin: '20px 0 24px' }}>
-          <h1 style={{ fontSize: isMobile ? 24 : 30, fontWeight: 800, margin: 0, letterSpacing: -0.3 }}>
+        <header style={{ margin: '24px 0 28px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.t3 }}>
+            {lang === 'zh' ? '// 资料库 · 归档' : '// library · archive'}
+          </span>
+          <h1 style={{ fontSize: isMobile ? 26 : 36, fontWeight: 700, margin: 0, letterSpacing: -0.5, fontFamily: 'var(--font-display)' }}>
             {lang === 'zh' ? '资料库' : 'Library'}
           </h1>
-          <p style={{ color: C.t2, fontSize: 14, margin: '6px 0 0' }}>
-            {lang === 'zh'
-              ? '历史简报、已发布内容与产品概念的归档 — 随着使用时间积累价值。'
-              : 'Past briefs, published content, and product concepts — builds value as you keep using Rebase.'}
+          <p style={{ color: C.t2, fontSize: 14, margin: 0, fontFamily: 'var(--font-mono)' }}>
+            // {lang === 'zh'
+              ? '历史简报、已发布内容与产品概念的归档'
+              : 'past briefs, published content + product concepts — builds value over time'}
           </p>
         </header>
 
