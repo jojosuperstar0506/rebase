@@ -18,6 +18,7 @@
 | 2 | Test full user flow end-to-end on live site | B | ❌ | 2026-04-01 | 2026-04-04 | Both go through: calculator → onboarding → login → agent pages. Note anything broken |
 | 3 | Identify 3–5 target SMB contacts to share the platform with | J | ❌ | 2026-04-01 | 2026-04-04 | Real user feedback beats any feature built this week |
 | 4 | **[GAP]** Draft "first client playbook" — what happens after someone applies | B | ❌ | 2026-04-01 | 2026-04-07 | Who calls them? Agenda? What do they receive? Without this a hot lead goes cold |
+| 45 | **[GAP] Make the scrape pipeline solid enough to generate a real Brief** | W | ❌ | 2026-05-22 | TBD | **The #1 product risk.** Onboarding + the whole Brief UI are built, but no real Brief has ever been produced end-to-end — that needs reliable scraping of XHS / Douyin / Tmall for a workspace's competitor set. Open questions: current reliability of `services/competitor_intel/` scrapers, burner-account / login gating, anti-bot handling, rate limits, what breaks at scale. The Brief *UI* is being designed against `ciMocks.ts` (the type contract) so it's unblocked — but the product delivers zero value until a real scrape → score → narrate run works. Needs a dedicated audit + hardening pass, not UIUX. Relates to #29, #30, F9. |
 
 ---
 
