@@ -184,4 +184,32 @@
     background-size: 100% var(--spacing-grid);
     background-position: 0 0;
   }
+
+  /* ─── Accessibility ──────────────────────────────────────────────────
+     App-wide keyboard focus ring. :focus-visible means it only appears
+     for keyboard navigation, never on mouse clicks — so it doesn't add
+     visual noise for pointer users but every interactive element is
+     reachable and clearly indicated for keyboard + screen-reader users.
+     2px lime + a 2px offset keeps the ring readable on light and dark. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-xs);
+  }
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* Respect users who ask the OS to reduce motion — disable the pulse
+     dots, hover lifts, and scroll animations rather than forcing them. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
