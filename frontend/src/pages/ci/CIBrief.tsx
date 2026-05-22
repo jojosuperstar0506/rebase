@@ -784,13 +784,13 @@ export default function CIBrief() {
               }}>
                 {trendIcon(brief.verdict.trend)} {trendLabel(brief.verdict.trend, lang)}
               </span>
-              <span style={{ fontSize: 11, color: C.t3 }}>
-                {lang === 'zh' ? '本周市场地位' : 'Your position this week'}
+              <span style={{ fontSize: 11, color: C.t3, fontFamily: 'var(--font-mono)' }}>
+                {lang === 'zh' ? '// 本周市场地位' : '// your position this week'}
               </span>
             </div>
             <h2 style={{
-              fontSize: isMobile ? 22 : 28, fontWeight: 800, margin: '0 0 10px',
-              lineHeight: 1.25, letterSpacing: -0.4,
+              fontSize: isMobile ? 22 : 30, fontWeight: 700, margin: '0 0 10px',
+              lineHeight: 1.2, letterSpacing: -0.5, fontFamily: 'var(--font-display)',
             }}>
               {brief.verdict.headline}
             </h2>
@@ -966,7 +966,7 @@ export default function CIBrief() {
              through silently if the indices endpoint returns null. */}
         {indices && Object.keys(indices.indices_by_competitor).length > 0 && (
           <section style={{ marginBottom: 40 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 700, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 6px' }}>
+            <h3 style={{ fontSize: 12, fontWeight: 600, color: C.t3, letterSpacing: '0.16em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', margin: '0 0 6px' }}>
               {lang === 'zh' ? '竞争地图' : 'Competitive map'}
             </h3>
             <p style={{ fontSize: 12, color: C.t3, margin: '0 0 14px', lineHeight: 1.55 }}>
@@ -980,7 +980,7 @@ export default function CIBrief() {
 
         {/* ─── SECTION 1b: Three moves ──────────────────────────────── */}
         <section style={{ marginBottom: 40 }}>
-          <h3 style={{ fontSize: 13, fontWeight: 700, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 14px' }}>
+          <h3 style={{ fontSize: 12, fontWeight: 600, color: C.t3, letterSpacing: '0.16em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', margin: '0 0 14px' }}>
             {lang === 'zh' ? '本周3件值得关注的事' : '3 things that moved'}
           </h3>
           {!hasHistory && (
@@ -1088,7 +1088,7 @@ export default function CIBrief() {
         {/* ─── SECTION 2: Content playbook ───────────────────────────── */}
         <section style={{ marginBottom: 40 }}>
           <div style={{ marginBottom: 14 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 700, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', margin: 0 }}>
+            <h3 style={{ fontSize: 12, fontWeight: 600, color: C.t3, letterSpacing: '0.16em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', margin: 0 }}>
               {lang === 'zh' ? '本周内容剧本' : "This week's content"}
             </h3>
             <div style={{ fontSize: 12, color: C.t3, marginTop: 4 }}>
@@ -1229,7 +1229,7 @@ export default function CIBrief() {
         {brief.product_opportunity && oppStatus !== 'dismissed' && (
           <section style={{ marginBottom: 40 }}>
             <div style={{ marginBottom: 14 }}>
-              <h3 style={{ fontSize: 13, fontWeight: 700, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', margin: 0 }}>
+              <h3 style={{ fontSize: 12, fontWeight: 600, color: C.t3, letterSpacing: '0.16em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', margin: 0 }}>
                 {lang === 'zh' ? '产品机会' : 'Product Opportunity'}
               </h3>
               <div style={{ fontSize: 12, color: C.t3, marginTop: 4 }}>
@@ -1333,10 +1333,10 @@ function ProductOpportunityCard({ opp, accepted, onAccept, onDismiss, C, lang, i
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
         <Lightbulb size={26} strokeWidth={1.75} color={C.ac} />
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 11, color: C.t3, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-            {lang === 'zh' ? '产品概念' : 'Product Concept'}
+          <div style={{ fontSize: 11, color: C.t3, letterSpacing: '0.14em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
+            {lang === 'zh' ? '// 产品概念' : '// product concept'}
           </div>
-          <h3 style={{ fontSize: isMobile ? 17 : 20, fontWeight: 700, margin: '2px 0 0' }}>
+          <h3 style={{ fontSize: isMobile ? 17 : 22, fontWeight: 700, margin: '2px 0 0', fontFamily: 'var(--font-display)', letterSpacing: -0.3 }}>
             {opp.concept_name}
           </h3>
         </div>

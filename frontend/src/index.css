@@ -138,11 +138,14 @@
     color: var(--color-text-primary);
   }
 
-  /* Hairline grid utility — 10rem vertical rhythm, applied as a class */
+  /* Hairline grid utility — faint 10rem vertical-rhythm texture.
+     Uses the active section's --border so it stays near-invisible on
+     dark (inverse) sections instead of slicing bright lines through
+     the text. Falls back to the light hairline on un-schemed elements. */
   .grid-hairline {
     background-image: linear-gradient(
       to bottom,
-      var(--color-border-hairline) 1px,
+      var(--border, var(--color-border-hairline)) 1px,
       transparent 1px
     );
     background-size: 100% var(--spacing-grid);
