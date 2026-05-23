@@ -224,3 +224,17 @@ The `huggable_quote` actor is marked **DEPRECATED** on Apify's marketplace (rati
 `natanielsantos/douyin-scraper` (Joanna's pick) has open reliability issues on its Apify page — community reports of "all requests failing" and yields dropping from 500 to 7 items per call. We still adopt it as primary, but `apify_client.py` adds a fallback actor (TBD at A4 time — `kuaima/douyin-search` is a candidate) that the wrapper tries on primary failure. Adds ~30 lines to the wrapper, removes a single-vendor risk.
 
 **Everything else in this strategy is adopted as-is.**
+
+---
+
+## A1 Findings — William, 2026-05-23
+
+Will completed the manual Apify Console test today against `zhorex/rednote-xiaohongshu-scraper` in `search` mode with `searchQuery="Songmont"` and burner cookie. Recorded output: `services/competitor_intel/scrapers/fixtures/apify_xhs_search_2026-05-23.json`. Two material findings worth recording:
+
+**Finding 1: Search mode is structurally thin** — returns only `postId`, `title`, `likes`, `author.{userId,nickname,avatar}`, `type`. The fields `content`, `tags`, `images`, `comments`, `shares`, `saves`, `publishedAt`, `videoUrl` are ALWAYS empty/zero in search mode despite being listed in the actor's documented schema. Documented + asserted via test cases in `test_apify_client.py::test_real_search_mode_does_NOT_populate_rich_fields`.
+
+**Finding 2: `searchQuery` parameter is unreliable for English brand names** — passing `"Songmont"` returned 10 results, none of which were Songmont-related (random feed content from the cookie's algorithmic explore page). Either the actor ignores English queries, XHS doesn't index "Songmont" in English, or the cookie's session takes precedence over query. Did not test Chinese queries — moot given Finding 1 already pushes us off search mode.
+
+**Decision:** Pivot from `mode: "search"` to `mode: "user_posts"` for production scraping. user_posts targets a brand's profile URL directly and (per documentation) returns rich per-post data. Each brand requires a one-time userUrl config — Songmont's URL is the first one Will captured manually from the XHS web UI. The `apify_client.py` wrapper will be updated to call user_posts as the primary path. Search mode remains available in the wrapper for future UGC-monitoring use cases but is not part of the daily scrape pipeline.
+
+**Cost implication of pivot:** user_posts mode pricing (TBD — will verify in A2 manual test) likely similar order of magnitude to search ($5-10 per 1k results). Per-brand cost stays in the $0.10-0.30/run range Joanna's original cost table assumed.
