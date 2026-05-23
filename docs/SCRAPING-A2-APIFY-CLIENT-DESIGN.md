@@ -1,14 +1,15 @@
-# W2 Design — `apify_client.py`
+# A2 Design — `apify_client.py`
 
-> **Status:** Design only — no code until W1 parity gate passes.
+> **Status:** Design only — code lands when A1 (Apify signup + burner XHS + manual Console test) completes.
 > **Tracks:** Issue [#62](https://github.com/jojosuperstar0506/rebase/issues/62) · PR [#81](https://github.com/jojosuperstar0506/rebase/pull/81)
-> **Owner:** Will (cross into Joanna's `services/competitor_intel/` per CODEOWNERS — Joanna reviews)
+> **Strategy doc:** `docs/SCRAPING-STRATEGY.md` (Joanna's plan + William's corrections)
+> **Owner:** William (cross into Joanna's `services/competitor_intel/` per CODEOWNERS — Joanna reviews)
 
 ---
 
 ## Why this doc exists
 
-W1 runs a probe and produces `parity_report.md`. If the gate passes, W2 starts immediately. This doc captures the design decisions for W2 so the moment the gate passes, the only open questions are "did the probe surface anything I didn't expect" — not "where do I start?"
+A1 verifies the actor works in the Apify Console manually. A2 builds the Python wrapper that makes those Console calls automatically as part of our daily pipeline. This doc captures the design decisions for A2 so the moment A1 reports back "actor works," coding starts without re-deriving the file shape.
 
 The integration contract is **the dict shape that `save_brand_profile()` accepts**, not `XhsBrandData`. Source of truth: `scrape_runner.py:_save_result()` lines 73-138. The new `apify_client.py` must produce that exact dict shape so zero changes are needed in the 16 downstream scoring pipelines.
 
@@ -42,12 +43,12 @@ class ApifyScraperClient:
         ...
 
     def scrape_taobao_products(self, brand: dict) -> ScrapeResult:
-        """W5 — not in initial W2 PR. Stub here for the contract."""
-        raise NotImplementedError("W5")
+        """A4 work — separate PR. Stub here for the contract."""
+        raise NotImplementedError("A4")
 
     def scrape_douyin_brand(self, brand: dict) -> ScrapeResult:
-        """W6 — not in initial W2 PR. Stub here for the contract."""
-        raise NotImplementedError("W6")
+        """A4 work — separate PR. Stub here for the contract."""
+        raise NotImplementedError("A4")
 ```
 
 `ScrapeResult` is a small dataclass: `status`, `data_dict`, `notes_list`, `cost_estimate`, `errors`. Keeps the method signatures clean and lets the caller decide whether to save / retry / alert.
@@ -73,7 +74,7 @@ else:
     result = await xhs_scraper.scrape_brand_api(brand)
 ```
 
-Default `false`. Production cron stays on Playwright until W3 (parallel run) shows Apify is at parity with score-drift < 5%.
+Default `false`. Production cron stays on Playwright until **optional A6 (3-day parallel run)** shows Apify is at parity with score-drift < 5%. If A6 is skipped per Will's call, cutover happens after A3 lands and a single-day manual verification.
 
 ---
 
@@ -142,7 +143,7 @@ The dict passed to `save_brand_profile(platform, brand_name, data, scrape_tier)`
 
 ## Apify call sequence
 
-For one brand, two Apify actor runs (validated by W1 probe):
+For one brand, two Apify actor runs (validated manually in Apify Console during A1):
 
 | Order | Mode | Cookie? | What we extract |
 |---|---|---|---|
@@ -154,7 +155,7 @@ Combined output is mapped to the DB dict above. Order matters: search results ma
 **Failure modes:**
 - Search returns empty → entire scrape fails (no posts ≈ no scoring signal)
 - Profile mode fails (cookie expired) → mark partial, set scrape_status="partial", populate what we have. Don't drop the whole scrape.
-- Apify rate-limited → exponential backoff, retry up to 3 times. If still failing, mark connection_expired, alert per W4 runbook.
+- Apify rate-limited → exponential backoff, retry up to 3 times. If still failing, mark connection_expired, alert per A5 runbook.
 
 ---
 
@@ -219,11 +220,11 @@ services/competitor_intel/scrapers/tests/test_apify_mapper.py
     test_image_count_derived_from_images_array
 ```
 
-Recorded fixture from W1 probe output (`apify_probe_search.json` + `apify_probe_profile.json`) used as test input. No live API calls in tests.
+Recorded fixtures saved during A1 manual Console testing — download the JSON from a successful Apify Console run for Songmont (search + profile modes), save as `apify_search_songmont.json` + `apify_profile_songmont.json` under `services/competitor_intel/scrapers/fixtures/`. Tests use these fixtures — no live API calls in tests.
 
 ---
 
-## W2 PR plan
+## A2 PR plan
 
 Tracks #62. Files in the PR:
 
@@ -238,21 +239,21 @@ Tracks #62. Files in the PR:
 | `services/competitor_intel/scraping_rules.yml` | MODIFY — add `apify:` section with actor IDs + budgets |
 | `.env.example` | MODIFY — document USE_APIFY, APIFY_API_TOKEN, XHS_SESSION_COOKIE |
 | `backend/migrations/012_apify_run_log.sql` | NEW — cost tracking table |
-| `docs/SCRAPING-PLAN-2026-05-22.md` | MODIFY — mark W1 done, W2 in progress |
+| `docs/SCRAPING-STRATEGY.md` | MODIFY — mark A1 done, A2 in progress in the corrections section |
 
 Estimated lines: ~600 new, ~30 modified. Reviewable in one sitting.
 
 ---
 
-## Open questions for Will at W2 start
+## Open questions for Will at A2 start
 
-1. **`xhs_scraper.py` left in tree or removed?** Recommend left for W2 (rollback safety), removed in W7 after a clean Apify week. CLAUDE.md says don't create dead code; addressing in W7 closes that loop.
+1. **`xhs_scraper.py` left in tree or removed?** Recommend left for A2 (rollback safety), removed after the parallel-run window passes with clean Apify output. CLAUDE.md says don't create dead code; deferred cleanup acknowledged in commit log.
 2. **Cost log retention.** Forever, or 90-day rolling? Recommend 90-day rolling — aggregated weekly stats stay forever.
 3. **First brand to migrate.** Songmont (the canonical demo workspace) — lowest risk, most observable.
 
 ---
 
-## Definition of done for W2
+## Definition of done for A2
 
 - [ ] `pytest services/competitor_intel/scrapers/tests/` passes
 - [ ] `USE_APIFY=true python -m services.competitor_intel.scrape_runner --platform xhs --brand Songmont` produces a row in `scraped_brand_profiles` identical in shape to the Playwright path's output (manual SQL comparison)
@@ -260,4 +261,4 @@ Estimated lines: ~600 new, ~30 modified. Reviewable in one sitting.
 - [ ] PR description shows side-by-side score comparison (Playwright vs Apify) for at least one brand
 - [ ] Joanna reviews + approves (CODEOWNERS auto-routes since `services/competitor_intel/` is hers)
 
-After W2 merges, W3 (parallel run, 7 days) begins.
+After A2 merges, optional A6 (3-day parallel run) before cron cutover.
