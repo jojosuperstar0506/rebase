@@ -37,6 +37,15 @@ from typing import Any, Callable, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 
+# Import the third-party apify-client SDK at module level so tests can
+# monkey-patch this attribute. Falls back to None if the package isn't
+# installed; ApifyScraperClient.__init__ raises a helpful ImportError then.
+try:
+    from apify_client import ApifyClient as _ApifyClientSdk
+except ImportError:
+    _ApifyClientSdk = None
+
+
 # Apify actor IDs — kept here (not in scraping_rules.yml) because they're
 # tightly coupled to the per-actor mapping code below. If we move to a
 # different XHS actor later, the mapping logic changes too — single source
@@ -46,13 +55,31 @@ TAOBAO_ACTOR_ID = "pizani/taobao-product-scraper"           # A4
 DOUYIN_ACTOR_ID_PRIMARY = "natanielsantos/douyin-scraper"   # A4
 DOUYIN_ACTOR_ID_FALLBACK = None                             # A4 — pick at A4 time
 
-# Markers that indicate the actor returned a login-wall page instead of real
-# data. Source of truth for XHS markers is scraping_rules.yml -> xhs.auth_wall_markers
-# (same as the Playwright scraper uses); imported lazily to avoid an import cycle.
-_DEFAULT_LOGIN_WALL_MARKERS = (
-    "扫码登录", "登录后查看", "登录小红书", "请先登录",
-    "Scan with logged-in", "QR code expires",
-)
+# Login-wall markers — load from scraping_rules.yml (same source of truth as
+# xhs_scraper.py uses). Fall back to a hardcoded set if the YAML loader fails,
+# so a config error doesn't take down the cron silently.
+try:
+    from ..scraping_config import auth_wall_markers as _yaml_auth_wall_markers, ScrapingRulesError
+    try:
+        _LOGIN_WALL_MARKERS = tuple(_yaml_auth_wall_markers("xhs")) or (
+            "扫码登录", "登录后查看", "登录小红书", "请先登录",
+            "Scan with logged-in", "QR code expires",
+        )
+    except ScrapingRulesError as _e:
+        logger.warning(
+            "scraping_rules.yml load failed (%s); falling back to hardcoded login-wall markers",
+            _e,
+        )
+        _LOGIN_WALL_MARKERS = (
+            "扫码登录", "登录后查看", "登录小红书", "请先登录",
+            "Scan with logged-in", "QR code expires",
+        )
+except ImportError:
+    # scraping_config not importable (e.g., test environment without yaml) — fall back
+    _LOGIN_WALL_MARKERS = (
+        "扫码登录", "登录后查看", "登录小红书", "请先登录",
+        "Scan with logged-in", "QR code expires",
+    )
 
 
 # ─── Exceptions ────────────────────────────────────────────────────────────
@@ -141,15 +168,15 @@ class ApifyScraperClient:
         self._cost_logger = cost_logger
         self._max_retries = max_retries
 
-        # Lazy-import: don't fail at module load if apify-client isn't installed
-        try:
-            from apify_client import ApifyClient
-            self._client = ApifyClient(apify_token)
-        except ImportError as exc:
+        # Module-level _ApifyClientSdk is the real SDK class when installed,
+        # None otherwise. Tests monkey-patch this module attribute to inject a fake.
+        sdk_cls = _ApifyClientSdk
+        if sdk_cls is None:
             raise ImportError(
                 "apify-client not installed. Run: "
                 "pip install -r services/competitor_intel/requirements.txt"
-            ) from exc
+            )
+        self._client = sdk_cls(apify_token)
 
     # ── Public scrape methods ──
 
@@ -266,6 +293,11 @@ class ApifyScraperClient:
 
         Retries up to self._max_retries on transient errors (rate limit,
         timeout). Non-transient errors raise ApifyScrapeError immediately.
+
+        SYNC method — uses time.sleep() for backoff. The Apify Python SDK
+        is synchronous; if A3 calls this from an async context, wrap with
+        ``asyncio.to_thread()`` or ``loop.run_in_executor()`` to avoid
+        blocking the event loop.
         """
         # Sanitize input for logging — never log cookieString
         safe_input = {k: v for k, v in actor_input.items() if k != "cookieString"}
@@ -321,7 +353,7 @@ class ApifyScraperClient:
             str(v) for item in items if isinstance(item, dict)
             for v in item.values() if isinstance(v, str)
         )[:5000]  # truncate to avoid quadratic cost on large outputs
-        return any(marker in text_blob for marker in _DEFAULT_LOGIN_WALL_MARKERS)
+        return any(marker in text_blob for marker in _LOGIN_WALL_MARKERS)
 
     def _guess_brand_profile_url(
         self,

@@ -178,7 +178,19 @@ def _save_result(platform: str, brand_name: str, tier: str, result, cookies: str
 # ─── API mode ────────────────────────────────────────────────────────────────
 
 async def scrape_brand(platform: str, brand_name: str, keyword: str, tier: str, cookies: str = None):
-    """Scrape a single brand via httpx API mode."""
+    """Scrape a single brand via httpx API mode.
+
+    A3 (issue #62): when USE_APIFY=true and platform is XHS, route through
+    ApifyScraperClient instead of the in-house Playwright/httpx scraper.
+    Default (USE_APIFY=false or unset) keeps the existing behavior unchanged.
+    """
+    # ── A3 feature-flag branch: Apify path for XHS ──
+    # Only XHS is wired in A3. A4 adds Douyin + Taobao. All other platforms
+    # continue using the existing scraper regardless of USE_APIFY setting.
+    if os.environ.get("USE_APIFY", "false").lower() == "true" and platform == "xhs":
+        return await _scrape_brand_via_apify(platform, brand_name, keyword, tier)
+
+    # ── existing httpx/Playwright path — unchanged ──
     ScraperClass = PLATFORM_SCRAPERS.get(platform)
     if not ScraperClass:
         print(f"[WARN] No scraper for platform: {platform}")
@@ -205,6 +217,72 @@ async def scrape_brand(platform: str, brand_name: str, keyword: str, tier: str, 
         traceback.print_exc()
         _check_auth_failure(platform, 'exception', str(e), cookies)
         return False
+
+
+async def _scrape_brand_via_apify(platform: str, brand_name: str, keyword: str, tier: str) -> bool:
+    """A3 — route a single brand scrape through ApifyScraperClient.
+
+    Reads APIFY_API_TOKEN and XHS_SESSION_COOKIE from env. Bypasses
+    `_save_result()` (which expects the XhsBrandData object shape) and
+    writes the apify_client.data_dict directly to save_brand_profile().
+
+    Returns True on success/partial, False on failure. On cookie expiration,
+    marks the platform connection as expired so the next run skips XHS until
+    the cookie is refreshed.
+    """
+    try:
+        from .scrapers.apify_client import ApifyScraperClient, ApifyScrapeError
+    except ImportError as exc:
+        print(f"[ERROR/apify] USE_APIFY=true but apify_client unavailable: {exc}")
+        print("  Install: pip install -r services/competitor_intel/requirements.txt")
+        return False
+
+    token = os.environ.get("APIFY_API_TOKEN")
+    if not token:
+        print("[ERROR/apify] USE_APIFY=true but APIFY_API_TOKEN env var not set")
+        return False
+
+    cookie = os.environ.get("XHS_SESSION_COOKIE") if platform == "xhs" else None
+    if platform == "xhs" and not cookie:
+        print("[WARN/apify] XHS_SESSION_COOKIE not set — profile mode will be skipped")
+
+    print(f"[SCRAPE/apify] {platform} / {brand_name} (keyword: {keyword}, tier: {tier})")
+    client = ApifyScraperClient(apify_token=token, xhs_cookie=cookie)
+
+    try:
+        # apify_client is sync; offload so we don't block the asyncio loop
+        result = await asyncio.to_thread(
+            client.scrape_xhs_brand,
+            {"name": brand_name, "keyword": keyword},
+        )
+    except ApifyScrapeError as exc:
+        print(f"[FAIL/apify] {platform} / {brand_name}: {exc}")
+        if exc.cookie_expired:
+            mark_connection_expired(platform)
+        return False
+    except Exception as exc:
+        print(f"[ERROR/apify] {platform} / {brand_name}: unexpected {type(exc).__name__}: {exc}")
+        traceback.print_exc()
+        return False
+
+    if result.status == "failed" or not result.data_dict:
+        print(f"[FAIL/apify] {platform} / {brand_name}: errors={result.errors}")
+        return False
+
+    # ── Write to DB using the EXISTING contract ──
+    # ScrapeResult.data_dict is already in the shape save_brand_profile expects.
+    save_brand_profile(platform, brand_name, result.data_dict, scrape_tier=tier)
+    if result.notes_list:
+        save_products(platform, brand_name, result.notes_list, scrape_tier=tier)
+
+    note_count = len(result.notes_list)
+    cost = result.cost_estimate_usd
+    err_suffix = f" (partial: {result.errors})" if result.errors else ""
+    print(f"[OK/apify] {platform} / {brand_name}: {result.status} | "
+          f"notes={note_count} cost=~${cost:.4f}{err_suffix}")
+
+    mark_connection_success(platform)
+    return True
 
 
 async def run_tier_scrape(platform: str, tier: str):
