@@ -1,15 +1,12 @@
 """
 Tests for ApifyScraperClient (services/competitor_intel/scrapers/apify_client.py).
 
-Synthetic-fixture phase: these tests use hand-constructed dicts shaped like
-zhorex/rednote-xiaohongshu-scraper's documented output (per Apify marketplace
-page, fetched 2026-05-22). They validate the structural code paths — mapping,
-login-wall detection, retry logic — without making live API calls.
-
-When Will completes A1 (manual Apify Console run), replace the SYNTHETIC_SEARCH
-and SYNTHETIC_PROFILE constants with the recorded fixture from his Console
-output. Tests should keep passing — if any fail, the mapper needs revision
-because Apify's actual output differs from documented schema.
+Two test sources:
+1. SYNTHETIC_* fixtures — hand-constructed dicts shaped per zhorex's documented
+   schema. These exercise the optimistic "all fields populated" code paths.
+2. REAL fixtures in services/competitor_intel/scrapers/fixtures/ — captured
+   from actual Apify Console runs during A1 (2026-05-23). These exercise the
+   real-world thin-data search-mode behavior.
 
 Run:
     pytest services/competitor_intel/test_apify_client.py -v
@@ -17,10 +14,14 @@ Run:
 
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
+
+FIXTURE_DIR = Path(__file__).parent / "scrapers" / "fixtures"
 
 
 # ─── Synthetic fixtures (replace with real A1 output later) ────────────────
@@ -382,3 +383,97 @@ def test_scrape_taobao_stub_raises(fake_client):
 def test_scrape_douyin_stub_raises(fake_client):
     with pytest.raises(NotImplementedError, match="A4"):
         fake_client.scrape_douyin_brand({"name": "Songmont"})
+
+
+# ─── Real-fixture validation (A1 ground truth, 2026-05-23) ────────────────
+
+
+def _load_real_search_fixture():
+    path = FIXTURE_DIR / "apify_xhs_search_2026-05-23.json"
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def test_real_fixture_loads_and_has_expected_count():
+    items = _load_real_search_fixture()
+    assert len(items) == 10, "expected 10 items from A1 spike"
+
+
+def test_real_search_mode_populates_basic_fields(fake_client):
+    """Search mode reliably gives us postId, title, likes, author, type."""
+    items = _load_real_search_fixture()
+    for item in items:
+        assert item.get("postId"), f"missing postId: {item}"
+        assert item.get("title"), f"missing title: {item}"
+        assert isinstance(item.get("likes"), int)
+        assert item.get("author", {}).get("userId"), "missing author.userId"
+        assert item.get("author", {}).get("nickname"), "missing author.nickname"
+        assert item.get("type") in ("video", "normal"), f"unexpected type: {item.get('type')}"
+
+
+def test_real_search_mode_does_NOT_populate_rich_fields(fake_client):
+    """A1 finding: search mode leaves content/tags/images/comments empty.
+
+    This test documents the limitation. If a future actor version starts
+    populating these in search mode, this test should fail, prompting us
+    to update apify_client.py to take advantage.
+    """
+    items = _load_real_search_fixture()
+    for item in items:
+        assert item.get("content") == "", "search mode now populates content? Update mapper!"
+        assert item.get("tags") == [], "search mode now populates tags? Update mapper!"
+        assert item.get("images") == [], "search mode now populates images? Update mapper!"
+        assert item.get("comments") == 0, "search mode now populates comments? Update mapper!"
+        assert item.get("shares") == 0
+        assert item.get("saves") == 0
+
+
+def test_real_fixture_through_mapper_produces_valid_dict(fake_client):
+    """End-to-end: real Apify output → mapper → save_brand_profile dict shape."""
+    items = _load_real_search_fixture()
+    result_dict = fake_client._build_save_brand_profile_dict(
+        brand_name="Songmont",
+        search_items=items,
+        profile_items=[],  # profile mode not tested in A1
+    )
+
+    # Top-level shape contract
+    assert "follower_count" in result_dict
+    assert "engagement_metrics" in result_dict
+    assert "raw_dimensions" in result_dict
+    assert "d3" in result_dict["raw_dimensions"]
+
+    # All 10 search items should produce top_notes entries
+    top_notes = result_dict["raw_dimensions"]["d3"]["top_notes"]
+    assert len(top_notes) == 10
+
+    # With search-mode-only data, we expect populated title/likes/author_name
+    # but EMPTY body_text, hashtags, image_count=0, comments_count=0
+    note = top_notes[0]
+    assert note["title"]                # populated ✓
+    assert isinstance(note["likes"], int) and note["likes"] > 0  # populated ✓
+    assert note["author_name"]          # populated ✓
+    assert note["note_id"]              # populated ✓
+    assert note["body_text"] == ""      # documented limitation
+    assert note["hashtags"] == []       # documented limitation
+    assert note["image_count"] == 0     # documented limitation
+    assert note["comments_count"] == 0  # documented limitation
+
+
+def test_real_fixture_content_types_aggregated_correctly(fake_client):
+    """7 video + 3 normal posts in the fixture."""
+    items = _load_real_search_fixture()
+    result = fake_client._build_save_brand_profile_dict(
+        brand_name="Songmont",
+        search_items=items,
+        profile_items=[],
+    )
+    ct = result["content_metrics"]["content_types"]
+    assert ct.get("video") == 8
+    assert ct.get("normal") == 2
+
+
+def test_real_fixture_no_login_wall(fake_client):
+    """Sanity: A1 output didn't have login-wall markers."""
+    items = _load_real_search_fixture()
+    assert fake_client._detect_login_wall(items) is False
