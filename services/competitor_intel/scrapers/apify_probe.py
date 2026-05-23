@@ -1,25 +1,30 @@
-"""W1 of the scraping migration: one-off Apify parity probe.
+"""W1 of the scraping migration: Apify parity probe.
 
-Calls zhorex/rednote-xiaohongshu-scraper for ONE brand and diffs the output
-against XhsBrandData (services/competitor_intel/scrapers/xhs_scraper.py:67)
-to validate field-level parity before we commit to writing apify_client.py.
+Calls zhorex/rednote-xiaohongshu-scraper TWICE for one brand (search for posts,
+then profile for follower count) and diffs the combined output against the
+fields scrape_runner.py:_save_result() needs to populate scraped_brand_profiles.
 
-See docs/SCRAPING-PLAN-2026-05-22.md §4 W1 and GitHub issue #62 for context.
+This is the spike, not production code. See docs/SCRAPING-PLAN-2026-05-22.md
+§4 W1 and GitHub issue #62 for context.
+
+Why two calls: pipelines read both engagement_metrics.total_notes (needs
+profile mode's `notesCount`) AND raw_dimensions.d3.top_notes[] (needs search
+mode's posts list). One call alone covers <50% of what scoring needs.
 
 Usage:
+    pip install -r services/competitor_intel/requirements.txt
     APIFY_API_TOKEN=apify_api_xxx \\
         python -m services.competitor_intel.scrapers.apify_probe --brand Songmont
 
-    # Optionally include a logged-in XHS session cookie (needed for comments
-    # and full profile data; not needed for search/user_posts modes):
+    # If profile mode requires cookies (it usually does), provide one:
     APIFY_API_TOKEN=apify_api_xxx \\
-    XHS_SESSION_COOKIE='a1=...; web_session=...' \\
-        python -m services.competitor_intel.scrapers.apify_probe --brand Songmont \\
-        --include-cookies
+    XHS_SESSION_COOKIE='web_session=...' \\
+        python -m services.competitor_intel.scrapers.apify_probe --brand Songmont
 
 Outputs (next to this file):
-    apify_probe_output.json  — raw actor output
-    parity_report.md         — the decision-gate document for W2
+    apify_probe_search.json    — raw output from search mode
+    apify_probe_profile.json   — raw output from profile mode
+    parity_report.md           — W2 go/no-go decision document
 """
 
 from __future__ import annotations
@@ -30,81 +35,77 @@ import os
 import sys
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 ACTOR_ID = "zhorex/rednote-xiaohongshu-scraper"
 OUTPUT_DIR = Path(__file__).parent
 
-# Hardcoded to avoid importing xhs_scraper (which pulls scraping_config and
-# YAML deps). Must mirror XhsBrandData in xhs_scraper.py:67 — update both
-# together if either changes.
-XHS_BRAND_DATA_FIELDS = [
-    ("brand_name", "str"),
-    ("scrape_date", "str"),
-    ("scrape_status", "str"),
-    ("d1_search_suggestions", "List[str]"),
-    ("d1_search_volume_rank", "str"),
-    ("d1_related_searches", "List[str]"),
-    ("d2_official_followers", "int"),
-    ("d2_total_notes", "int"),
-    ("d2_total_likes", "int"),
-    ("d2_official_account_id", "str"),
-    ("d2_official_account_name", "str"),
-    ("d2_is_verified", "bool"),
-    ("d3_content_types", "Dict[str, int]"),
-    ("d3_top_notes", "List[Dict]"),
-    ("d3_posting_frequency", "str"),
-    ("d3_avg_engagement", "str"),
-    ("d4_top_kols", "List[Dict[str, str]]"),
-    ("d4_collab_count", "int"),
-    ("d4_celebrity_mentions", "List[str]"),
-    ("d6_sentiment_keywords", "List[str]"),
-    ("d6_positive_keywords", "List[str]"),
-    ("d6_negative_keywords", "List[str]"),
-    ("d6_ugc_sample_notes", "List[Dict[str, str]]"),
-    ("full_note_catalog", "List[Dict]"),
+
+# What scrape_runner.py:_save_result() actually needs to populate
+# scraped_brand_profiles. Source of truth: scrape_runner.py:73-138.
+#
+# Each entry: (semantic_name, where_it_goes_in_DB, severity)
+# severity: "critical" = pipeline reads this directly; "high" = pipeline can
+# degrade gracefully; "nice" = bonus context.
+REQUIRED_FIELDS = [
+    # ── Top-level brand stats (profile mode) ──
+    ("follower_count",          "scraped_brand_profiles.follower_count",                    "critical"),
+    ("total_notes_count",       "scraped_brand_profiles.engagement_metrics.total_notes",    "critical"),
+    ("total_likes_count",       "scraped_brand_profiles.engagement_metrics.total_likes",    "critical"),
+    ("is_verified",             "scraped_brand_profiles.raw_dimensions.d2 (account scoring)", "high"),
+    ("brand_user_id",           "scraped_brand_profiles.raw_dimensions.d2",                 "high"),
+    ("brand_nickname",          "scraped_brand_profiles.raw_dimensions.d2",                 "nice"),
+
+    # ── Posts list (search / user_posts mode) ──
+    ("posts_list",              "raw_dimensions.d3.top_notes[]",                            "critical"),
+    ("post.title",              "d3.top_notes[].title",                                     "critical"),
+    ("post.content",            "d3.top_notes[].body_text",                                 "critical"),
+    ("post.likes",              "d3.top_notes[].likes",                                     "critical"),
+    ("post.comments",           "d3.top_notes[].comments_count",                            "critical"),
+    ("post.shares",             "d3.top_notes[].shares",                                    "high"),
+    ("post.hashtags",           "d3.top_notes[].hashtags",                                  "critical"),
+    ("post.images",             "d3.top_notes[].image_count (derived: len(images))",        "high"),
+    ("post.note_id",            "d3.top_notes[].note_id",                                   "critical"),
+    ("post.author_nickname",    "d4.note_authors[].name",                                   "high"),
+    ("post.author_user_id",     "d4.note_authors[]",                                        "nice"),
+    ("post.published_at",       "d3.top_notes[] (used for content recency)",                "nice"),
+    ("post.type",               "d3.top_notes[].type (text/video discrimination)",          "high"),
 ]
 
-# Subset of XhsBrandData fields the 16 scoring pipelines actually read.
-# If any of these are missing from Apify output, the parity gate fails.
-# Inferred from grep over services/competitor_intel/pipelines/*.py — keep
-# this conservative; better to over-include than under-include for the gate.
-PIPELINE_CRITICAL = {
-    "d2_official_followers",     # voice_volume, momentum
-    "d2_total_notes",            # content_strategy, voice_volume
-    "d2_total_likes",            # content_strategy, mindshare
-    "d2_is_verified",            # account_scoring
-    "d3_content_types",          # content_strategy
-    "d3_top_notes",              # content_strategy, design_vision, kol_tracker
-    "d6_sentiment_keywords",     # mindshare
-    "full_note_catalog",         # launch_tracker, product_ranking
-}
 
-# Aliases we'll try when matching an XhsBrandData field to keys in Apify output.
-# zhorex's actor output keys are not perfectly documented, so we cast a wide
-# net per field. The parity report logs which alias actually matched.
-FIELD_ALIASES: Dict[str, set] = {
-    "d2_official_followers": {"followers", "follower_count", "followerCount", "fans"},
-    "d2_total_notes": {"notes", "note_count", "noteCount", "totalNotes", "notesCount"},
-    "d2_total_likes": {"likes", "like_count", "likeCount", "totalLikes", "liked_count"},
-    "d2_official_account_id": {"user_id", "userId", "id", "userId"},
-    "d2_official_account_name": {"nickname", "name", "user_name", "userName"},
-    "d2_is_verified": {"verified", "is_verified", "isVerified", "blueV"},
-    "d3_top_notes": {"notes", "posts", "items", "items"},
-    "d3_content_types": {"contentTypes", "content_types"},
-    "d6_sentiment_keywords": {"sentimentKeywords", "tags", "keywords"},
-    "d6_positive_keywords": {"positiveKeywords", "positive_keywords"},
-    "d6_negative_keywords": {"negativeKeywords", "negative_keywords"},
-    "d6_ugc_sample_notes": {"ugcNotes", "ugc_notes", "userNotes"},
-    "full_note_catalog": {"notes", "posts", "items", "noteList"},
-    "d1_search_suggestions": {"suggestions", "searchSuggestions"},
-    "d1_related_searches": {"relatedSearches", "related"},
-    "d4_top_kols": {"kols", "topKols", "influencers"},
-    "d4_celebrity_mentions": {"mentions", "celebrities"},
+# Map semantic names to candidate keys in Apify output.
+# Updated from zhorex's documented schema (fetched 2026-05-22).
+# Profile-mode fields and post-mode fields are merged in the search space.
+APIFY_KEY_CANDIDATES: Dict[str, set] = {
+    # Profile mode
+    "follower_count":      {"followers"},
+    "total_notes_count":   {"notesCount"},
+    "total_likes_count":   {"totalLikes"},
+    "is_verified":         {"isVerified"},
+    "brand_user_id":       {"userId", "redId"},
+    "brand_nickname":      {"nickname"},
+
+    # Search / user_posts mode (top-level container in each item)
+    "posts_list":          set(),  # detected by presence of post-mode keys in any item
+
+    # Per-post fields
+    "post.title":          {"title"},
+    "post.content":        {"content"},
+    "post.likes":          {"likes"},
+    "post.comments":       {"comments"},
+    "post.shares":         {"shares"},
+    "post.hashtags":       {"hashtag", "hashtags", "tags"},
+    "post.images":         {"images"},
+    "post.note_id":        {"postId"},
+    "post.author_nickname": {"authorName"},  # plus author.nickname (nested)
+    "post.author_user_id": set(),             # nested: author.userId
+    "post.published_at":   {"publishedAt"},
+    "post.type":           {"type"},
 }
 
 
-def call_apify_actor(brand: str, token: str, cookie: str | None) -> List[Dict[str, Any]]:
+def call_apify_actor(actor_input: Dict[str, Any], token: str, label: str) -> List[Dict[str, Any]]:
+    """Single Apify actor run, returns dataset items."""
     try:
         from apify_client import ApifyClient
     except ImportError:
@@ -116,158 +117,251 @@ def call_apify_actor(brand: str, token: str, cookie: str | None) -> List[Dict[st
         sys.exit(2)
 
     client = ApifyClient(token)
-    run_input: Dict[str, Any] = {
-        "mode": "search",
-        "keyword": brand,
-        "maxItems": 30,
-    }
-    if cookie:
-        run_input["cookies"] = cookie
+    safe_input = {k: v for k, v in actor_input.items() if k != "cookieString"}
+    print(f"[probe:{label}] Input: {json.dumps(safe_input, ensure_ascii=False)}", file=sys.stderr)
+    if actor_input.get("cookieString"):
+        print(f"[probe:{label}] cookieString length: {len(actor_input['cookieString'])} chars", file=sys.stderr)
 
-    print(f"[probe] Running actor {ACTOR_ID} for brand={brand!r}", file=sys.stderr)
-    print(f"[probe] Input: {json.dumps({k: v for k, v in run_input.items() if k != 'cookies'})}", file=sys.stderr)
-    if cookie:
-        print(f"[probe] Cookie length: {len(cookie)} chars", file=sys.stderr)
-
-    run = client.actor(ACTOR_ID).call(run_input=run_input)
+    run = client.actor(ACTOR_ID).call(run_input=actor_input)
     items = list(client.dataset(run["defaultDatasetId"]).iterate_items())
-    print(f"[probe] Got {len(items)} items from actor", file=sys.stderr)
+    print(f"[probe:{label}] Got {len(items)} items", file=sys.stderr)
     return items
 
 
-def _all_keys_in(items: List[Any]) -> set:
-    """Collect every JSON key that appears anywhere in the actor output."""
+def search_mode(brand: str, token: str, cookie: Optional[str], max_results: int = 30) -> List[Dict]:
+    """Search posts for a brand keyword. Cookie-optional."""
+    inp = {
+        "mode": "search",
+        "searchQuery": brand,
+        "maxResults": max_results,
+    }
+    if cookie:
+        inp["cookieString"] = cookie
+    return call_apify_actor(inp, token, "search")
+
+
+def profile_mode(user_url: str, token: str, cookie: Optional[str]) -> List[Dict]:
+    """Profile mode for follower count / notesCount / totalLikes. Cookie usually required."""
+    inp = {
+        "mode": "profile",
+        "userUrl": user_url,
+    }
+    if cookie:
+        inp["cookieString"] = cookie
+    return call_apify_actor(inp, token, "profile")
+
+
+def _all_keys(obj: Any, prefix: str = "") -> set:
+    """Recursive walk: yields every JSON key as dotted path (author.nickname etc.)."""
     keys: set = set()
-
-    def walk(obj):
-        if isinstance(obj, dict):
-            for k, v in obj.items():
-                keys.add(k)
-                walk(v)
-        elif isinstance(obj, list):
-            for x in obj:
-                walk(x)
-
-    walk(items)
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            path = f"{prefix}.{k}" if prefix else k
+            keys.add(path)
+            keys.add(k)  # also add unqualified
+            keys |= _all_keys(v, path)
+    elif isinstance(obj, list) and obj:
+        # Walk the first item to discover per-item shape; full keyset would
+        # be huge for long arrays.
+        for item in obj[:3]:
+            keys |= _all_keys(item, prefix)
     return keys
 
 
-def analyze_parity(apify_items: List[Dict[str, Any]]) -> Dict[str, Any]:
-    if not apify_items:
-        return {
-            "status": "no_data",
-            "item_count": 0,
-            "matched": [],
-            "missing": [{"field": n, "type": t} for n, t in XHS_BRAND_DATA_FIELDS],
-            "extra": [],
-            "critical_missing": sorted(PIPELINE_CRITICAL),
-            "score": 0.0,
-            "gate_passed": False,
-        }
+def _guess_brand_user_url(search_items: List[Dict], brand: str) -> Optional[str]:
+    """Best-effort: find a profileUrl or author.userId in the search results
+    that looks like the brand's official account. Uses nickname/title match.
+    """
+    brand_lower = brand.lower()
+    candidates = []
+    for item in search_items:
+        if not isinstance(item, dict):
+            continue
+        # Direct profile field
+        if "profileUrl" in item:
+            candidates.append(item["profileUrl"])
+        # Nested author block
+        author = item.get("author") or {}
+        if isinstance(author, dict):
+            nick = (author.get("nickname") or "").lower()
+            uid = author.get("userId")
+            if uid and brand_lower in nick:
+                candidates.append(f"https://www.xiaohongshu.com/user/profile/{uid}")
+        # Top-level authorName + try to match
+        if (item.get("authorName") or "").lower() == brand_lower and item.get("authorUserId"):
+            candidates.append(f"https://www.xiaohongshu.com/user/profile/{item['authorUserId']}")
+    return candidates[0] if candidates else None
 
-    apify_keys = _all_keys_in(apify_items)
-    matched, missing = [], []
 
-    for name, typ in XHS_BRAND_DATA_FIELDS:
-        # Try: exact name, stripped d#_ prefix, declared aliases
-        candidates = {name}
-        if "_" in name:
-            candidates.add(name.split("_", 1)[1])
-        candidates |= FIELD_ALIASES.get(name, set())
+def analyze_parity(search_items: List[Dict], profile_items: List[Dict]) -> Dict[str, Any]:
+    """Diff combined Apify output against REQUIRED_FIELDS."""
+    search_keys = _all_keys(search_items)
+    profile_keys = _all_keys(profile_items)
+    combined_keys = search_keys | profile_keys
 
-        hit = apify_keys & candidates
-        if hit:
-            matched.append({"field": name, "matched_via": sorted(hit)})
+    matched = []
+    missing = []
+
+    for semantic_name, db_target, severity in REQUIRED_FIELDS:
+        if semantic_name == "posts_list":
+            # Special case: presence of any post-mode field
+            post_mode_signals = {"postId", "likes", "title", "comments"}
+            if post_mode_signals & search_keys:
+                matched.append({
+                    "field": semantic_name,
+                    "severity": severity,
+                    "db_target": db_target,
+                    "matched_via": sorted(post_mode_signals & search_keys),
+                    "source": "search",
+                })
+            else:
+                missing.append({"field": semantic_name, "severity": severity, "db_target": db_target})
+            continue
+
+        if semantic_name == "post.author_user_id":
+            # Nested check
+            if "author.userId" in combined_keys:
+                matched.append({"field": semantic_name, "severity": severity, "db_target": db_target,
+                               "matched_via": ["author.userId"], "source": "search"})
+            else:
+                missing.append({"field": semantic_name, "severity": severity, "db_target": db_target})
+            continue
+
+        candidates = APIFY_KEY_CANDIDATES.get(semantic_name, set())
+        if not candidates:
+            missing.append({"field": semantic_name, "severity": severity, "db_target": db_target,
+                           "note": "no alias defined; check raw output"})
+            continue
+
+        # Where it could appear
+        search_hit = candidates & search_keys
+        profile_hit = candidates & profile_keys
+        if search_hit or profile_hit:
+            source = "profile" if profile_hit else "search"
+            matched.append({
+                "field": semantic_name,
+                "severity": severity,
+                "db_target": db_target,
+                "matched_via": sorted(search_hit | profile_hit),
+                "source": source,
+            })
         else:
-            missing.append({"field": name, "type": typ})
+            missing.append({"field": semantic_name, "severity": severity, "db_target": db_target})
 
-    # Extras are Apify keys we don't map to any XhsBrandData field
-    used_candidates: set = set()
-    for name, _ in XHS_BRAND_DATA_FIELDS:
-        used_candidates.add(name)
-        if "_" in name:
-            used_candidates.add(name.split("_", 1)[1])
-        used_candidates |= FIELD_ALIASES.get(name, set())
-    extra = sorted(apify_keys - used_candidates)
+    # Extras: keys in Apify output that don't map to any REQUIRED_FIELDS candidate
+    all_candidates: set = set()
+    for s in APIFY_KEY_CANDIDATES.values():
+        all_candidates |= s
+    extra = sorted(k for k in combined_keys if k not in all_candidates and "." not in k)
 
-    critical_missing = [m["field"] for m in missing if m["field"] in PIPELINE_CRITICAL]
-    score = round(len(matched) / len(XHS_BRAND_DATA_FIELDS), 3)
-    gate_passed = (not critical_missing) and score >= 0.6
+    critical_missing = [m["field"] for m in missing if m["severity"] == "critical"]
+    high_missing = [m["field"] for m in missing if m["severity"] == "high"]
+    crit_total = sum(1 for _, _, sev in REQUIRED_FIELDS if sev == "critical")
+    crit_matched = sum(1 for m in matched if m["severity"] == "critical")
+    crit_pct = round(crit_matched / crit_total, 3) if crit_total else 0
+
+    gate_passed = not critical_missing and crit_pct >= 0.8
 
     return {
-        "status": "ok",
-        "item_count": len(apify_items),
-        "apify_keys_observed": sorted(apify_keys),
+        "search_items": len(search_items),
+        "profile_items": len(profile_items),
         "matched": matched,
         "missing": missing,
-        "extra": extra,
+        "extra": extra[:50],
         "critical_missing": critical_missing,
-        "score": score,
+        "high_missing": high_missing,
+        "critical_match_pct": crit_pct,
         "gate_passed": gate_passed,
+        "search_keys_observed": sorted(search_keys),
+        "profile_keys_observed": sorted(profile_keys),
     }
 
 
 def write_report(analysis: Dict[str, Any], brand: str, out_path: Path) -> None:
-    score = analysis.get("score", 0)
-    gate = "✅ PASS" if analysis.get("gate_passed") else "❌ FAIL"
-    matched = analysis.get("matched", [])
-    missing = analysis.get("missing", [])
-    extra = analysis.get("extra", [])
-    critical_missing = analysis.get("critical_missing", [])
+    matched = analysis["matched"]
+    missing = analysis["missing"]
+    extra = analysis["extra"]
+    crit_missing = analysis["critical_missing"]
+    high_missing = analysis["high_missing"]
+    crit_pct = analysis["critical_match_pct"]
+    gate = "PASS" if analysis["gate_passed"] else "FAIL"
 
     out = []
     out.append(f"# Apify XHS Parity Report — {brand}")
     out.append("")
     out.append(f"- **Actor:** `{ACTOR_ID}`")
     out.append(f"- **Date:** {date.today().isoformat()}")
-    out.append(f"- **Items returned:** {analysis.get('item_count', 0)}")
-    out.append(f"- **Schema parity score:** {score} ({len(matched)}/{len(XHS_BRAND_DATA_FIELDS)} fields matched)")
-    out.append(f"- **Decision gate (≥60% schema AND no critical missing):** {gate}")
+    out.append(f"- **Search items returned:** {analysis['search_items']}")
+    out.append(f"- **Profile items returned:** {analysis['profile_items']}")
+    out.append(f"- **Critical-field match:** {crit_pct} ({sum(1 for m in matched if m['severity'] == 'critical')}/{sum(1 for f in REQUIRED_FIELDS if f[2] == 'critical')})")
+    out.append(f"- **Decision gate:** {'✅ PASS' if analysis['gate_passed'] else '❌ FAIL'} (need ≥80% critical AND zero critical missing)")
     out.append("")
 
-    out.append("## Critical fields (block W2 if any missing)")
+    out.append("## What we're checking against")
     out.append("")
-    if critical_missing:
-        for f in critical_missing:
-            out.append(f"- 🔴 `{f}` — required by scoring pipelines, NOT in Apify output")
+    out.append("Source of truth: `scrape_runner.py:_save_result()` (lines 73-138) shows exactly what dict shape goes into `save_brand_profile()`. The Apify wrapper (W2) must produce the same shape.")
+    out.append("")
+
+    out.append("## Critical fields — blocking if missing")
+    out.append("")
+    if crit_missing:
+        for f in crit_missing:
+            target = next(m["db_target"] for _, target in [(f, "")] for sname, m_target, _ in REQUIRED_FIELDS if sname == f)
+            out.append(f"- 🔴 `{f}` — needed for `{target}`")
     else:
         out.append("All critical fields present. ✓")
     out.append("")
 
+    out.append("## High-severity missing (pipeline degrades)")
+    out.append("")
+    if high_missing:
+        for f in high_missing:
+            out.append(f"- ⚠️ `{f}`")
+    else:
+        out.append("None.")
+    out.append("")
+
     out.append("## Matched fields")
     out.append("")
-    if matched:
-        for m in matched:
-            out.append(f"- `{m['field']}` ← `{', '.join(m['matched_via'])}`")
-    else:
-        out.append("_None_")
+    for m in matched:
+        sev_icon = {"critical": "🟢", "high": "🟡", "nice": "🔵"}[m["severity"]]
+        out.append(f"- {sev_icon} `{m['field']}` ← `{', '.join(m['matched_via'])}` (source: {m['source']}) → `{m['db_target']}`")
     out.append("")
 
-    out.append("## Missing fields (non-critical)")
+    out.append("## Missing fields (all)")
     out.append("")
-    nc_missing = [m for m in missing if m["field"] not in PIPELINE_CRITICAL]
-    if nc_missing:
-        for m in nc_missing:
-            out.append(f"- `{m['field']}` (`{m['type']}`)")
+    if missing:
+        for m in missing:
+            sev_icon = {"critical": "🔴", "high": "⚠️", "nice": "🔵"}[m["severity"]]
+            note = f" — {m['note']}" if "note" in m else ""
+            out.append(f"- {sev_icon} `{m['field']}` ({m['severity']}) → `{m['db_target']}`{note}")
     else:
-        out.append("_None_")
+        out.append("None.")
     out.append("")
 
-    out.append("## Extra fields (Apify-only — may enrich what we collect)")
+    out.append("## Extra keys Apify returned (potential enrichment)")
     out.append("")
     if extra:
         for e in extra[:30]:
             out.append(f"- `{e}`")
         if len(extra) > 30:
-            out.append(f"- _…and {len(extra) - 30} more (see apify_probe_output.json)_")
+            out.append(f"- _…and {len(extra) - 30} more (see apify_probe_search.json / apify_probe_profile.json)_")
     else:
-        out.append("_None_")
+        out.append("None.")
     out.append("")
 
-    out.append("## All keys observed in actor output")
+    out.append("## All keys observed in search mode")
     out.append("")
     out.append("```")
-    for k in analysis.get("apify_keys_observed", []):
+    for k in analysis["search_keys_observed"]:
+        out.append(k)
+    out.append("```")
+    out.append("")
+
+    out.append("## All keys observed in profile mode")
+    out.append("")
+    out.append("```")
+    for k in analysis["profile_keys_observed"]:
         out.append(k)
     out.append("```")
 
@@ -275,11 +369,13 @@ def write_report(analysis: Dict[str, Any], brand: str, out_path: Path) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="W1 Apify XHS parity probe")
-    parser.add_argument("--brand", default="Songmont",
-                        help="Brand keyword to search (default: Songmont)")
-    parser.add_argument("--include-cookies", action="store_true",
-                        help="Pass XHS_SESSION_COOKIE env var to the actor")
+    parser = argparse.ArgumentParser(description="W1 Apify XHS parity probe (search + profile)")
+    parser.add_argument("--brand", default="Songmont", help="Brand keyword to search (default: Songmont)")
+    parser.add_argument("--max-results", type=int, default=30, help="Search posts cap (default: 30)")
+    parser.add_argument("--skip-profile", action="store_true",
+                        help="Skip profile-mode call (useful if you have no XHS cookie yet)")
+    parser.add_argument("--profile-url", default=None,
+                        help="Override the auto-detected brand profile URL")
     args = parser.parse_args()
 
     token = os.environ.get("APIFY_API_TOKEN")
@@ -293,24 +389,49 @@ def main() -> int:
         )
         return 1
 
-    cookie = os.environ.get("XHS_SESSION_COOKIE") if args.include_cookies else None
-    if args.include_cookies and not cookie:
-        print("WARN: --include-cookies set but XHS_SESSION_COOKIE is empty", file=sys.stderr)
+    cookie = os.environ.get("XHS_SESSION_COOKIE")
+    if cookie:
+        print(f"[probe] Using XHS_SESSION_COOKIE ({len(cookie)} chars)", file=sys.stderr)
+    else:
+        print("[probe] No XHS_SESSION_COOKIE — search mode will run cookie-free; profile mode may fail", file=sys.stderr)
 
-    items = call_apify_actor(args.brand, token, cookie)
+    # ── Call 1: search mode ──
+    search_items = search_mode(args.brand, token, cookie, args.max_results)
+    (OUTPUT_DIR / "apify_probe_search.json").write_text(
+        json.dumps(search_items, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
-    raw_path = OUTPUT_DIR / "apify_probe_output.json"
-    raw_path.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"[probe] Raw output → {raw_path}", file=sys.stderr)
+    # ── Call 2: profile mode ──
+    profile_items: List[Dict] = []
+    if not args.skip_profile:
+        profile_url = args.profile_url or _guess_brand_user_url(search_items, args.brand)
+        if not profile_url:
+            print(f"[probe] Could not auto-detect a profile URL for '{args.brand}'.", file=sys.stderr)
+            print("        Pass --profile-url 'https://www.xiaohongshu.com/user/profile/<id>' to test profile mode.", file=sys.stderr)
+            print("        Or rerun with --skip-profile to validate search-mode only.", file=sys.stderr)
+        else:
+            print(f"[probe] Using profile URL: {profile_url}", file=sys.stderr)
+            try:
+                profile_items = profile_mode(profile_url, token, cookie)
+            except Exception as exc:
+                print(f"[probe] Profile mode failed: {exc}", file=sys.stderr)
+                print("        Profile mode usually requires XHS_SESSION_COOKIE — provide one and rerun.", file=sys.stderr)
 
-    analysis = analyze_parity(items)
+        (OUTPUT_DIR / "apify_probe_profile.json").write_text(
+            json.dumps(profile_items, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+    # ── Parity analysis ──
+    analysis = analyze_parity(search_items, profile_items)
     report_path = OUTPUT_DIR / "parity_report.md"
     write_report(analysis, args.brand, report_path)
-    print(f"[probe] Parity report → {report_path}", file=sys.stderr)
 
-    print(f"\nGATE: {'PASS' if analysis.get('gate_passed') else 'FAIL'}")
-    print(f"Schema parity score: {analysis.get('score', 0)}")
-    if analysis.get("critical_missing"):
+    print(f"\n[probe] Raw search output  → {OUTPUT_DIR / 'apify_probe_search.json'}")
+    print(f"[probe] Raw profile output → {OUTPUT_DIR / 'apify_probe_profile.json'}")
+    print(f"[probe] Parity report       → {report_path}")
+    print(f"\nGATE: {'PASS ✅' if analysis['gate_passed'] else 'FAIL ❌'}")
+    print(f"Critical-field match: {analysis['critical_match_pct']}")
+    if analysis["critical_missing"]:
         print(f"Critical missing: {analysis['critical_missing']}")
         return 1
     return 0
