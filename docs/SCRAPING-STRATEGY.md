@@ -3,7 +3,7 @@
 > **Source:** Authored by Joanna, 2026-05-22 (`Rebase-Scraping-Strategy (2).docx`)  
 > **Status:** Active — this is the strategy we are executing  
 > **Tracks:** [issue #62](https://github.com/jojosuperstar0506/rebase/issues/62), [PR #81](https://github.com/jojosuperstar0506/rebase/pull/81)  
-> **Companion:** `docs/SCRAPING-A2-APIFY-CLIENT-DESIGN.md` (apify_client.py spec)
+> **Implementation:** `services/competitor_intel/scrapers/apify_client.py` (this strategy realized)
 
 ---
 
