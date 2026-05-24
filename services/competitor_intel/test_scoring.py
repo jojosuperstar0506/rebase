@@ -13,6 +13,14 @@ Covers:
 
 import os
 import sqlite3
+from datetime import date, timedelta
+
+
+def _days_ago_iso(n: int) -> str:
+    """Test-helper: ISO date string for N days ago. Avoids hardcoded
+    fixture dates falling outside `days=N` filter windows over time.
+    """
+    return (date.today() - timedelta(days=n)).isoformat()
 import tempfile
 from datetime import datetime, timedelta
 
@@ -537,8 +545,10 @@ class TestStorageScoreFunctions:
         path, conn = tmp_db
         _insert_brand(conn, "HistScore")
 
-        save_scores(conn, "HistScore", "2026-03-21", 60.0, 45.0, [], {}, {}, 0.8)
-        save_scores(conn, "HistScore", "2026-03-28", 65.0, 48.0, [], {}, {}, 0.9)
+        # Relative dates inside 30-day window. Was hardcoded 2026-03-21/28
+        # which broke once wall-clock passed April 2026.
+        save_scores(conn, "HistScore", _days_ago_iso(10), 60.0, 45.0, [], {}, {}, 0.8)
+        save_scores(conn, "HistScore", _days_ago_iso(3), 65.0, 48.0, [], {}, {}, 0.9)
 
         history = get_score_history(conn, "HistScore", days=30)
         assert len(history) == 2

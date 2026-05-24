@@ -13,6 +13,14 @@ Covers:
 
 import json
 import os
+from datetime import date, timedelta
+
+
+def _days_ago_iso(n: int) -> str:
+    """Test-helper: ISO date string for N days ago. Avoids hardcoded
+    fixture dates falling outside `days=N` filter windows over time.
+    """
+    return (date.today() - timedelta(days=n)).isoformat()
 import tempfile
 from pathlib import Path
 
@@ -320,15 +328,20 @@ class TestProductRankingsStorage:
         db = str(tmp_path / "test.db")
         conn = init_db(db)
 
+        # Relative dates inside the 30-day window. Was hardcoded
+        # 2026-03-21/28 which broke once wall-clock passed April 2026.
+        earlier_date = _days_ago_iso(10)
+        later_date = _days_ago_iso(3)
+
         save_product_rankings(
-            conn, "sycm", "2026-03-21", "箱包", "交易指数",
+            conn, "sycm", earlier_date, "箱包", "交易指数",
             [
                 {"rank": 1, "product_name": "Songmont A", "brand": "Songmont", "price": "¥899", "transaction_index": 98000},
                 {"rank": 2, "product_name": "CASSILE B", "brand": "CASSILE", "price": "¥599", "transaction_index": 87000},
             ],
         )
         save_product_rankings(
-            conn, "sycm", "2026-03-28", "箱包", "交易指数",
+            conn, "sycm", later_date, "箱包", "交易指数",
             [
                 {"rank": 1, "product_name": "CASSILE B", "brand": "CASSILE", "price": "¥599", "transaction_index": 99000},
                 {"rank": 2, "product_name": "Songmont A", "brand": "Songmont", "price": "¥899", "transaction_index": 95000},
@@ -337,11 +350,11 @@ class TestProductRankingsStorage:
 
         history = get_ranking_history(conn, "Songmont", "sycm", days=30)
         assert len(history) == 2
-        # First entry: rank 1 on 03-21
-        assert history[0][0] == "2026-03-21"
+        # First entry: rank 1 on earlier date
+        assert history[0][0] == earlier_date
         assert history[0][1] == 1
-        # Second entry: rank 2 on 03-28
-        assert history[1][0] == "2026-03-28"
+        # Second entry: rank 2 on later date
+        assert history[1][0] == later_date
         assert history[1][1] == 2
         conn.close()
 

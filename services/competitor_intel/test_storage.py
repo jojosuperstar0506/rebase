@@ -9,9 +9,17 @@ import json
 import os
 import sqlite3
 import tempfile
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 import pytest
+
+
+# Helper for time-dependent tests using the `days=N` filter on history
+# queries. Hardcoded dates fall outside windows as wall-clock advances;
+# relative dates keep tests stable. Original bug: March 2026 hardcoded
+# fixtures fell outside the 30-day window by May 2026.
+def _days_ago_iso(n: int) -> str:
+    return (date.today() - timedelta(days=n)).isoformat()
 
 from .storage import (
     DEFAULT_DB_PATH,
@@ -274,19 +282,21 @@ class TestMetricHistory:
         """get_metric_history should return date-ordered (ascending) results."""
         run_id = record_scrape_run(db_conn, status="completed", brands_attempted=1)
 
-        dates = ["2026-03-20", "2026-03-23", "2026-03-26", "2026-03-28"]
+        # Use relative dates so the test stays inside the 30-day filter
+        # regardless of when it runs (was hardcoded 2026-03-XX, broke in May).
+        dates = [_days_ago_iso(20), _days_ago_iso(15), _days_ago_iso(10), _days_ago_iso(5)]
         follower_counts = [100000, 110000, 130000, 150000]
 
-        for date, followers in zip(dates, follower_counts):
-            data = _make_sample_brand_data("小CK", scrape_date=date)
+        for d, followers in zip(dates, follower_counts):
+            data = _make_sample_brand_data("小CK", scrape_date=d)
             data["d2_brand_voice_volume"]["xhs"]["followers"] = followers
             save_snapshot(db_conn, run_id, "小CK", data)
 
         history = get_metric_history(db_conn, "小CK", "xhs_followers", days=30)
         assert len(history) == 4
         # Check ascending date order
-        assert history[0][0] == "2026-03-20"
-        assert history[-1][0] == "2026-03-28"
+        assert history[0][0] == dates[0]
+        assert history[-1][0] == dates[-1]
         # Check values
         assert history[0][1] == "100000"
         assert history[-1][1] == "150000"
@@ -295,17 +305,20 @@ class TestMetricHistory:
         """get_metric_history should only return data within the specified day range."""
         run_id = record_scrape_run(db_conn, status="completed", brands_attempted=1)
 
-        # Insert data from 60 days ago and today
-        old_data = _make_sample_brand_data("小CK", scrape_date="2026-01-28")
+        # 60 days ago = outside 30-day window; 5 days ago = inside.
+        old_date = _days_ago_iso(60)
+        new_date = _days_ago_iso(5)
+
+        old_data = _make_sample_brand_data("小CK", scrape_date=old_date)
         save_snapshot(db_conn, run_id, "小CK", old_data)
 
-        new_data = _make_sample_brand_data("小CK", scrape_date="2026-03-28")
+        new_data = _make_sample_brand_data("小CK", scrape_date=new_date)
         save_snapshot(db_conn, run_id, "小CK", new_data)
 
         # Only last 30 days
         history = get_metric_history(db_conn, "小CK", "xhs_followers", days=30)
         assert len(history) == 1
-        assert history[0][0] == "2026-03-28"
+        assert history[0][0] == new_date
 
         # Last 90 days should include both
         history_90 = get_metric_history(db_conn, "小CK", "xhs_followers", days=90)

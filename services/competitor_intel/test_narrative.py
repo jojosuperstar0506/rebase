@@ -12,7 +12,14 @@ import sqlite3
 import sys
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import date, datetime, timedelta
+
+
+def _days_ago_iso(n: int) -> str:
+    """Test-helper: ISO date string for N days ago. Avoids hardcoded
+    fixture dates falling outside `days=N` filter windows over time.
+    """
+    return (date.today() - timedelta(days=n)).isoformat()
 from unittest.mock import MagicMock, patch
 
 from . import narrative as narrative_mod
@@ -434,8 +441,12 @@ class TestNarrativeStorage(unittest.TestCase):
 
     def test_narrative_history(self):
         """Get narrative history over time."""
-        save_narrative(self.conn, "2026-03-20", "brand", "week1", brand_name="Songmont")
-        save_narrative(self.conn, "2026-03-28", "brand", "week2", brand_name="Songmont")
+        # Relative dates inside the 30-day filter window. Was hardcoded
+        # 2026-03-20/28 which broke once wall-clock passed April 2026.
+        earlier_date = _days_ago_iso(14)
+        later_date = _days_ago_iso(7)
+        save_narrative(self.conn, earlier_date, "brand", "week1", brand_name="Songmont")
+        save_narrative(self.conn, later_date, "brand", "week2", brand_name="Songmont")
         history = get_narrative_history(self.conn, brand_name="Songmont", narrative_type="brand")
         self.assertEqual(len(history), 2)
         # Should be ordered by date ascending
