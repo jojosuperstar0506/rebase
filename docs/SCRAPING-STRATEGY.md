@@ -305,3 +305,29 @@ We don't need `XHS_SESSION_COOKIE` anymore. easyapi authenticates internally via
 ### Per-brand profile URL config
 
 easyapi's actors take `profileUrls` as input — meaning each competitor brand needs a one-time-config XHS profile URL. Currently bootstrap via env var `XHS_PROFILE_URL_<BRAND_NAME>` (e.g., `XHS_PROFILE_URL_SONGMONT`). A3 follow-up: persist as a `xhs_profile_url` column on `workspace_competitors` so admin UI can set it without env hacks.
+
+### Profile-actor output is fuzzy-bucketed (additional limitation discovered 2026-05-24)
+
+When the easyapi profile actor ran for Songmont, the returned counts were **fuzzy buckets, not exact integers**:
+
+| Field | Returned value | Real meaning |
+|---|---|---|
+| `interactions[type=fans].count` | `"1万+"` (i18n: `"10K+"`) | "≥10,000 but <50,000" |
+| `interactions[type=interaction].count` | `"1万+"` | Combined likes+saves, also bucketed |
+| `interactions[type=follows].count` | `"10+"` | "≥10 (following count)" |
+| `notesCount` / `totalNotes` | **not in output at all** | We use `len(posts_items)` as lower-bound fallback |
+| `isVerified` | **not in output** | Mapper checks tags as heuristic; defaults False |
+
+This is XHS's design choice (anti-scraping privacy measure on public profile pages) — not an actor bug. **Any actor scraping the public profile page sees the same fuzzy display.**
+
+**Implications for scoring:**
+- d2 follower_count and total_likes are bucket-floor estimates (10K+ → 10000)
+- Week-over-week momentum scoring can't detect growth while the brand stays in the same bucket (e.g., Songmont could grow from 12K → 35K followers and the brief would still say "≥10K, unchanged")
+- Bio + IP location + redId from profile DO populate cleanly — useful for narrative context
+
+**Path to exact counts (when needed):**
+- Chanmama / feigua subscriptions (Joanna's Layer 2 plan) have data partnerships with XHS for exact metrics
+- Estimated ¥500-2000/mo per platform
+- Deferred until first paying customer asks for momentum scoring or we have budget pressure
+
+**Mapper handles this gracefully** — `_parse_count()` takes lower bounds, exposes the raw fuzzy string alongside as `d2.followers_display`, so the Brief UI can show "≥10K followers" (transparent) instead of "10,000 followers" (misleading).

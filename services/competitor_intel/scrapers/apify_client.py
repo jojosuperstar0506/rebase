@@ -116,10 +116,24 @@ class ScrapeResult:
 
 
 def _parse_count(val: Any) -> int:
-    """Parse easyapi's stringified counts (e.g., '6,739' or '10万') into int.
+    """Parse easyapi's stringified counts into int.
 
-    easyapi returns counts as strings with thousands commas or Chinese
-    万 ("ten thousand") suffix. Returns 0 on failure (don't crash the scrape).
+    Handles formats observed in the wild:
+      - "6,739"     → 6739    (user_posts liked_count format)
+      - "10万"      → 100000  (XHS 万 = 10k suffix)
+      - "1万+"      → 10000   (profile interactions FUZZY BUCKET — lower bound)
+      - "10+"       → 10      (profile interactions tiny-count format)
+      - "1.5万"     → 15000
+      - "10K+"      → 10000   (i18n version of 1万+)
+      - "1亿"       → 100000000
+
+    Profile-actor counts are bucketed — "1万+" doesn't mean exactly 10,000;
+    it means ">=10,000 but <50,000 (next bucket)". We take the lower bound.
+    Callers that need EXACT counts (e.g., week-over-week momentum scoring)
+    will hit a ceiling when the brand stays in the same bucket — flagged in
+    SCRAPING-STRATEGY.md A1.5 Findings section.
+
+    Returns 0 on failure (don't crash the scrape).
     """
     if val is None:
         return 0
@@ -128,7 +142,11 @@ def _parse_count(val: Any) -> int:
     s = str(val).strip().replace(",", "").replace("，", "")
     if not s:
         return 0
-    # Handle 万 (10k) and 亿 (100M) Chinese number suffixes
+    # Strip trailing "+" from fuzzy buckets — we take the lower bound
+    has_plus = s.endswith("+")
+    if has_plus:
+        s = s[:-1].strip()
+    # Strip i18n suffix (K, M, B) — convert before parsing
     try:
         if s.endswith("万"):
             return int(float(s[:-1]) * 10000)
@@ -136,9 +154,39 @@ def _parse_count(val: Any) -> int:
             return int(float(s[:-1]) * 100_000_000)
         if s.endswith("w") or s.endswith("W"):
             return int(float(s[:-1]) * 10000)
+        if s.endswith("K") or s.endswith("k"):
+            return int(float(s[:-1]) * 1000)
+        if s.endswith("M") or s.endswith("m"):
+            return int(float(s[:-1]) * 1_000_000)
+        if s.endswith("B") or s.endswith("b"):
+            return int(float(s[:-1]) * 1_000_000_000)
         return int(float(s))
     except (ValueError, TypeError):
         return 0
+
+
+def _find_interaction(profile_data: Dict[str, Any], target_type: str) -> Optional[Dict[str, Any]]:
+    """easyapi profile returns interactions as a list of {type, name, count, i18nCount} dicts.
+
+    target_type values observed: "follows" (count following), "fans" (followers),
+    "interaction" (combined likes + saves).
+    """
+    for it in profile_data.get("interactions") or []:
+        if isinstance(it, dict) and it.get("type") == target_type:
+            return it
+    return None
+
+
+def _extract_user_id_from_profile_url(url: str) -> str:
+    """Pull the XHS user ID from a profile URL like
+    https://www.rednote.com/user/profile/58c7d02b82ec3977dd42c218?xsec_token=...
+    Returns the ID portion (24-char hex typically) or empty string.
+    """
+    if not url:
+        return ""
+    # Match the /profile/<id> segment, allow query string after
+    m = re.search(r"/user/profile/([a-zA-Z0-9]+)", url)
+    return m.group(1) if m else ""
 
 
 _NOTE_ID_RE = re.compile(r"/([a-f0-9]{16,32})!nc_", re.IGNORECASE)
@@ -425,37 +473,51 @@ class ApifyScraperClient:
         Contract: scrape_runner.py:73-138.
         """
         # ── d2 from profile actor (if it ran) ──
-        prof = profile_items[0] if profile_items else {}
-        # easyapi profile field paths TBD — placeholders use best-guess based on
-        # the schema doc's mention of "fans count" and "nickname".
-        # Will be corrected to verified paths when profile fixture arrives.
-        follower_count = _parse_count(
-            (prof.get("interactions") or {}).get("fans")
-            or prof.get("followers")
-            or prof.get("fansCount")
-            or 0
-        )
-        total_notes = _parse_count(
-            prof.get("notesCount")
-            or prof.get("totalNotes")
-            or len(posts_items)  # fallback: count of posts we scraped
-        )
-        total_likes = _parse_count(
-            prof.get("totalLikes")
-            or prof.get("likedAndCollected")
-            or 0
-        )
-        is_verified = bool(prof.get("isVerified") or prof.get("verified"))
-        brand_user_id = (
-            prof.get("userId") or prof.get("user_id") or ""
-        )
-        # Fall back to user_id from first post if profile didn't return one
+        # Verified field paths against real Songmont fixture (2026-05-24):
+        #   item["profileData"]["basicInfo"]["nickname"|"redId"|"desc"|"ipLocation"]
+        #   item["profileData"]["interactions"] = list of {type, name, count, i18nCount}
+        #     - type="follows"     → following count
+        #     - type="fans"        → follower count (FUZZY: "1万+" → 10000 lower bound)
+        #     - type="interaction" → likes+saves aggregate (FUZZY)
+        #   item["profileUrl"]     → parse user_id from URL path
+        prof_item = profile_items[0] if profile_items else {}
+        prof_data = prof_item.get("profileData") or {}
+        basic = prof_data.get("basicInfo") or {}
+
+        fans_int = _find_interaction(prof_data, "fans") or {}
+        likes_int = _find_interaction(prof_data, "interaction") or {}
+
+        follower_count = _parse_count(fans_int.get("count"))
+        follower_count_display = fans_int.get("count") or ""  # preserve fuzzy bucket string
+        total_likes = _parse_count(likes_int.get("count"))
+        total_likes_display = likes_int.get("count") or ""
+        # No notesCount in easyapi profile output — fall back to len(posts).
+        # NOTE: this is a LOWER BOUND. Real brands have more posts than the
+        # actor returns (maxItems cap + XHS pagination limits). The actual
+        # total_notes is unknowable from this actor — flagged in strategy doc.
+        total_notes = len(posts_items)
+
+        # isVerified not directly present in easyapi profile output. Heuristic:
+        # check tags for any verified-related markers. False by default.
+        is_verified = False
+        for tag in (prof_data.get("tags") or []):
+            if isinstance(tag, dict):
+                tag_name = (tag.get("name") or "").lower()
+                if "verified" in tag_name or "认证" in (tag.get("name") or ""):
+                    is_verified = True
+                    break
+
+        # User ID: parse from profileUrl since easyapi profile doesn't include userId field
+        brand_user_id = _extract_user_id_from_profile_url(prof_item.get("profileUrl") or "")
+        # Fall back to user_id from first post if profile didn't run
         if not brand_user_id and posts_items:
             first_user = (posts_items[0].get("postData") or {}).get("user") or {}
             brand_user_id = first_user.get("user_id") or ""
-        brand_nickname = (
-            prof.get("nickname") or prof.get("nick_name") or brand_name
-        )
+
+        brand_nickname = basic.get("nickname") or brand_name
+        brand_red_id = basic.get("redId") or ""
+        brand_bio = basic.get("desc") or ""
+        brand_ip_location = basic.get("ipLocation") or ""
 
         # ── d3 from user_posts actor ──
         top_notes = self._map_posts_to_top_notes(posts_items[:50])
@@ -488,11 +550,16 @@ class ApifyScraperClient:
                 },
                 "d2": {
                     "followers": follower_count,
+                    "followers_display": follower_count_display,  # raw fuzzy string ("1万+")
                     "total_notes": total_notes,
                     "total_likes": total_likes,
+                    "total_likes_display": total_likes_display,
                     "is_verified": is_verified,
                     "user_id": brand_user_id,
                     "nickname": brand_nickname,
+                    "red_id": brand_red_id,
+                    "bio": brand_bio,
+                    "ip_location": brand_ip_location,
                 },
                 "d3": {
                     "content_types": content_types,

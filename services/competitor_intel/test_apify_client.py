@@ -115,6 +115,47 @@ def test_parse_count_returns_zero_on_garbage():
     assert _parse_count("not a number") == 0
 
 
+def test_parse_count_handles_fuzzy_bucket_plus_suffix():
+    """Profile actor returns '1万+' / '10K+' for follower buckets.
+    We take the LOWER BOUND as the int — '1万+' → 10000.
+    """
+    from services.competitor_intel.scrapers.apify_client import _parse_count
+    assert _parse_count("1万+") == 10000
+    assert _parse_count("10K+") == 10000
+    assert _parse_count("10+") == 10
+    assert _parse_count("5万+") == 50000
+    assert _parse_count("100K+") == 100000
+
+
+def test_extract_user_id_from_profile_url():
+    """Profile actor doesn't include user_id field — must parse from URL."""
+    from services.competitor_intel.scrapers.apify_client import _extract_user_id_from_profile_url
+    assert _extract_user_id_from_profile_url(
+        "https://www.rednote.com/user/profile/58c7d02b82ec3977dd42c218"
+    ) == "58c7d02b82ec3977dd42c218"
+    assert _extract_user_id_from_profile_url(
+        "https://www.rednote.com/user/profile/abc123?xsec_token=xyz&xsec_source=pc_search"
+    ) == "abc123"
+    assert _extract_user_id_from_profile_url("") == ""
+    assert _extract_user_id_from_profile_url("https://example.com/no-match") == ""
+
+
+def test_find_interaction_by_type():
+    """easyapi profile.interactions is a list — must find by type tag."""
+    from services.competitor_intel.scrapers.apify_client import _find_interaction
+    profile_data = {
+        "interactions": [
+            {"type": "follows", "count": "10+"},
+            {"type": "fans", "count": "1万+"},
+            {"type": "interaction", "count": "5万+"},
+        ]
+    }
+    assert _find_interaction(profile_data, "fans")["count"] == "1万+"
+    assert _find_interaction(profile_data, "interaction")["count"] == "5万+"
+    assert _find_interaction(profile_data, "nonexistent") is None
+    assert _find_interaction({}, "fans") is None  # missing key OK
+
+
 def test_derive_note_id_uses_cover_url_hash():
     """easyapi note_id is always empty — derive from cover URL."""
     from services.competitor_intel.scrapers.apify_client import _derive_note_id
@@ -390,4 +431,75 @@ def test_mapper_pulls_real_follower_count_from_profile(fake_client):
         posts_items=items,
         profile_items=profile,
     )
-    assert result["follower_count"] > 0, "profile mapper produced 0 followers from real fixture"
+    # Songmont's fixture has "1万+" follower bucket → 10000 lower bound
+    assert result["follower_count"] == 10000
+
+
+@pytest.mark.skipif(
+    not PROFILE_FIXTURE.exists(),
+    reason="Profile fixture not yet captured",
+)
+def test_mapper_preserves_fuzzy_follower_display_string(fake_client):
+    """We store the raw '1万+' string alongside the int for UI display."""
+    profile = _load_profile()
+    result = fake_client._build_save_brand_profile_dict(
+        brand_name="Songmont",
+        posts_items=_load_user_posts(),
+        profile_items=profile,
+    )
+    d2 = result["raw_dimensions"]["d2"]
+    assert d2["followers_display"] == "1万+"
+    assert d2["total_likes_display"] == "1万+"
+
+
+@pytest.mark.skipif(
+    not PROFILE_FIXTURE.exists(),
+    reason="Profile fixture not yet captured",
+)
+def test_mapper_extracts_brand_metadata_from_profile(fake_client):
+    """Profile actor enriches d2 with bio, redId, ipLocation, etc."""
+    profile = _load_profile()
+    result = fake_client._build_save_brand_profile_dict(
+        brand_name="Songmont",
+        posts_items=_load_user_posts(),
+        profile_items=profile,
+    )
+    d2 = result["raw_dimensions"]["d2"]
+    assert d2["nickname"] == "Songmont山下有松"
+    assert d2["red_id"] == "95560643885"
+    assert d2["ip_location"] == "上海"
+    assert "山下有松" in d2["bio"]
+    assert "包中有温度" in d2["bio"]
+
+
+@pytest.mark.skipif(
+    not PROFILE_FIXTURE.exists(),
+    reason="Profile fixture not yet captured",
+)
+def test_mapper_derives_user_id_from_profile_url(fake_client):
+    """Profile actor doesn't include user_id field — derived from profileUrl."""
+    profile = _load_profile()
+    result = fake_client._build_save_brand_profile_dict(
+        brand_name="Songmont",
+        posts_items=_load_user_posts(),
+        profile_items=profile,
+    )
+    assert result["raw_dimensions"]["d2"]["user_id"] == "58c7d02b82ec3977dd42c218"
+
+
+@pytest.mark.skipif(
+    not PROFILE_FIXTURE.exists(),
+    reason="Profile fixture not yet captured",
+)
+def test_mapper_documents_isverified_limitation(fake_client):
+    """easyapi profile output doesn't include explicit isVerified flag.
+    Defaults to False. If a future actor version adds it, this test
+    should fail and the heuristic should be revisited.
+    """
+    profile = _load_profile()
+    result = fake_client._build_save_brand_profile_dict(
+        brand_name="Songmont",
+        posts_items=_load_user_posts(),
+        profile_items=profile,
+    )
+    assert result["raw_dimensions"]["d2"]["is_verified"] is False
