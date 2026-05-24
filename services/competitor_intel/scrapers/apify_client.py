@@ -5,31 +5,44 @@ Same DB write path (save_brand_profile / save_products); zero changes needed
 in scoring pipelines.
 
 Design: docs/SCRAPING-A2-APIFY-CLIENT-DESIGN.md
-Strategy: docs/SCRAPING-STRATEGY.md (Joanna's plan + William's corrections)
+Strategy: docs/SCRAPING-STRATEGY.md (Joanna's plan + William's corrections + Tier B decision)
 Tracks: GitHub issue #62
 
-Actor choices (validated 2026-05-22):
-  - XHS:    zhorex/rednote-xiaohongshu-scraper  (active; huggable_quote is deprecated)
-  - Taobao: pizani/taobao-product-scraper       (A4 — stubbed here)
-  - Douyin: natanielsantos/douyin-scraper       (A4 — stubbed here, needs fallback)
+ACTOR CHOICES — VALIDATED 2026-05-24
+====================================
+After spike testing on 2026-05-23 → 24, settled on TWO easyapi actors per brand:
 
-Why this file exists:
-  Our 750-line Playwright XHS scraper is structurally losing the anti-bot
-  arms race. Joanna's burner account got banned 2026-04-22 even with
-  conservative rate limits. Apify outsources the arms race to a vendor whose
-  full-time job is keeping their actors working. We pay ~$80-110/mo and stop
-  patching detection bypasses ourselves.
+  XHS user posts:   easyapi/rednote-xiaohongshu-user-posts-scraper
+  XHS profile:      easyapi/rednote-xiaohongshu-profile-scraper
+  (Taobao):         easyapi/... (A4 — separate PR)
+  (Douyin):         easyapi/... (A4 — separate PR)
 
-  This client is the integration layer. It reads APIFY_API_TOKEN and
-  XHS_SESSION_COOKIE from env vars (per CLAUDE.md no-hardcoding rule),
-  calls Apify's hosted actors, and produces the exact dict shape that
-  scrape_runner.py:_save_result() expects to pass to save_brand_profile().
+Why easyapi over zhorex (rejected): zhorex returned 0 items in user_posts and
+profile modes despite full burner cookies; its search mode also ignored the
+searchQuery parameter, returning random feed content. Five iterations confirmed
+zhorex is fundamentally broken for our use case. easyapi handles auth
+internally via residential proxies + their own cookie pool — we don't pass
+session cookies at all.
+
+COVERAGE TIER: B  (d2 brand stats + d3 content strategy)
+========================================================
+Deferred to future PRs:
+  - d4 KOL ecosystem (needs search-mode UGC scraping)
+  - d6 consumer sentiment from comments (needs easyapi comments actor)
+
+Per-post fields easyapi user_posts gives us:
+  ✓ title (display_title), likes (interact_info.liked_count), type
+  ✓ cover image URL (single), author info
+  ✗ body text, hashtags, comments/shares/saves counts, multiple images
+  ✗ note_id (empty — we derive a stable key from cover URL hash)
 """
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
@@ -46,40 +59,11 @@ except ImportError:
     _ApifyClientSdk = None
 
 
-# Apify actor IDs — kept here (not in scraping_rules.yml) because they're
-# tightly coupled to the per-actor mapping code below. If we move to a
-# different XHS actor later, the mapping logic changes too — single source
-# of truth for the (actor_id, mapping_function) pair belongs in code.
-XHS_ACTOR_ID = "zhorex/rednote-xiaohongshu-scraper"
-TAOBAO_ACTOR_ID = "pizani/taobao-product-scraper"           # A4
-DOUYIN_ACTOR_ID_PRIMARY = "natanielsantos/douyin-scraper"   # A4
-DOUYIN_ACTOR_ID_FALLBACK = None                             # A4 — pick at A4 time
-
-# Login-wall markers — load from scraping_rules.yml (same source of truth as
-# xhs_scraper.py uses). Fall back to a hardcoded set if the YAML loader fails,
-# so a config error doesn't take down the cron silently.
-try:
-    from ..scraping_config import auth_wall_markers as _yaml_auth_wall_markers, ScrapingRulesError
-    try:
-        _LOGIN_WALL_MARKERS = tuple(_yaml_auth_wall_markers("xhs")) or (
-            "扫码登录", "登录后查看", "登录小红书", "请先登录",
-            "Scan with logged-in", "QR code expires",
-        )
-    except ScrapingRulesError as _e:
-        logger.warning(
-            "scraping_rules.yml load failed (%s); falling back to hardcoded login-wall markers",
-            _e,
-        )
-        _LOGIN_WALL_MARKERS = (
-            "扫码登录", "登录后查看", "登录小红书", "请先登录",
-            "Scan with logged-in", "QR code expires",
-        )
-except ImportError:
-    # scraping_config not importable (e.g., test environment without yaml) — fall back
-    _LOGIN_WALL_MARKERS = (
-        "扫码登录", "登录后查看", "登录小红书", "请先登录",
-        "Scan with logged-in", "QR code expires",
-    )
+# Apify actor IDs — easyapi's specialized scrapers (validated 2026-05-24).
+XHS_USER_POSTS_ACTOR = "easyapi/rednote-xiaohongshu-user-posts-scraper"
+XHS_PROFILE_ACTOR = "easyapi/rednote-xiaohongshu-profile-scraper"
+TAOBAO_ACTOR_ID = "easyapi/taobao-product-scraper"          # A4
+DOUYIN_ACTOR_ID = "easyapi/douyin-scraper"                  # A4
 
 
 # ─── Exceptions ────────────────────────────────────────────────────────────
@@ -88,29 +72,24 @@ except ImportError:
 class ApifyScrapeError(Exception):
     """Structured error for Apify actor call failures.
 
-    Carries enough context that the caller can decide whether to retry,
-    skip the brand, or alert. Mirrors the LlmCallError pattern from
-    narrative_pipeline.py (William's PR #4fc7b1c precedent).
+    Mirrors the LlmCallError pattern from narrative_pipeline.py
+    (William's PR #4fc7b1c precedent).
     """
 
     def __init__(
         self,
         message: str,
         *,
-        mode: str = "",
-        brand: str = "",
         actor: str = "",
+        brand: str = "",
         status_code: int = 0,
         cost_so_far_usd: float = 0.0,
-        cookie_expired: bool = False,
     ):
         super().__init__(message)
-        self.mode = mode
-        self.brand = brand
         self.actor = actor
+        self.brand = brand
         self.status_code = status_code
         self.cost_so_far_usd = cost_so_far_usd
-        self.cookie_expired = cookie_expired
 
 
 # ─── Result type ───────────────────────────────────────────────────────────
@@ -133,30 +112,86 @@ class ScrapeResult:
     errors: List[str] = field(default_factory=list)
 
 
+# ─── Helpers (parse, hash, etc.) ───────────────────────────────────────────
+
+
+def _parse_count(val: Any) -> int:
+    """Parse easyapi's stringified counts (e.g., '6,739' or '10万') into int.
+
+    easyapi returns counts as strings with thousands commas or Chinese
+    万 ("ten thousand") suffix. Returns 0 on failure (don't crash the scrape).
+    """
+    if val is None:
+        return 0
+    if isinstance(val, int):
+        return val
+    s = str(val).strip().replace(",", "").replace("，", "")
+    if not s:
+        return 0
+    # Handle 万 (10k) and 亿 (100M) Chinese number suffixes
+    try:
+        if s.endswith("万"):
+            return int(float(s[:-1]) * 10000)
+        if s.endswith("亿"):
+            return int(float(s[:-1]) * 100_000_000)
+        if s.endswith("w") or s.endswith("W"):
+            return int(float(s[:-1]) * 10000)
+        return int(float(s))
+    except (ValueError, TypeError):
+        return 0
+
+
+_NOTE_ID_RE = re.compile(r"/([a-f0-9]{16,32})!nc_", re.IGNORECASE)
+
+
+def _derive_note_id(post: Dict[str, Any]) -> str:
+    """easyapi returns note_id="" — derive a stable ID for DB uniqueness.
+
+    Strategy: look for a stable hex hash in the cover image URL. Fallback to
+    SHA1 of (display_title + cover URL). Both produce stable IDs that match
+    across re-scrapes as long as the post + image don't change.
+    """
+    cover = post.get("cover") or {}
+    cover_url = cover.get("url_default") or cover.get("url") or ""
+
+    # Try to extract a stable hash from the cover URL path
+    m = _NOTE_ID_RE.search(cover_url)
+    if m:
+        return f"xhs-img-{m.group(1)}"
+
+    # Fallback: SHA1 of title + URL
+    seed = (post.get("display_title") or "") + cover_url
+    if seed.strip():
+        return f"xhs-sha-{hashlib.sha1(seed.encode('utf-8')).hexdigest()[:16]}"
+
+    return ""  # truly empty post — caller can skip
+
+
 # ─── Client ────────────────────────────────────────────────────────────────
 
 
 class ApifyScraperClient:
-    """Production XHS / Taobao / Douyin scraping via Apify hosted actors.
+    """Production XHS scraping via two easyapi actors per brand.
 
-    Stateless per-call; instantiate once per process (e.g., in scrape_runner.py)
-    and reuse for all brands in a daily run.
+    Each `scrape_xhs_brand` call makes TWO Apify actor invocations:
+      1. easyapi/rednote-xiaohongshu-user-posts-scraper (d3 content)
+      2. easyapi/rednote-xiaohongshu-profile-scraper    (d2 brand stats)
+
+    easyapi handles XHS authentication internally (residential proxies +
+    their own session pool), so we do NOT pass session cookies. The brand
+    dict MUST include an xhs_profile_url field (one-time config per brand).
 
     Args:
         apify_token: APIFY_API_TOKEN env var. Required.
-        xhs_cookie: XHS_SESSION_COOKIE env var. Optional for search mode;
-                    required for profile mode and comments.
         cost_logger: callable invoked after each actor call with a dict of
-                     {brand, platform, actor, mode, items_returned,
-                      estimated_cost_usd, timestamp, run_id}. Used by W2/A2's
-                     cost-logging hook. Pass None to disable.
+                     {brand, platform, actor, items_returned, estimated_cost_usd,
+                      timestamp, run_id}. Pass None to disable.
         max_retries: how many times to retry on transient failures (default 3).
     """
 
     def __init__(
         self,
         apify_token: str,
-        xhs_cookie: Optional[str] = None,
         cost_logger: Optional[Callable[[Dict[str, Any]], None]] = None,
         max_retries: int = 3,
     ):
@@ -164,12 +199,9 @@ class ApifyScraperClient:
             raise ValueError("apify_token is required (set APIFY_API_TOKEN env var)")
 
         self._token = apify_token
-        self._xhs_cookie = xhs_cookie
         self._cost_logger = cost_logger
         self._max_retries = max_retries
 
-        # Module-level _ApifyClientSdk is the real SDK class when installed,
-        # None otherwise. Tests monkey-patch this module attribute to inject a fake.
         sdk_cls = _ApifyClientSdk
         if sdk_cls is None:
             raise ImportError(
@@ -181,86 +213,57 @@ class ApifyScraperClient:
     # ── Public scrape methods ──
 
     def scrape_xhs_brand(self, brand: Dict[str, Any]) -> ScrapeResult:
-        """Scrape one XHS brand via Apify (search + profile, two actor calls).
+        """Scrape one XHS brand via two easyapi actors (user_posts + profile).
 
         Args:
-            brand: dict with at least 'name' and 'keyword' keys. Matches the
-                   shape scrape_runner.py reads from get_scrape_targets().
+            brand: dict with at least 'name' and 'xhs_profile_url' keys.
+                   The profile URL is one-time-config per brand (set up via
+                   admin UI or seed_test_data.py).
 
         Returns:
             ScrapeResult with data_dict matching save_brand_profile() contract.
 
         Raises:
             ApifyScrapeError on unrecoverable failure. Partial successes
-            (e.g., search worked but profile failed) return status="partial"
-            rather than raising.
+            (e.g., posts worked but profile failed) return status="partial".
         """
         brand_name = brand.get("name") or brand.get("brand_name") or ""
-        keyword = brand.get("keyword") or brand_name
-        if not brand_name or not keyword:
-            raise ValueError(f"brand requires 'name' and 'keyword' keys, got: {brand}")
+        profile_url = brand.get("xhs_profile_url") or brand.get("profile_url") or ""
+
+        if not brand_name:
+            raise ValueError(f"brand requires 'name' key, got: {brand}")
+        if not profile_url:
+            raise ValueError(
+                f"brand '{brand_name}' missing 'xhs_profile_url' — must be "
+                f"configured before scraping (one-time per brand)"
+            )
 
         result = ScrapeResult(status="failed", brand_name=brand_name, platform="xhs")
 
-        # ── Call 1: search mode (gets posts) ──
+        # ── Call 1: user_posts (d3 content) ──
         try:
-            search_items = self._call_actor(
-                actor_id=XHS_ACTOR_ID,
-                actor_input={
-                    "mode": "search",
-                    "searchQuery": keyword,
-                    "maxResults": 30,
-                    **({"cookieString": self._xhs_cookie} if self._xhs_cookie else {}),
-                },
-                mode_label="search",
-                brand=brand_name,
-            )
+            posts_items = self._call_easyapi_user_posts(profile_url, brand_name, max_items=50)
         except ApifyScrapeError as exc:
-            result.errors.append(f"search mode failed: {exc}")
-            return result  # search is critical — no posts = no data
+            result.errors.append(f"user_posts actor failed: {exc}")
+            return result  # posts are critical — no posts = no content data
 
-        if self._detect_login_wall(search_items):
-            result.errors.append("login wall detected in search results (cookie expired?)")
-            raise ApifyScrapeError(
-                "XHS search returned login-wall content",
-                mode="search", brand=brand_name, actor=XHS_ACTOR_ID,
-                cookie_expired=True,
-            )
-
-        # ── Call 2: profile mode (gets follower count + total stats) ──
-        # Cookie usually required for profile mode. If we don't have one,
-        # skip this call and degrade gracefully.
+        # ── Call 2: profile (d2 brand stats) ──
         profile_items: List[Dict[str, Any]] = []
-        profile_url = self._guess_brand_profile_url(search_items, brand_name)
-        if profile_url and self._xhs_cookie:
-            try:
-                profile_items = self._call_actor(
-                    actor_id=XHS_ACTOR_ID,
-                    actor_input={
-                        "mode": "profile",
-                        "userUrl": profile_url,
-                        "cookieString": self._xhs_cookie,
-                    },
-                    mode_label="profile",
-                    brand=brand_name,
-                )
-            except ApifyScrapeError as exc:
-                # Don't bail the whole scrape on profile failure — degrade
-                logger.warning("Profile mode failed for %s: %s", brand_name, exc)
-                result.errors.append(f"profile mode failed: {exc}")
-        elif not profile_url:
-            result.errors.append("no brand profile URL found in search results")
-        elif not self._xhs_cookie:
-            result.errors.append("XHS_SESSION_COOKIE not set — skipped profile mode")
+        try:
+            profile_items = self._call_easyapi_profile(profile_url, brand_name)
+        except ApifyScrapeError as exc:
+            # Profile failure is degradation, not fatal — partial scrape is OK
+            logger.warning("Profile actor failed for %s: %s", brand_name, exc)
+            result.errors.append(f"profile actor failed: {exc}")
 
         # ── Map combined output → save_brand_profile() dict ──
         try:
             data_dict = self._build_save_brand_profile_dict(
                 brand_name=brand_name,
-                search_items=search_items,
+                posts_items=posts_items,
                 profile_items=profile_items,
             )
-            notes_list = self._build_save_products_list(brand_name, search_items)
+            notes_list = self._build_save_products_list(brand_name, posts_items)
         except Exception as exc:  # mapper bugs shouldn't bring down the cron
             logger.exception("Mapping failed for %s", brand_name)
             result.errors.append(f"mapping failed: {exc}")
@@ -273,35 +276,64 @@ class ApifyScraperClient:
 
     def scrape_taobao_products(self, brand: Dict[str, Any]) -> ScrapeResult:
         """Taobao product search. A4 — separate PR."""
-        raise NotImplementedError("A4 task — pizani/taobao-product-scraper integration pending")
+        raise NotImplementedError("A4 task — easyapi Taobao actor integration pending")
 
     def scrape_douyin_brand(self, brand: Dict[str, Any]) -> ScrapeResult:
-        """Douyin brand scrape. A4 — separate PR with primary+fallback path."""
-        raise NotImplementedError("A4 task — natanielsantos/douyin-scraper + fallback pending")
+        """Douyin brand scrape. A4 — separate PR."""
+        raise NotImplementedError("A4 task — easyapi Douyin actor integration pending")
 
-    # ── Internal helpers ──
+    # ── Actor call helpers ──
+
+    def _call_easyapi_user_posts(
+        self,
+        profile_url: str,
+        brand: str,
+        max_items: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """Call easyapi/rednote-xiaohongshu-user-posts-scraper.
+
+        Input shape: {"profileUrls": [url], "maxItems": N}
+        Output shape: list of items each with {"profileUrl", "postData", "scrapedAt"}.
+        """
+        return self._call_actor(
+            actor_id=XHS_USER_POSTS_ACTOR,
+            actor_input={
+                "profileUrls": [profile_url],
+                "maxItems": max_items,
+            },
+            brand=brand,
+            label="user_posts",
+        )
+
+    def _call_easyapi_profile(self, profile_url: str, brand: str) -> List[Dict[str, Any]]:
+        """Call easyapi/rednote-xiaohongshu-profile-scraper.
+
+        Input shape: {"profileUrls": [url]}
+        Output shape: list of profile items with brand stats.
+        """
+        return self._call_actor(
+            actor_id=XHS_PROFILE_ACTOR,
+            actor_input={"profileUrls": [profile_url]},
+            brand=brand,
+            label="profile",
+        )
 
     def _call_actor(
         self,
         *,
         actor_id: str,
         actor_input: Dict[str, Any],
-        mode_label: str,
         brand: str,
+        label: str,
     ) -> List[Dict[str, Any]]:
         """Single Apify actor call with retries + cost logging.
 
-        Retries up to self._max_retries on transient errors (rate limit,
-        timeout). Non-transient errors raise ApifyScrapeError immediately.
-
         SYNC method — uses time.sleep() for backoff. The Apify Python SDK
         is synchronous; if A3 calls this from an async context, wrap with
-        ``asyncio.to_thread()`` or ``loop.run_in_executor()`` to avoid
-        blocking the event loop.
+        ``asyncio.to_thread()`` (which scrape_runner._scrape_brand_via_apify
+        already does).
         """
-        # Sanitize input for logging — never log cookieString
-        safe_input = {k: v for k, v in actor_input.items() if k != "cookieString"}
-        logger.info("apify: %s actor=%s brand=%s input=%s", mode_label, actor_id, brand, safe_input)
+        logger.info("apify: %s actor=%s brand=%s", label, actor_id, brand)
 
         last_exc: Optional[Exception] = None
         for attempt in range(1, self._max_retries + 1):
@@ -309,97 +341,43 @@ class ApifyScraperClient:
                 run = self._client.actor(actor_id).call(run_input=actor_input)
                 items = list(self._client.dataset(run["defaultDatasetId"]).iterate_items())
 
-                # Cost estimation — refined at A3 time once we see actual billing
-                cost_estimate = self._estimate_cost(actor_id, mode_label, len(items))
+                cost_estimate = self._estimate_cost(actor_id, len(items))
                 self._log_cost({
                     "brand": brand,
-                    "platform": "xhs" if "xiaohongshu" in actor_id or "rednote" in actor_id else "unknown",
+                    "platform": "xhs",
                     "actor": actor_id,
-                    "mode": mode_label,
+                    "label": label,
                     "items_returned": len(items),
                     "estimated_cost_usd": cost_estimate,
                     "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                     "run_id": run.get("id", ""),
                 })
 
-                logger.info("apify: %s done items=%d cost=$%.4f", mode_label, len(items), cost_estimate)
+                logger.info("apify: %s done items=%d cost=$%.4f", label, len(items), cost_estimate)
                 return items
 
             except Exception as exc:
                 last_exc = exc
-                # Apify SDK raises generic exceptions — we'd refine these
-                # once we see real failure shapes in A3 testing. Until then,
-                # treat all as potentially-transient and retry.
                 if attempt < self._max_retries:
                     backoff = 2 ** attempt
                     logger.warning(
                         "apify: %s failed (attempt %d/%d): %s — retrying in %ds",
-                        mode_label, attempt, self._max_retries, exc, backoff,
+                        label, attempt, self._max_retries, exc, backoff,
                     )
                     time.sleep(backoff)
 
         raise ApifyScrapeError(
             f"Actor {actor_id} failed after {self._max_retries} attempts: {last_exc}",
-            mode=mode_label,
-            brand=brand,
             actor=actor_id,
+            brand=brand,
         )
 
-    def _detect_login_wall(self, items: List[Any]) -> bool:
-        """Walk the returned items looking for XHS login-wall markers."""
-        if not items:
-            return False
-        text_blob = " ".join(
-            str(v) for item in items if isinstance(item, dict)
-            for v in item.values() if isinstance(v, str)
-        )[:5000]  # truncate to avoid quadratic cost on large outputs
-        return any(marker in text_blob for marker in _LOGIN_WALL_MARKERS)
+    def _estimate_cost(self, actor_id: str, items_returned: int) -> float:
+        """Pricing source: Apify actor pages as of 2026-05-24.
 
-    def _guess_brand_profile_url(
-        self,
-        search_items: List[Dict[str, Any]],
-        brand_name: str,
-    ) -> Optional[str]:
-        """Best-effort: find a brand's official profile URL in search results.
-
-        Looks for posts whose author.nickname matches brand_name (case-insensitive),
-        then constructs the profile URL from author.userId.
+        easyapi/rednote-xiaohongshu-*-scraper: $4.99 / 1000 results = $0.005 / item.
         """
-        target = brand_name.lower()
-        for item in search_items:
-            if not isinstance(item, dict):
-                continue
-            author = item.get("author") or {}
-            if not isinstance(author, dict):
-                continue
-            nick = (author.get("nickname") or "").lower()
-            user_id = author.get("userId") or ""
-            if user_id and target in nick:
-                return f"https://www.xiaohongshu.com/user/profile/{user_id}"
-            # Fallback shapes some actors return
-            if (item.get("authorName") or "").lower() == target and item.get("authorUserId"):
-                return f"https://www.xiaohongshu.com/user/profile/{item['authorUserId']}"
-        return None
-
-    def _estimate_cost(self, actor_id: str, mode: str, items_returned: int) -> float:
-        """Rough per-call cost estimate. Refined at A3 with real billing data.
-
-        Pricing source: Apify actor pages as of 2026-05-22.
-        zhorex/rednote-xiaohongshu-scraper: per-event pricing
-            - search post: $0.010/post
-            - profile: $0.020/profile
-            - comments: $0.005/comment
-            - videos: $0.025/video
-        """
-        if mode == "search":
-            return 0.010 * items_returned
-        if mode == "profile":
-            return 0.020 * max(1, items_returned)
-        if mode == "comments":
-            return 0.005 * items_returned
-        if mode == "video":
-            return 0.025 * items_returned
-        return 0.0
+        return 0.005 * items_returned
 
     def _log_cost(self, payload: Dict[str, Any]) -> None:
         if self._cost_logger is None:
@@ -409,59 +387,92 @@ class ApifyScraperClient:
         except Exception:  # cost logging must never break the scrape
             logger.exception("cost_logger raised — continuing")
 
-    # ── Field mappers (Apify output → DB dict shape) ──
+    # ── Field mappers (easyapi output → DB dict shape) ────────────────────
     #
-    # STUB. These functions need a real Apify Console run output (A1) to
-    # validate field paths. Current implementation is the educated-guess
-    # version based on zhorex's documented schema fetched 2026-05-22 from
-    # https://apify.com/zhorex/rednote-xiaohongshu-scraper.
+    # Contract source of truth: scrape_runner.py:_save_result() lines 73-138.
+    # The new wrapper must produce the SAME dict shape so scoring pipelines
+    # (which read DB JSONB columns) are completely untouched.
     #
-    # After A1 completes, replace educated guesses with verified field paths,
-    # using the recorded fixture as ground truth.
+    # easyapi user_posts schema (validated against real Songmont fixture
+    # apify_easyapi_user_posts_songmont_2026-05-24.json):
+    #
+    #   item = {
+    #     "profileUrl": str,
+    #     "postData": {
+    #       "postUrl": str,        # generic explore URL, not per-post permalink
+    #       "type": "video" | "normal",
+    #       "display_title": str,
+    #       "user": {"nick_name", "nickname", "avatar", "user_id"},
+    #       "interact_info": {"liked_count": str(comma-formatted), "sticky": bool},
+    #       "cover": {"url_default", "url_pre", "info_list": [...]},
+    #       "note_id": "" (always empty — we derive via _derive_note_id),
+    #       "xsec_token": str
+    #     },
+    #     "scrapedAt": str
+    #   }
+    #
+    # easyapi profile schema (TBD — validated when Will sends profile fixture).
 
     def _build_save_brand_profile_dict(
         self,
         *,
         brand_name: str,
-        search_items: List[Dict[str, Any]],
+        posts_items: List[Dict[str, Any]],
         profile_items: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """Produce the exact dict shape save_brand_profile() expects.
+        """Build the EXACT dict shape save_brand_profile() expects.
 
-        Contract source of truth: scrape_runner.py:73-138.
+        Contract: scrape_runner.py:73-138.
         """
-        profile = profile_items[0] if profile_items else {}
+        # ── d2 from profile actor (if it ran) ──
+        prof = profile_items[0] if profile_items else {}
+        # easyapi profile field paths TBD — placeholders use best-guess based on
+        # the schema doc's mention of "fans count" and "nickname".
+        # Will be corrected to verified paths when profile fixture arrives.
+        follower_count = _parse_count(
+            (prof.get("interactions") or {}).get("fans")
+            or prof.get("followers")
+            or prof.get("fansCount")
+            or 0
+        )
+        total_notes = _parse_count(
+            prof.get("notesCount")
+            or prof.get("totalNotes")
+            or len(posts_items)  # fallback: count of posts we scraped
+        )
+        total_likes = _parse_count(
+            prof.get("totalLikes")
+            or prof.get("likedAndCollected")
+            or 0
+        )
+        is_verified = bool(prof.get("isVerified") or prof.get("verified"))
+        brand_user_id = (
+            prof.get("userId") or prof.get("user_id") or ""
+        )
+        # Fall back to user_id from first post if profile didn't return one
+        if not brand_user_id and posts_items:
+            first_user = (posts_items[0].get("postData") or {}).get("user") or {}
+            brand_user_id = first_user.get("user_id") or ""
+        brand_nickname = (
+            prof.get("nickname") or prof.get("nick_name") or brand_name
+        )
 
-        # Top-level stats from profile mode
-        follower_count = profile.get("followers") or 0
-        total_notes = profile.get("notesCount") or 0
-        total_likes = profile.get("totalLikes") or 0
-        is_verified = bool(profile.get("isVerified"))
-        brand_user_id = profile.get("userId") or ""
-        brand_nickname = profile.get("nickname") or brand_name
-
-        # Build d3.top_notes from search results (up to 50)
-        top_notes = self._map_posts_to_top_notes(search_items[:50])
-
-        # d4.note_authors from filtered top_notes
-        d4_note_authors = [
-            {
-                "name": n.get("author_name", ""),
-                "followers": n.get("author_followers", 0),
-                "is_sponsored": n.get("is_sponsored", False),
-            }
-            for n in top_notes if n.get("author_followers", 0) > 10000
-        ][:20]
-
-        # d3.content_types: count posts by type
+        # ── d3 from user_posts actor ──
+        top_notes = self._map_posts_to_top_notes(posts_items[:50])
         content_types: Dict[str, int] = {}
-        for item in search_items:
-            t = (item.get("type") or "normal").lower()
+        for item in posts_items:
+            post = item.get("postData") or {}
+            t = (post.get("type") or "normal").lower()
             content_types[t] = content_types.get(t, 0) + 1
+
+        # d4.note_authors filtered (easyapi user_posts only returns the brand
+        # itself as author for each post; no UGC mentions yet — that needs the
+        # search actor in a future PR)
+        d4_note_authors: List[Dict[str, Any]] = []
 
         return {
             "follower_count": follower_count,
-            "total_products": None,  # XHS has no product concept
+            "total_products": None,  # XHS has no product concept at the user level
             "avg_price": None,
             "engagement_metrics": {
                 "total_likes": total_likes,
@@ -472,7 +483,7 @@ class ApifyScraperClient:
             },
             "raw_dimensions": {
                 "d1": {
-                    "search_suggestions": [],  # zhorex search doesn't return this; A4 candidate
+                    "search_suggestions": [],  # not from user_posts; A4 candidate
                     "search_volume_rank": "",
                 },
                 "d2": {
@@ -486,14 +497,14 @@ class ApifyScraperClient:
                 "d3": {
                     "content_types": content_types,
                     "top_notes": top_notes,
-                    "catalog_size": len(search_items),
+                    "catalog_size": len(posts_items),
                 },
                 "d4": {
-                    "kols": [],  # would need per-author profile lookups; A4 candidate
+                    "kols": [],
                     "note_authors": d4_note_authors,
                 },
                 "d6": {
-                    "sentiment_keywords": [],  # needs comments mode (cookie-gated); A5/A4 candidate
+                    "sentiment_keywords": [],  # needs comments actor; A4 candidate
                     "positive_keywords": [],
                     "negative_keywords": [],
                     "consumer_comments": [],
@@ -501,92 +512,107 @@ class ApifyScraperClient:
             },
         }
 
-    def _map_posts_to_top_notes(self, posts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Map Apify post items → d3.top_notes shape (per scrape_runner.py:96-114)."""
+    def _map_posts_to_top_notes(self, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Map easyapi user_posts items → d3.top_notes shape.
+
+        Per scrape_runner.py:96-114, each top_notes entry needs:
+          title, body_text, likes, comments_count, shares, hashtags,
+          tagged_products, is_sponsored, brand_collab, author_followers,
+          image_count, top_comments, note_id, type, author_name
+
+        easyapi user_posts populates: title, likes, type, author_name, cover image.
+        Everything else is empty/zero — deferred to comments/search actors in A4.
+        """
         out = []
-        for p in posts:
-            if not isinstance(p, dict):
+        for item in items:
+            if not isinstance(item, dict):
                 continue
-            author = p.get("author") or {}
-            images = p.get("images") or []
-            hashtags = p.get("hashtag") or p.get("hashtags") or p.get("tags") or []
+            post = item.get("postData") or {}
+            user = post.get("user") or {}
+            cover = post.get("cover") or {}
+            interact = post.get("interact_info") or {}
+
+            cover_url = cover.get("url_default") or cover.get("url") or ""
+            note_id = _derive_note_id(post)
+
             out.append({
-                "title":              p.get("title", "") or "",
-                "body_text":          p.get("content", "") or "",
-                "likes":              int(p.get("likes", 0) or 0),
-                "comments_count":     int(p.get("comments", 0) or 0),
-                "shares":             int(p.get("shares", 0) or 0),
-                "hashtags":           hashtags if isinstance(hashtags, list) else [],
-                "tagged_products":    [],  # not surfaced by zhorex search mode
-                "is_sponsored":       False,  # not surfaced; could regex on content for #广告
-                "brand_collab":       "",
-                "author_followers":   0,  # would require per-post author lookup
-                "author_name":        author.get("nickname") or p.get("authorName") or "",
-                "image_count":        len(images) if isinstance(images, list) else 0,
-                "top_comments":       [],  # needs comments mode
-                "note_id":            p.get("postId", "") or "",
-                "type":               p.get("type", "normal") or "normal",
+                "title":             post.get("display_title") or "",
+                "body_text":         "",  # easyapi doesn't populate; needs comments actor
+                "likes":             _parse_count(interact.get("liked_count")),
+                "comments_count":    0,   # not populated by user_posts actor
+                "shares":            0,
+                "hashtags":          [],  # not populated by user_posts actor
+                "tagged_products":   [],
+                "is_sponsored":      False,
+                "brand_collab":      "",
+                "author_followers":  0,
+                "author_name":       user.get("nickname") or user.get("nick_name") or "",
+                "image_count":       1 if cover_url else 0,
+                "top_comments":      [],
+                "note_id":           note_id,
+                "type":              post.get("type") or "normal",
+                "cover_url":         cover_url,  # extra: useful for the Brief UI
             })
         return out
 
     def _build_save_products_list(
         self,
         brand_name: str,
-        search_items: List[Dict[str, Any]],
+        items: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        """Notes-as-products list (per scrape_runner.py:148-158 pattern)."""
+        """Map easyapi user_posts items → save_products() list shape."""
         out = []
-        for i, p in enumerate(search_items):
-            if not isinstance(p, dict):
+        for i, item in enumerate(items):
+            if not isinstance(item, dict):
                 continue
-            note_id = p.get("postId", f"{brand_name}-{i}")
-            images = p.get("images") or []
-            hashtags = p.get("hashtag") or p.get("hashtags") or p.get("tags") or []
+            post = item.get("postData") or {}
+            cover = post.get("cover") or {}
+            interact = post.get("interact_info") or {}
+            note_id = _derive_note_id(post) or f"{brand_name}-easyapi-{i}"
+            cover_url = cover.get("url_default") or cover.get("url") or ""
+
             out.append({
                 "product_id":      note_id,
-                "product_name":    p.get("title", "") or "",
-                "sales_volume":    int(p.get("likes", 0) or 0),
-                "review_count":    int(p.get("comments", 0) or 0),
-                "product_url":     p.get("postUrl") or (f"https://www.xiaohongshu.com/explore/{note_id}" if note_id else ""),
-                "image_urls":      images if isinstance(images, list) else [],
-                "category":        ", ".join(hashtags[:5]) if isinstance(hashtags, list) and hashtags else None,
-                "data_confidence": "apify",
+                "product_name":    post.get("display_title") or "",
+                "sales_volume":    _parse_count(interact.get("liked_count")),
+                "review_count":    0,  # not in easyapi user_posts output
+                "product_url":     post.get("postUrl") or "",
+                "image_urls":      [cover_url] if cover_url else [],
+                "category":        None,  # would need hashtags — not available
+                "data_confidence": "apify_easyapi",
             })
         return out
 
 
 # ─── Smoke test entrypoint (for A3 local verification) ─────────────────────
 #
-# Not invoked from production. Run by hand to verify the wrapper works:
-#
-#   USE_APIFY=true \
 #   APIFY_API_TOKEN=apify_api_xxx \
-#   XHS_SESSION_COOKIE='web_session=...' \
-#       python -m services.competitor_intel.scrapers.apify_client --brand Songmont
+#       python -m services.competitor_intel.scrapers.apify_client \
+#         --brand Songmont \
+#         --profile-url https://www.rednote.com/user/profile/58c7d02b82ec3977dd42c218
 #
-# Prints the produced data_dict to stdout for visual inspection. Does NOT
-# touch the database.
+# Prints the produced data_dict to stdout. Does NOT touch the database.
 
 def _smoke_test_main():
     import argparse
     import json as _json
-    parser = argparse.ArgumentParser(description="A2/A3 smoke test for ApifyScraperClient")
+    parser = argparse.ArgumentParser(description="A3 smoke test for ApifyScraperClient (easyapi)")
     parser.add_argument("--brand", default="Songmont")
-    parser.add_argument("--keyword", default=None, help="Override search keyword")
+    parser.add_argument("--profile-url", required=True,
+                        help="XHS profile URL, e.g. https://www.rednote.com/user/profile/<userId>")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
     token = os.environ.get("APIFY_API_TOKEN")
-    cookie = os.environ.get("XHS_SESSION_COOKIE")
     if not token:
         print("ERROR: APIFY_API_TOKEN env var not set", flush=True)
         return 1
 
-    client = ApifyScraperClient(apify_token=token, xhs_cookie=cookie)
+    client = ApifyScraperClient(apify_token=token)
     result = client.scrape_xhs_brand({
         "name": args.brand,
-        "keyword": args.keyword or args.brand,
+        "xhs_profile_url": args.profile_url,
     })
 
     print(f"\nstatus: {result.status}")

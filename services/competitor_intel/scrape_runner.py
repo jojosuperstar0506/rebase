@@ -222,13 +222,17 @@ async def scrape_brand(platform: str, brand_name: str, keyword: str, tier: str, 
 async def _scrape_brand_via_apify(platform: str, brand_name: str, keyword: str, tier: str) -> bool:
     """A3 — route a single brand scrape through ApifyScraperClient.
 
-    Reads APIFY_API_TOKEN and XHS_SESSION_COOKIE from env. Bypasses
-    `_save_result()` (which expects the XhsBrandData object shape) and
-    writes the apify_client.data_dict directly to save_brand_profile().
+    Reads APIFY_API_TOKEN from env (no XHS_SESSION_COOKIE needed — easyapi
+    actors handle auth internally via residential proxies + their own
+    session pool). Bypasses `_save_result()` (which expects the XhsBrandData
+    object shape) and writes the apify_client.data_dict directly to
+    save_brand_profile().
 
-    Returns True on success/partial, False on failure. On cookie expiration,
-    marks the platform connection as expired so the next run skips XHS until
-    the cookie is refreshed.
+    Brand dict must include 'xhs_profile_url' (one-time-config per brand)
+    since easyapi's user_posts and profile actors both require a profile URL
+    input — search-by-keyword is not used (validated unreliable during A1.5).
+
+    Returns True on success/partial, False on failure.
     """
     try:
         from .scrapers.apify_client import ApifyScraperClient, ApifyScrapeError
@@ -242,23 +246,29 @@ async def _scrape_brand_via_apify(platform: str, brand_name: str, keyword: str, 
         print("[ERROR/apify] USE_APIFY=true but APIFY_API_TOKEN env var not set")
         return False
 
-    cookie = os.environ.get("XHS_SESSION_COOKIE") if platform == "xhs" else None
-    if platform == "xhs" and not cookie:
-        print("[WARN/apify] XHS_SESSION_COOKIE not set — profile mode will be skipped")
+    # Fetch the brand's pre-configured XHS profile URL. For now, read from a
+    # JSON column on workspace_competitors or fall back to env-var lookup.
+    # TODO(A3 followup): persist xhs_profile_url per competitor in the DB
+    # (one-time admin UI). Until then, env var XHS_PROFILE_URL_<BRAND> is
+    # the bootstrap mechanism for the demo workspace.
+    profile_url = os.environ.get(f"XHS_PROFILE_URL_{brand_name.upper().replace(' ', '_')}")
+    if not profile_url:
+        print(f"[ERROR/apify] No XHS profile URL configured for brand '{brand_name}'. "
+              f"Set XHS_PROFILE_URL_{brand_name.upper().replace(' ', '_')} env var "
+              f"OR migrate to per-competitor xhs_profile_url DB column (A3 followup).")
+        return False
 
-    print(f"[SCRAPE/apify] {platform} / {brand_name} (keyword: {keyword}, tier: {tier})")
-    client = ApifyScraperClient(apify_token=token, xhs_cookie=cookie)
+    print(f"[SCRAPE/apify] {platform} / {brand_name} (profile: {profile_url}, tier: {tier})")
+    client = ApifyScraperClient(apify_token=token)
 
     try:
         # apify_client is sync; offload so we don't block the asyncio loop
         result = await asyncio.to_thread(
             client.scrape_xhs_brand,
-            {"name": brand_name, "keyword": keyword},
+            {"name": brand_name, "xhs_profile_url": profile_url},
         )
     except ApifyScrapeError as exc:
         print(f"[FAIL/apify] {platform} / {brand_name}: {exc}")
-        if exc.cookie_expired:
-            mark_connection_expired(platform)
         return False
     except Exception as exc:
         print(f"[ERROR/apify] {platform} / {brand_name}: unexpected {type(exc).__name__}: {exc}")

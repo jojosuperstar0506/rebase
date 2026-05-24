@@ -1,12 +1,14 @@
 """
 Tests for ApifyScraperClient (services/competitor_intel/scrapers/apify_client.py).
 
-Two test sources:
-1. SYNTHETIC_* fixtures — hand-constructed dicts shaped per zhorex's documented
-   schema. These exercise the optimistic "all fields populated" code paths.
-2. REAL fixtures in services/competitor_intel/scrapers/fixtures/ — captured
-   from actual Apify Console runs during A1 (2026-05-23). These exercise the
-   real-world thin-data search-mode behavior.
+Real-fixture-driven: tests load the actual easyapi output captured during the
+A1.5/Tier B spike (2026-05-24) and validate that the mapper produces the exact
+dict shape save_brand_profile() expects.
+
+Two fixtures:
+  - apify_easyapi_user_posts_songmont_2026-05-24.json  (validated, real)
+  - apify_easyapi_profile_songmont_2026-05-24.json     (TBD — populated when
+    Will runs the profile actor; until then, profile-mapper tests are skipped)
 
 Run:
     pytest services/competitor_intel/test_apify_client.py -v
@@ -17,98 +19,34 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
 FIXTURE_DIR = Path(__file__).parent / "scrapers" / "fixtures"
-
-
-# ─── Synthetic fixtures (replace with real A1 output later) ────────────────
-
-# Search-mode response — shape per zhorex docs. Each item is one XHS post.
-SYNTHETIC_SEARCH = [
-    {
-        "postId": "abc123",
-        "postUrl": "https://www.xiaohongshu.com/explore/abc123",
-        "type": "normal",
-        "title": "Songmont 新款帆布包测评",
-        "content": "今天分享一下 Songmont 的新款帆布包...",
-        "hashtag": ["Songmont", "帆布包", "穿搭"],
-        "publishedAt": "2026-05-20T10:00:00Z",
-        "images": ["https://sns-img.xhscdn.com/img1.jpg", "https://sns-img.xhscdn.com/img2.jpg"],
-        "likes": 1500,
-        "comments": 87,
-        "shares": 42,
-        "saves": 230,
-        "author": {
-            "userId": "songmont_official",
-            "nickname": "Songmont 官方",
-            "avatar": "https://avatar.xhscdn.com/songmont.jpg",
-        },
-        "authorName": "Songmont 官方",
-        "scrapedAt": "2026-05-22T08:00:00Z",
-    },
-    {
-        "postId": "def456",
-        "postUrl": "https://www.xiaohongshu.com/explore/def456",
-        "type": "video",
-        "title": "口袋包真的不实用吗？",
-        "content": "Songmont 口袋包入手三个月真实感受...",
-        "hashtag": ["Songmont", "口袋包"],
-        "publishedAt": "2026-05-18T15:30:00Z",
-        "images": ["https://sns-img.xhscdn.com/img3.jpg"],
-        "videoUrl": "https://video.xhscdn.com/vid1.mp4",
-        "likes": 850,
-        "comments": 45,
-        "shares": 12,
-        "saves": 110,
-        "author": {
-            "userId": "user_xyz",
-            "nickname": "随便看看",
-        },
-        "authorName": "随便看看",
-    },
-]
-
-# Profile-mode response — shape per zhorex docs. Single profile item.
-SYNTHETIC_PROFILE = [
-    {
-        "userId": "songmont_official",
-        "profileUrl": "https://www.xiaohongshu.com/user/profile/songmont_official",
-        "redId": "songmont",
-        "nickname": "Songmont 官方",
-        "avatar": "https://avatar.xhscdn.com/songmont.jpg",
-        "description": "原创设计 · 都市轻奢",
-        "gender": "female",
-        "location": "上海",
-        "followers": 47200,
-        "following": 12,
-        "totalLikes": 285000,
-        "notesCount": 340,
-        "isVerified": True,
-        "tags": ["原创设计", "包袋", "穿搭"],
-    }
-]
-
-LOGIN_WALL_FIXTURE = [
-    {
-        "title": "登录小红书",
-        "content": "请先登录后查看内容",
-    }
-]
+USER_POSTS_FIXTURE = FIXTURE_DIR / "apify_easyapi_user_posts_songmont_2026-05-24.json"
+PROFILE_FIXTURE = FIXTURE_DIR / "apify_easyapi_profile_songmont_2026-05-24.json"
 
 
 # ─── Fixtures ──────────────────────────────────────────────────────────────
 
 
+def _load_user_posts() -> list:
+    with open(USER_POSTS_FIXTURE, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _load_profile() -> list:
+    """Returns [] if the profile fixture doesn't exist yet (Will's pending run)."""
+    if not PROFILE_FIXTURE.exists():
+        return []
+    with open(PROFILE_FIXTURE, encoding="utf-8") as f:
+        return json.load(f)
+
+
 @pytest.fixture
 def fake_client(monkeypatch):
-    """Build an ApifyScraperClient with the real ApifyClient mocked out."""
-    # Set required env vars
-    monkeypatch.setenv("APIFY_API_TOKEN", "apify_api_test_fake")
-
-    # Patch the SDK class before instantiating our wrapper
+    """Build an ApifyScraperClient with the real ApifyClient SDK mocked out."""
     from services.competitor_intel.scrapers import apify_client as mod
 
     fake_actor = MagicMock()
@@ -119,8 +57,7 @@ def fake_client(monkeypatch):
 
     monkeypatch.setattr(mod, "_ApifyClientSdk", lambda token: fake_apify_client, raising=False)
 
-    client = mod.ApifyScraperClient(apify_token="apify_api_test_fake", xhs_cookie="web_session=fake")
-    # Expose the mock so tests can configure return values
+    client = mod.ApifyScraperClient(apify_token="apify_api_test_fake")
     client._fake_actor = fake_actor
     client._fake_dataset = fake_dataset
     return client
@@ -135,241 +72,284 @@ def test_init_requires_token():
         ApifyScraperClient(apify_token="")
 
 
-# ─── Login-wall detection ──────────────────────────────────────────────────
+def test_init_no_cookie_param():
+    """easyapi handles auth internally — constructor should NOT accept xhs_cookie."""
+    from services.competitor_intel.scrapers.apify_client import ApifyScraperClient
+    # Cookie params shouldn't be in the signature; passing one should raise TypeError
+    with pytest.raises(TypeError):
+        ApifyScraperClient(apify_token="x", xhs_cookie="should_not_exist")
 
 
-def test_login_wall_detected_in_results(fake_client):
-    assert fake_client._detect_login_wall(LOGIN_WALL_FIXTURE) is True
+# ─── Parse helpers ─────────────────────────────────────────────────────────
 
 
-def test_login_wall_not_detected_in_normal_results(fake_client):
-    assert fake_client._detect_login_wall(SYNTHETIC_SEARCH) is False
+def test_parse_count_handles_int():
+    from services.competitor_intel.scrapers.apify_client import _parse_count
+    assert _parse_count(42) == 42
 
 
-def test_login_wall_empty_results_returns_false(fake_client):
-    assert fake_client._detect_login_wall([]) is False
+def test_parse_count_handles_comma_string():
+    """easyapi returns counts like '6,739' — must parse to 6739."""
+    from services.competitor_intel.scrapers.apify_client import _parse_count
+    assert _parse_count("6,739") == 6739
+    assert _parse_count("1,234,567") == 1234567
 
 
-# ─── Profile URL guessing ─────────────────────────────────────────────────
+def test_parse_count_handles_chinese_wan():
+    """XHS often abbreviates large numbers: '10万' = 100,000."""
+    from services.competitor_intel.scrapers.apify_client import _parse_count
+    assert _parse_count("10万") == 100000
+    assert _parse_count("3.5万") == 35000
 
 
-def test_guess_profile_url_finds_brand_match(fake_client):
-    url = fake_client._guess_brand_profile_url(SYNTHETIC_SEARCH, "Songmont")
-    assert url == "https://www.xiaohongshu.com/user/profile/songmont_official"
+def test_parse_count_handles_chinese_yi():
+    """'1亿' = 100,000,000."""
+    from services.competitor_intel.scrapers.apify_client import _parse_count
+    assert _parse_count("1亿") == 100_000_000
 
 
-def test_guess_profile_url_returns_none_when_no_match(fake_client):
-    url = fake_client._guess_brand_profile_url(SYNTHETIC_SEARCH, "UnknownBrand")
-    assert url is None
+def test_parse_count_returns_zero_on_garbage():
+    from services.competitor_intel.scrapers.apify_client import _parse_count
+    assert _parse_count(None) == 0
+    assert _parse_count("") == 0
+    assert _parse_count("not a number") == 0
 
 
-# ─── Cost estimation ──────────────────────────────────────────────────────
+def test_derive_note_id_uses_cover_url_hash():
+    """easyapi note_id is always empty — derive from cover URL."""
+    from services.competitor_intel.scrapers.apify_client import _derive_note_id
+    post = {
+        "cover": {
+            "url_default": "http://sns-web-i10.rednotecdn.com/202605241954/abc123def456/1040g2sg31va4ia9r3qa0!nc_n_webp_mw_1?src=A",
+        }
+    }
+    note_id = _derive_note_id(post)
+    assert note_id.startswith("xhs-")
+    assert note_id  # non-empty
 
 
-def test_cost_estimate_search_mode(fake_client):
-    # 30 search items at $0.010 each
-    assert fake_client._estimate_cost("zhorex/rednote-xiaohongshu-scraper", "search", 30) == pytest.approx(0.30)
+def test_derive_note_id_stable_across_calls():
+    """Same input → same ID (for DB uniqueness)."""
+    from services.competitor_intel.scrapers.apify_client import _derive_note_id
+    post = {
+        "cover": {"url_default": "http://example.com/x"},
+        "display_title": "test",
+    }
+    assert _derive_note_id(post) == _derive_note_id(post)
 
 
-def test_cost_estimate_profile_mode(fake_client):
-    # Profile mode: $0.020 per profile, minimum 1
-    assert fake_client._estimate_cost("zhorex/rednote-xiaohongshu-scraper", "profile", 1) == pytest.approx(0.020)
+# ─── Real-fixture validation (the meat of the regression suite) ────────────
 
 
-# ─── Mapper: posts → top_notes (DB contract) ──────────────────────────────
+def test_real_user_posts_fixture_loads_with_10_items():
+    items = _load_user_posts()
+    assert len(items) == 10
 
 
-def test_mapper_produces_save_brand_profile_dict_shape(fake_client):
-    """The output must match scrape_runner.py:_save_result's dict contract exactly."""
-    result_dict = fake_client._build_save_brand_profile_dict(
+def test_real_user_posts_has_songmont_branding():
+    """Every item should reference Songmont (user_id 58c7d02b82ec3977dd42c218)."""
+    items = _load_user_posts()
+    for item in items:
+        user = (item.get("postData") or {}).get("user") or {}
+        assert user.get("user_id") == "58c7d02b82ec3977dd42c218"
+        assert "Songmont" in (user.get("nickname") or "")
+
+
+def test_real_user_posts_have_unique_titles():
+    """Sanity check: the 10 items aren't duplicates."""
+    items = _load_user_posts()
+    titles = {(item.get("postData") or {}).get("display_title") for item in items}
+    # Should have ~9-10 unique titles (allow 1 duplicate for safety)
+    assert len(titles) >= 9
+
+
+def test_mapper_handles_easyapi_user_posts_shape(fake_client):
+    """End-to-end: real easyapi fixture → mapper → DB-contract dict."""
+    items = _load_user_posts()
+    result = fake_client._build_save_brand_profile_dict(
         brand_name="Songmont",
-        search_items=SYNTHETIC_SEARCH,
-        profile_items=SYNTHETIC_PROFILE,
+        posts_items=items,
+        profile_items=[],
     )
 
-    # Top-level keys required by save_brand_profile (db_bridge.py:save_brand_profile)
-    assert "follower_count" in result_dict
-    assert "total_products" in result_dict
-    assert "avg_price" in result_dict
-    assert "engagement_metrics" in result_dict
-    assert "content_metrics" in result_dict
-    assert "raw_dimensions" in result_dict
+    # Top-level keys from save_brand_profile contract
+    assert "follower_count" in result
+    assert "engagement_metrics" in result
+    assert "content_metrics" in result
+    assert "raw_dimensions" in result
 
-    # Engagement metrics shape
-    em = result_dict["engagement_metrics"]
-    assert "total_likes" in em
-    assert "total_notes" in em
-
-    # Raw dimensions — d1/d2/d3/d4/d6 shape
-    rd = result_dict["raw_dimensions"]
+    # raw_dimensions structure
+    rd = result["raw_dimensions"]
     for key in ("d1", "d2", "d3", "d4", "d6"):
-        assert key in rd, f"raw_dimensions missing {key}"
+        assert key in rd, f"missing raw_dimensions.{key}"
+
+    # d3 top_notes from the 10 posts
+    top_notes = rd["d3"]["top_notes"]
+    assert len(top_notes) == 10
 
 
-def test_mapper_pulls_follower_count_from_profile(fake_client):
+def test_mapper_parses_liked_count_strings(fake_client):
+    """easyapi returns liked_count as '6,739' string — must parse to 6739 int."""
+    items = _load_user_posts()
     result = fake_client._build_save_brand_profile_dict(
         brand_name="Songmont",
-        search_items=SYNTHETIC_SEARCH,
-        profile_items=SYNTHETIC_PROFILE,
-    )
-    assert result["follower_count"] == 47200
-
-
-def test_mapper_pulls_total_notes_from_profile(fake_client):
-    result = fake_client._build_save_brand_profile_dict(
-        brand_name="Songmont",
-        search_items=SYNTHETIC_SEARCH,
-        profile_items=SYNTHETIC_PROFILE,
-    )
-    assert result["engagement_metrics"]["total_notes"] == 340
-
-
-def test_mapper_pulls_total_likes_from_profile(fake_client):
-    result = fake_client._build_save_brand_profile_dict(
-        brand_name="Songmont",
-        search_items=SYNTHETIC_SEARCH,
-        profile_items=SYNTHETIC_PROFILE,
-    )
-    assert result["engagement_metrics"]["total_likes"] == 285000
-
-
-def test_mapper_handles_missing_profile_gracefully(fake_client):
-    """If profile mode failed/was skipped, fields default to 0/empty without raising."""
-    result = fake_client._build_save_brand_profile_dict(
-        brand_name="Songmont",
-        search_items=SYNTHETIC_SEARCH,
-        profile_items=[],   # no profile data
-    )
-    assert result["follower_count"] == 0
-    assert result["engagement_metrics"]["total_notes"] == 0
-    # But posts list should still be populated from search
-    assert len(result["raw_dimensions"]["d3"]["top_notes"]) == 2
-
-
-def test_mapper_counts_content_types_from_posts(fake_client):
-    result = fake_client._build_save_brand_profile_dict(
-        brand_name="Songmont",
-        search_items=SYNTHETIC_SEARCH,
-        profile_items=SYNTHETIC_PROFILE,
-    )
-    # SYNTHETIC_SEARCH has 1 "normal" + 1 "video"
-    content_types = result["content_metrics"]["content_types"]
-    assert content_types.get("normal") == 1
-    assert content_types.get("video") == 1
-
-
-def test_mapper_top_notes_have_expected_fields(fake_client):
-    result = fake_client._build_save_brand_profile_dict(
-        brand_name="Songmont",
-        search_items=SYNTHETIC_SEARCH,
-        profile_items=SYNTHETIC_PROFILE,
+        posts_items=items,
+        profile_items=[],
     )
     top_notes = result["raw_dimensions"]["d3"]["top_notes"]
-    assert len(top_notes) == 2
-
-    note = top_notes[0]
-    # The exact fields scrape_runner.py:_save_result reads (lines 96-114)
-    for key in ("title", "body_text", "likes", "comments_count", "shares",
-                "hashtags", "is_sponsored", "author_followers", "image_count",
-                "note_id", "type"):
-        assert key in note, f"top_note missing {key}"
+    # First item in fixture has liked_count "6,739"
+    assert top_notes[0]["likes"] == 6739
+    # All likes should be ints (not strings)
+    for note in top_notes:
+        assert isinstance(note["likes"], int)
 
 
-def test_mapper_post_to_top_note_field_types(fake_client):
+def test_mapper_extracts_author_from_easyapi_user_block(fake_client):
+    """user.nickname → top_notes[].author_name (not author.nickname like zhorex)."""
+    items = _load_user_posts()
     result = fake_client._build_save_brand_profile_dict(
         brand_name="Songmont",
-        search_items=SYNTHETIC_SEARCH,
-        profile_items=SYNTHETIC_PROFILE,
+        posts_items=items,
+        profile_items=[],
+    )
+    top_notes = result["raw_dimensions"]["d3"]["top_notes"]
+    for note in top_notes:
+        assert "Songmont" in note["author_name"]
+
+
+def test_mapper_derives_note_id_from_cover_url(fake_client):
+    """easyapi's note_id is always empty — mapper must derive a stable ID."""
+    items = _load_user_posts()
+    result = fake_client._build_save_brand_profile_dict(
+        brand_name="Songmont",
+        posts_items=items,
+        profile_items=[],
+    )
+    top_notes = result["raw_dimensions"]["d3"]["top_notes"]
+    for note in top_notes:
+        assert note["note_id"], f"note_id should be derived, got empty for {note['title'][:30]}"
+        assert note["note_id"].startswith("xhs-")
+
+
+def test_mapper_counts_content_types(fake_client):
+    """6 video + 4 normal posts in the Songmont fixture (verified by manual count)."""
+    items = _load_user_posts()
+    result = fake_client._build_save_brand_profile_dict(
+        brand_name="Songmont",
+        posts_items=items,
+        profile_items=[],
+    )
+    ct = result["content_metrics"]["content_types"]
+    assert ct.get("video") == 6
+    assert ct.get("normal") == 4
+    # Sanity: counts add to total
+    assert sum(ct.values()) == 10
+
+
+def test_mapper_uses_post_count_as_fallback_for_total_notes(fake_client):
+    """When profile fixture is empty, total_notes falls back to len(posts_items)."""
+    items = _load_user_posts()
+    result = fake_client._build_save_brand_profile_dict(
+        brand_name="Songmont",
+        posts_items=items,
+        profile_items=[],
+    )
+    assert result["engagement_metrics"]["total_notes"] == 10
+
+
+def test_mapper_documents_missing_fields_for_easyapi(fake_client):
+    """Tier B coverage limit: body_text, hashtags, comments_count are empty
+    by design (easyapi user_posts doesn't return them). This test documents
+    the limitation — if a future easyapi version adds these, the test will
+    fail and prompt the mapper to take advantage.
+    """
+    items = _load_user_posts()
+    result = fake_client._build_save_brand_profile_dict(
+        brand_name="Songmont",
+        posts_items=items,
+        profile_items=[],
     )
     note = result["raw_dimensions"]["d3"]["top_notes"][0]
-    assert isinstance(note["likes"], int)
-    assert isinstance(note["comments_count"], int)
-    assert isinstance(note["shares"], int)
-    assert isinstance(note["hashtags"], list)
-    assert isinstance(note["image_count"], int)
-    assert note["image_count"] == 2  # 2 image URLs in SYNTHETIC_SEARCH[0]
+    assert note["body_text"] == "", "easyapi now populates body_text? Update mapper!"
+    assert note["hashtags"] == [], "easyapi now populates hashtags? Update mapper!"
+    assert note["comments_count"] == 0, "easyapi now populates comments? Update mapper!"
+    assert note["shares"] == 0
 
 
-# ─── save_products mapper ─────────────────────────────────────────────────
+def test_products_list_uses_apify_easyapi_confidence_tag(fake_client):
+    """data_confidence is 'apify_easyapi' to distinguish from 'direct_scrape'."""
+    items = _load_user_posts()
+    products = fake_client._build_save_products_list("Songmont", items)
+    assert len(products) == 10
+    for p in products:
+        assert p["data_confidence"] == "apify_easyapi"
 
 
-def test_products_list_matches_save_products_contract(fake_client):
-    products = fake_client._build_save_products_list("Songmont", SYNTHETIC_SEARCH)
-    assert len(products) == 2
-
-    p = products[0]
-    # Fields required by db_bridge.py:save_products
-    for key in ("product_id", "product_name", "sales_volume", "review_count",
-                "product_url", "image_urls", "category", "data_confidence"):
-        assert key in p, f"product missing {key}"
-
-    assert p["data_confidence"] == "apify"
+def test_products_list_image_urls_populated(fake_client):
+    items = _load_user_posts()
+    products = fake_client._build_save_products_list("Songmont", items)
+    for p in products:
+        # Songmont fixture has at least cover URLs on all items
+        assert len(p["image_urls"]) >= 1
 
 
-# ─── End-to-end orchestration (with mocked Apify SDK) ─────────────────────
+# ─── Orchestration with mocked SDK ────────────────────────────────────────
 
 
-def test_scrape_xhs_brand_returns_success_when_search_and_profile_work(fake_client):
-    # First .call() returns search data, second returns profile data
+def test_scrape_xhs_brand_requires_profile_url(fake_client):
+    """The new contract: brand dict MUST have xhs_profile_url."""
+    with pytest.raises(ValueError, match="xhs_profile_url"):
+        fake_client.scrape_xhs_brand({"name": "Songmont"})  # no profile_url
+
+
+def test_scrape_xhs_brand_calls_both_actors_in_sequence(fake_client):
+    """user_posts first, then profile — both per the orchestration."""
+    items = _load_user_posts()
+    # First call returns user_posts dataset, second returns profile dataset
     fake_client._fake_actor.call.side_effect = [
-        {"defaultDatasetId": "search_dataset_id", "id": "run1"},
-        {"defaultDatasetId": "profile_dataset_id", "id": "run2"},
+        {"defaultDatasetId": "user_posts_ds", "id": "run1"},
+        {"defaultDatasetId": "profile_ds", "id": "run2"},
     ]
-    # iterate_items returns the corresponding fixture per dataset
     fake_client._fake_dataset.iterate_items.side_effect = [
-        iter(SYNTHETIC_SEARCH),
-        iter(SYNTHETIC_PROFILE),
+        iter(items),
+        iter([{"followers": 50000, "notesCount": 200, "totalLikes": 1500000}]),
     ]
 
-    result = fake_client.scrape_xhs_brand({"name": "Songmont", "keyword": "Songmont"})
+    result = fake_client.scrape_xhs_brand({
+        "name": "Songmont",
+        "xhs_profile_url": "https://www.rednote.com/user/profile/58c7d02b82ec3977dd42c218",
+    })
 
     assert result.status == "success", f"unexpected errors: {result.errors}"
-    assert result.brand_name == "Songmont"
-    assert result.platform == "xhs"
     assert result.data_dict is not None
-    assert result.data_dict["follower_count"] == 47200
-    assert len(result.notes_list) == 2
+    assert len(result.notes_list) == 10
+    # Both actors were called
+    assert fake_client._fake_actor.call.call_count == 2
 
 
-def test_scrape_xhs_brand_partial_when_profile_skipped_no_cookie(monkeypatch):
-    """If no cookie set, profile mode is skipped but search-only result is still 'partial'."""
-    monkeypatch.setenv("APIFY_API_TOKEN", "apify_api_test_fake")
-
-    from services.competitor_intel.scrapers import apify_client as mod
-
-    fake_actor = MagicMock()
-    fake_dataset = MagicMock()
-    fake_apify_client = MagicMock()
-    fake_apify_client.actor.return_value = fake_actor
-    fake_apify_client.dataset.return_value = fake_dataset
-    monkeypatch.setattr(mod, "_ApifyClientSdk", lambda token: fake_apify_client, raising=False)
-
-    # No cookie passed → profile mode skipped
-    client = mod.ApifyScraperClient(apify_token="apify_api_test_fake", xhs_cookie=None)
-
-    fake_actor.call.return_value = {"defaultDatasetId": "ds", "id": "run"}
-    fake_dataset.iterate_items.return_value = iter(SYNTHETIC_SEARCH)
-
-    result = client.scrape_xhs_brand({"name": "Songmont", "keyword": "Songmont"})
-
-    # Search succeeded; profile skipped → partial
-    assert result.status == "partial"
-    assert any("cookie" in e.lower() or "profile" in e.lower() for e in result.errors)
-    # data_dict still populated from search alone
-    assert result.data_dict is not None
-    assert result.data_dict["follower_count"] == 0  # no profile = no follower data
-    assert len(result.data_dict["raw_dimensions"]["d3"]["top_notes"]) == 2
-
-
-def test_scrape_xhs_brand_raises_on_login_wall(fake_client):
+def test_scrape_xhs_brand_partial_when_profile_actor_fails(fake_client):
+    """Profile actor failure is partial, not fatal — posts still saved."""
     from services.competitor_intel.scrapers.apify_client import ApifyScrapeError
+    items = _load_user_posts()
 
-    fake_client._fake_actor.call.return_value = {"defaultDatasetId": "ds", "id": "run"}
-    fake_client._fake_dataset.iterate_items.return_value = iter(LOGIN_WALL_FIXTURE)
+    def side_effect(*args, **kwargs):
+        if not hasattr(side_effect, "called"):
+            side_effect.called = True
+            return {"defaultDatasetId": "user_posts_ds", "id": "run1"}
+        raise Exception("simulated profile failure")
 
-    with pytest.raises(ApifyScrapeError) as exc_info:
-        fake_client.scrape_xhs_brand({"name": "Songmont", "keyword": "Songmont"})
-    assert exc_info.value.cookie_expired is True
+    fake_client._fake_actor.call.side_effect = side_effect
+    fake_client._fake_dataset.iterate_items.return_value = iter(items)
+
+    result = fake_client.scrape_xhs_brand({
+        "name": "Songmont",
+        "xhs_profile_url": "https://www.rednote.com/user/profile/58c7d02b82ec3977dd42c218",
+    })
+
+    assert result.status == "partial"
+    assert any("profile" in e.lower() for e in result.errors)
+    assert result.data_dict is not None
+    assert len(result.notes_list) == 10  # posts still saved
 
 
 # ─── A4 stubs ─────────────────────────────────────────────────────────────
@@ -385,95 +365,29 @@ def test_scrape_douyin_stub_raises(fake_client):
         fake_client.scrape_douyin_brand({"name": "Songmont"})
 
 
-# ─── Real-fixture validation (A1 ground truth, 2026-05-23) ────────────────
+# ─── Profile-fixture-conditional tests (skip if Will hasn't run profile yet) ──
 
 
-def _load_real_search_fixture():
-    path = FIXTURE_DIR / "apify_xhs_search_2026-05-23.json"
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+@pytest.mark.skipif(
+    not PROFILE_FIXTURE.exists(),
+    reason="Profile fixture not yet captured (waiting on Will's easyapi profile run)",
+)
+def test_profile_fixture_loads():
+    profile = _load_profile()
+    assert len(profile) >= 1
 
 
-def test_real_fixture_loads_and_has_expected_count():
-    items = _load_real_search_fixture()
-    assert len(items) == 10, "expected 10 items from A1 spike"
-
-
-def test_real_search_mode_populates_basic_fields(fake_client):
-    """Search mode reliably gives us postId, title, likes, author, type."""
-    items = _load_real_search_fixture()
-    for item in items:
-        assert item.get("postId"), f"missing postId: {item}"
-        assert item.get("title"), f"missing title: {item}"
-        assert isinstance(item.get("likes"), int)
-        assert item.get("author", {}).get("userId"), "missing author.userId"
-        assert item.get("author", {}).get("nickname"), "missing author.nickname"
-        assert item.get("type") in ("video", "normal"), f"unexpected type: {item.get('type')}"
-
-
-def test_real_search_mode_does_NOT_populate_rich_fields(fake_client):
-    """A1 finding: search mode leaves content/tags/images/comments empty.
-
-    This test documents the limitation. If a future actor version starts
-    populating these in search mode, this test should fail, prompting us
-    to update apify_client.py to take advantage.
-    """
-    items = _load_real_search_fixture()
-    for item in items:
-        assert item.get("content") == "", "search mode now populates content? Update mapper!"
-        assert item.get("tags") == [], "search mode now populates tags? Update mapper!"
-        assert item.get("images") == [], "search mode now populates images? Update mapper!"
-        assert item.get("comments") == 0, "search mode now populates comments? Update mapper!"
-        assert item.get("shares") == 0
-        assert item.get("saves") == 0
-
-
-def test_real_fixture_through_mapper_produces_valid_dict(fake_client):
-    """End-to-end: real Apify output → mapper → save_brand_profile dict shape."""
-    items = _load_real_search_fixture()
-    result_dict = fake_client._build_save_brand_profile_dict(
-        brand_name="Songmont",
-        search_items=items,
-        profile_items=[],  # profile mode not tested in A1
-    )
-
-    # Top-level shape contract
-    assert "follower_count" in result_dict
-    assert "engagement_metrics" in result_dict
-    assert "raw_dimensions" in result_dict
-    assert "d3" in result_dict["raw_dimensions"]
-
-    # All 10 search items should produce top_notes entries
-    top_notes = result_dict["raw_dimensions"]["d3"]["top_notes"]
-    assert len(top_notes) == 10
-
-    # With search-mode-only data, we expect populated title/likes/author_name
-    # but EMPTY body_text, hashtags, image_count=0, comments_count=0
-    note = top_notes[0]
-    assert note["title"]                # populated ✓
-    assert isinstance(note["likes"], int) and note["likes"] > 0  # populated ✓
-    assert note["author_name"]          # populated ✓
-    assert note["note_id"]              # populated ✓
-    assert note["body_text"] == ""      # documented limitation
-    assert note["hashtags"] == []       # documented limitation
-    assert note["image_count"] == 0     # documented limitation
-    assert note["comments_count"] == 0  # documented limitation
-
-
-def test_real_fixture_content_types_aggregated_correctly(fake_client):
-    """7 video + 3 normal posts in the fixture."""
-    items = _load_real_search_fixture()
+@pytest.mark.skipif(
+    not PROFILE_FIXTURE.exists(),
+    reason="Profile fixture not yet captured",
+)
+def test_mapper_pulls_real_follower_count_from_profile(fake_client):
+    """When profile fixture exists, real follower count flows through."""
+    items = _load_user_posts()
+    profile = _load_profile()
     result = fake_client._build_save_brand_profile_dict(
         brand_name="Songmont",
-        search_items=items,
-        profile_items=[],
+        posts_items=items,
+        profile_items=profile,
     )
-    ct = result["content_metrics"]["content_types"]
-    assert ct.get("video") == 8
-    assert ct.get("normal") == 2
-
-
-def test_real_fixture_no_login_wall(fake_client):
-    """Sanity: A1 output didn't have login-wall markers."""
-    items = _load_real_search_fixture()
-    assert fake_client._detect_login_wall(items) is False
+    assert result["follower_count"] > 0, "profile mapper produced 0 followers from real fixture"
