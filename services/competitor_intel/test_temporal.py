@@ -13,6 +13,14 @@ Covers:
 
 import os
 import sqlite3
+from datetime import date, timedelta
+
+
+def _days_ago_iso(n: int) -> str:
+    """Test-helper: ISO date string for N days ago. Keeps time-dependent
+    tests stable as wall-clock advances past hardcoded fixture dates.
+    """
+    return (date.today() - timedelta(days=n)).isoformat()
 import tempfile
 from datetime import datetime, timedelta
 
@@ -187,7 +195,10 @@ class TestComputeRollingStats:
         """Single data point returns None for std and z-score."""
         path, conn = tmp_db
         _insert_brand(conn, "SinglePoint")
-        _insert_metric(conn, "SinglePoint", "2026-03-08", "xhs_followers", 5000)
+        # Use relative date — compute_rolling_stats uses a window (default
+        # 4 weeks); a fixed 2026-03-08 falls outside the window as time
+        # advances. 7 days ago is reliably inside any reasonable window.
+        _insert_metric(conn, "SinglePoint", _days_ago_iso(7), "xhs_followers", 5000)
 
         stats = compute_rolling_stats("SinglePoint", "xhs_followers", db_path=path)
 
@@ -501,10 +512,14 @@ class TestStorageDeltaFunctions:
         path, conn = tmp_db
         _insert_brand(conn, "HistBrand")
 
-        save_deltas(conn, "HistBrand", "2026-03-01",
+        # Two dates within the 30-day window (was hardcoded 2026-03-01,
+        # 2026-03-08 — both fell outside the window past April 2026).
+        earlier_date = _days_ago_iso(14)
+        later_date = _days_ago_iso(7)
+        save_deltas(conn, "HistBrand", earlier_date,
                     {"xhs_followers": {"previous_value": 100, "current_value": 110,
                                        "absolute_change": 10, "pct_change": 10.0}})
-        save_deltas(conn, "HistBrand", "2026-03-08",
+        save_deltas(conn, "HistBrand", later_date,
                     {"xhs_followers": {"previous_value": 110, "current_value": 125,
                                        "absolute_change": 15, "pct_change": 13.6}})
 

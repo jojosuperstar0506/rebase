@@ -177,8 +177,34 @@ def _save_result(platform: str, brand_name: str, tier: str, result, cookies: str
 
 # ─── API mode ────────────────────────────────────────────────────────────────
 
-async def scrape_brand(platform: str, brand_name: str, keyword: str, tier: str, cookies: str = None):
-    """Scrape a single brand via httpx API mode."""
+async def scrape_brand(
+    platform: str,
+    brand_name: str,
+    keyword: str,
+    tier: str,
+    cookies: str = None,
+    xhs_profile_url: str = None,
+):
+    """Scrape a single brand via httpx API mode.
+
+    A3 (issue #62): when USE_APIFY=true and platform is XHS, route through
+    ApifyScraperClient instead of the in-house Playwright/httpx scraper.
+    Default (USE_APIFY=false or unset) keeps the existing behavior unchanged.
+
+    xhs_profile_url (M-C, migration 013): if the caller pre-fetched the per-
+    competitor URL from workspace_competitors.xhs_profile_url, pass it through
+    to the Apify path. Falls back to env var XHS_PROFILE_URL_<BRAND> if None.
+    """
+    # ── A3 feature-flag branch: Apify path for XHS ──
+    # Only XHS is wired in A3. A4 adds Douyin + Taobao. All other platforms
+    # continue using the existing scraper regardless of USE_APIFY setting.
+    if os.environ.get("USE_APIFY", "false").lower() == "true" and platform == "xhs":
+        return await _scrape_brand_via_apify(
+            platform, brand_name, keyword, tier,
+            xhs_profile_url=xhs_profile_url,
+        )
+
+    # ── existing httpx/Playwright path — unchanged ──
     ScraperClass = PLATFORM_SCRAPERS.get(platform)
     if not ScraperClass:
         print(f"[WARN] No scraper for platform: {platform}")
@@ -207,6 +233,95 @@ async def scrape_brand(platform: str, brand_name: str, keyword: str, tier: str, 
         return False
 
 
+async def _scrape_brand_via_apify(
+    platform: str,
+    brand_name: str,
+    keyword: str,
+    tier: str,
+    xhs_profile_url: str = None,
+) -> bool:
+    """A3 — route a single brand scrape through ApifyScraperClient.
+
+    Reads APIFY_API_TOKEN from env (no XHS_SESSION_COOKIE needed — easyapi
+    actors handle auth internally via residential proxies + their own
+    session pool). Bypasses `_save_result()` (which expects the XhsBrandData
+    object shape) and writes the apify_client.data_dict directly to
+    save_brand_profile().
+
+    xhs_profile_url is the per-competitor XHS profile URL from the DB
+    (workspace_competitors.xhs_profile_url, populated by admin via
+    PATCH /api/admin/competitors/:id/xhs-url). Falls back to env var
+    XHS_PROFILE_URL_<BRAND> for bootstrap/demo workflows.
+
+    Returns True on success/partial, False on failure.
+    """
+    try:
+        from .scrapers.apify_client import ApifyScraperClient, ApifyScrapeError
+    except ImportError as exc:
+        print(f"[ERROR/apify] USE_APIFY=true but apify_client unavailable: {exc}")
+        print("  Install: pip install -r services/competitor_intel/requirements.txt")
+        return False
+
+    token = os.environ.get("APIFY_API_TOKEN")
+    if not token:
+        print("[ERROR/apify] USE_APIFY=true but APIFY_API_TOKEN env var not set")
+        return False
+
+    # XHS profile URL: prefer the per-competitor DB column (migration 013),
+    # fall back to env var XHS_PROFILE_URL_<BRAND> for bootstrap/demo workflows.
+    # The DB-column path is what production should use — admin configures via
+    # PATCH /api/admin/competitors/:id/xhs-url after AI suggests competitors.
+    profile_url = xhs_profile_url or os.environ.get(
+        f"XHS_PROFILE_URL_{brand_name.upper().replace(' ', '_')}"
+    )
+    if not profile_url:
+        print(f"[SKIP/apify] No XHS profile URL configured for brand '{brand_name}'. "
+              f"Set via admin PATCH /api/admin/competitors/:id/xhs-url, "
+              f"OR set XHS_PROFILE_URL_{brand_name.upper().replace(' ', '_')} env var for bootstrap.")
+        return False
+
+    print(f"[SCRAPE/apify] {platform} / {brand_name} (profile: {profile_url}, tier: {tier})")
+    # Wire the default cost logger so each actor call gets persisted to
+    # apify_run_log (migration 012). Lets us see daily/weekly Apify spend
+    # via SQL: SELECT date_trunc('day', invoked_at), SUM(cost_estimate_usd)
+    # FROM apify_run_log GROUP BY 1 ORDER BY 1 DESC.
+    from .db_bridge import log_apify_run
+    client = ApifyScraperClient(apify_token=token, cost_logger=log_apify_run)
+
+    try:
+        # apify_client is sync; offload so we don't block the asyncio loop
+        result = await asyncio.to_thread(
+            client.scrape_xhs_brand,
+            {"name": brand_name, "xhs_profile_url": profile_url},
+        )
+    except ApifyScrapeError as exc:
+        print(f"[FAIL/apify] {platform} / {brand_name}: {exc}")
+        return False
+    except Exception as exc:
+        print(f"[ERROR/apify] {platform} / {brand_name}: unexpected {type(exc).__name__}: {exc}")
+        traceback.print_exc()
+        return False
+
+    if result.status == "failed" or not result.data_dict:
+        print(f"[FAIL/apify] {platform} / {brand_name}: errors={result.errors}")
+        return False
+
+    # ── Write to DB using the EXISTING contract ──
+    # ScrapeResult.data_dict is already in the shape save_brand_profile expects.
+    save_brand_profile(platform, brand_name, result.data_dict, scrape_tier=tier)
+    if result.notes_list:
+        save_products(platform, brand_name, result.notes_list, scrape_tier=tier)
+
+    note_count = len(result.notes_list)
+    cost = result.cost_estimate_usd
+    err_suffix = f" (partial: {result.errors})" if result.errors else ""
+    print(f"[OK/apify] {platform} / {brand_name}: {result.status} | "
+          f"notes={note_count} cost=~${cost:.4f}{err_suffix}")
+
+    mark_connection_success(platform)
+    return True
+
+
 async def run_tier_scrape(platform: str, tier: str):
     """Scrape all brands at a tier via API mode."""
     targets = get_scrape_targets(tier)
@@ -221,7 +336,13 @@ async def run_tier_scrape(platform: str, tier: str):
         brand_name = target['brand_name']
         platform_ids = target.get('platform_ids') or {}
         keyword = platform_ids.get(platform, brand_name)
-        ok = await scrape_brand(platform, brand_name, keyword, tier, cookies)
+        # M-C: per-competitor XHS profile URL from DB column (migration 013).
+        # None for non-XHS platforms or when admin hasn't configured it yet.
+        xhs_profile_url = target.get('xhs_profile_url') if platform == 'xhs' else None
+        ok = await scrape_brand(
+            platform, brand_name, keyword, tier, cookies,
+            xhs_profile_url=xhs_profile_url,
+        )
         if ok:
             success += 1
         await asyncio.sleep(5)

@@ -1,0 +1,47 @@
+[
+  {
+    "profileUrl": "https://www.rednote.com/user/profile/58c7d02b82ec3977dd42c218",
+    "profileData": {
+      "basicInfo": {
+        "nickname": "Songmont山下有松",
+        "images": "https://sns-avatar-qc.xhscdn.com/avatar/64425c841300c5cf9d35f8b5.jpg?imageView2/2/w/360/format/webp",
+        "redId": "95560643885",
+        "gender": 1,
+        "ipLocation": "上海",
+        "desc": "山下有松 包中有温度\n\n@Songmont包罗万象 分享穿搭灵感\n@Song of mont 山下声 品牌播客栏目\n@Songmont香氛 探索香氛系列",
+        "imageb": "https://sns-avatar-qc.xhscdn.com/avatar/64425c841300c5cf9d35f8b5.jpg?imageView2/2/w/540/format/webp"
+      },
+      "interactions": [
+        {
+          "count": "10+",
+          "i18nCount": "10+",
+          "type": "follows",
+          "name": "Following"
+        },
+        {
+          "type": "fans",
+          "name": "Followers",
+          "count": "1万+",
+          "i18nCount": "10K+"
+        },
+        {
+          "name": "Likes & Saves",
+          "count": "1万+",
+          "i18nCount": "10K+",
+          "type": "interaction"
+        }
+      ],
+      "tags": [
+        {
+          "tagType": "info",
+          "icon": "http://ci.xiaohongshu.com/icons/user/gender-female-v1.png"
+        },
+        {
+          "name": "中国",
+          "tagType": "location"
+        }
+      ]
+    },
+    "scrapedAt": "2026-05-24T12:03:20.145Z"
+  }
+]

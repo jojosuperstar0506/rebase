@@ -4,6 +4,9 @@
 # HTTP client for API mode scraping
 httpx>=0.27.0
 
+# Apify hosted-actor client (W1+ of scraping migration — issue #62)
+apify-client>=1.7.0
+
 # Anthropic API for AI-powered analysis
 anthropic>=0.39.0
 
