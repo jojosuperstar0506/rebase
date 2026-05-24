@@ -532,10 +532,15 @@ app.get('/api/admin/pending-scrapes', async (req, res) => {
 //
 // Validation:
 //   - URL must point to www.rednote.com or www.xiaohongshu.com /user/profile/<id>
+//   - <id> must be 16-32 hex chars (real XHS user IDs are 24-char hex)
+//   - Query string and hash fragment are STRIPPED before storing (XHS web
+//     URLs often carry ?xsec_token=... and ?xsec_source=... which are
+//     session-specific signatures; not part of the canonical profile URL)
 //   - Pass null/empty string to clear a previously-set URL
 //
-// Auth: matches the rest of /api/admin/* (no middleware today; security
-// debt tracked separately).
+// Auth: protected by the global requireSecret middleware (server.js:64) which
+// applies to all /api/* routes. Requires header x-rebase-secret === env
+// API_SECRET. In dev (no API_SECRET set), requireSecret falls through.
 app.patch('/api/admin/competitors/:id/xhs-url', async (req, res) => {
   try {
     const id = req.params.id;
@@ -552,12 +557,20 @@ app.patch('/api/admin/competitors/:id/xhs-url', async (req, res) => {
     } else if (typeof xhs_profile_url !== 'string') {
       return res.status(400).json({ error: 'xhs_profile_url must be a string or null' });
     } else {
-      // Validate URL shape — must be xiaohongshu.com or rednote.com profile path
-      const xhsRegex = /^https?:\/\/(www\.)?(rednote|xiaohongshu)\.com\/user\/profile\/[a-zA-Z0-9]+/;
+      // Trim whitespace + strip query string and hash fragment to get
+      // the canonical profile URL. XHS web links carry session-specific
+      // ?xsec_token=... — those don't belong in our stored URL.
+      xhs_profile_url = xhs_profile_url.trim().split('?')[0].split('#')[0];
+
+      // Validate canonical shape — domain + /user/profile/<24-hex-ish-id>
+      // Tightened from \w+ to [a-f0-9]{16,32} to match real XHS user-id format.
+      const xhsRegex = /^https?:\/\/(www\.)?(rednote|xiaohongshu)\.com\/user\/profile\/[a-f0-9]{16,32}$/i;
       if (!xhsRegex.test(xhs_profile_url)) {
         return res.status(400).json({
           error: 'Invalid xhs_profile_url',
-          hint: 'Must look like https://www.rednote.com/user/profile/<userId> or https://www.xiaohongshu.com/user/profile/<userId>',
+          hint: 'After stripping any ?xsec_token=... query, URL must look like ' +
+                'https://www.rednote.com/user/profile/<24-hex-id> ' +
+                '(e.g., https://www.rednote.com/user/profile/58c7d02b82ec3977dd42c218)',
         });
       }
     }

@@ -281,7 +281,12 @@ async def _scrape_brand_via_apify(
         return False
 
     print(f"[SCRAPE/apify] {platform} / {brand_name} (profile: {profile_url}, tier: {tier})")
-    client = ApifyScraperClient(apify_token=token)
+    # Wire the default cost logger so each actor call gets persisted to
+    # apify_run_log (migration 012). Lets us see daily/weekly Apify spend
+    # via SQL: SELECT date_trunc('day', invoked_at), SUM(cost_estimate_usd)
+    # FROM apify_run_log GROUP BY 1 ORDER BY 1 DESC.
+    from .db_bridge import log_apify_run
+    client = ApifyScraperClient(apify_token=token, cost_logger=log_apify_run)
 
     try:
         # apify_client is sync; offload so we don't block the asyncio loop

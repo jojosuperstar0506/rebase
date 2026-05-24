@@ -136,6 +136,48 @@ def set_competitor_xhs_url_by_brand(workspace_id, brand_name, xhs_profile_url):
         conn.close()
 
 
+def log_apify_run(payload):
+    """Persist one Apify actor invocation to apify_run_log (migration 012).
+
+    Used as the default cost_logger callback for ApifyScraperClient.
+    Best-effort: failure to write the log row must NEVER break the scrape,
+    so we swallow any exception and just print a warning.
+
+    Args:
+        payload: dict from apify_client._log_cost. Expected keys:
+            brand, platform, actor, label (mode), items_returned,
+            estimated_cost_usd, timestamp (ISO str, optional), run_id (optional)
+    """
+    try:
+        conn = get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO apify_run_log (
+                        brand_name, platform, actor_id, mode,
+                        items_returned, cost_estimate_usd, run_id, invoked_at
+                    ) VALUES (
+                        %s, %s, %s, %s,
+                        %s, %s, %s, COALESCE(%s::timestamptz, NOW())
+                    )
+                """, (
+                    payload.get('brand') or '',
+                    payload.get('platform') or 'xhs',
+                    payload.get('actor') or '',
+                    payload.get('label') or payload.get('mode') or 'unknown',
+                    int(payload.get('items_returned') or 0),
+                    float(payload.get('estimated_cost_usd') or 0),
+                    payload.get('run_id') or None,
+                    payload.get('timestamp') or None,
+                ))
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as exc:
+        # Cost logging is best-effort; never propagate.
+        print(f"[WARN] apify_run_log insert failed: {exc}")
+
+
 def get_brand_cookies(platform):
     """Get decrypted active cookies for a platform."""
     from .crypto_utils import decrypt_cookies

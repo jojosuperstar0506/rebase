@@ -4,9 +4,11 @@ Replaces the per-platform Playwright scrapers behind feature flag USE_APIFY=true
 Same DB write path (save_brand_profile / save_products); zero changes needed
 in scoring pipelines.
 
-Design: docs/SCRAPING-A2-APIFY-CLIENT-DESIGN.md
 Strategy: docs/SCRAPING-STRATEGY.md (Joanna's plan + William's corrections + Tier B decision)
 Tracks: GitHub issue #62
+
+(The earlier docs/SCRAPING-A2-APIFY-CLIENT-DESIGN.md was deleted on commit 00552f2
+once this file existed — apify_client.py IS the design now.)
 
 ACTOR CHOICES — VALIDATED 2026-05-24
 ====================================
@@ -303,6 +305,19 @@ class ApifyScraperClient:
             # Profile failure is degradation, not fatal — partial scrape is OK
             logger.warning("Profile actor failed for %s: %s", brand_name, exc)
             result.errors.append(f"profile actor failed: {exc}")
+
+        # Surface a silent-degradation case the actor wouldn't raise on:
+        # actor succeeds but returns []. Without this log the operator
+        # sees no error yet d2.followers/total_likes default to 0 and
+        # total_notes falls back to len(posts) — easy to miss.
+        if not profile_items:
+            logger.warning(
+                "Profile actor returned empty result for %s — d2 stats degraded "
+                "(follower_count=0, total_likes=0, total_notes=len(posts_items)). "
+                "Possible causes: actor flake, URL invalid, brand profile private.",
+                brand_name,
+            )
+            result.errors.append("profile actor returned 0 items — d2 stats degraded")
 
         # ── Map combined output → save_brand_profile() dict ──
         try:

@@ -12,7 +12,7 @@
 // Label, BrandChip) + CSS variables (--color-*). Monospace comment
 // convention for inline labels matches CompetitorsStep.tsx.
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Eyebrow } from "../ui/Eyebrow";
 import { Heading } from "../ui/Heading";
 import { Input } from "../ui/Input";
@@ -35,19 +35,36 @@ export function CompetitorXhsUrls() {
   const [competitors, setCompetitors] = useState<MissingUrlCompetitor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // Coalesce parallel refresh calls: when two UrlRows both call onSaved()
+  // within their 1.5s success window, we want ONE refresh, not two. Tracks
+  // an in-flight refresh so the second caller is a no-op.
+  const refreshInFlight = useRef(false);
+  // Track mount state to avoid setState-after-unmount warnings in
+  // strict-mode dev / when admin navigates away mid-fetch.
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
 
   const fetchMissing = useCallback(async () => {
-    setLoading(true);
-    setError("");
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
+    if (mounted.current) {
+      setLoading(true);
+      setError("");
+    }
     try {
       const res = await fetch("/api/admin/competitors/missing-xhs-url");
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load");
-      setCompetitors(Array.isArray(data.competitors) ? data.competitors : []);
+      if (mounted.current) {
+        setCompetitors(Array.isArray(data.competitors) ? data.competitors : []);
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load");
+      if (mounted.current) {
+        setError(e instanceof Error ? e.message : "Failed to load");
+      }
     } finally {
-      setLoading(false);
+      if (mounted.current) setLoading(false);
+      refreshInFlight.current = false;
     }
   }, []);
 
@@ -129,6 +146,16 @@ function UrlRow({ competitor, onSaved }: UrlRowProps) {
   const [justSaved, setJustSaved] = useState(false);
   const [rowError, setRowError] = useState("");
 
+  // Track the refresh timeout so we can clear it if the component unmounts
+  // before the 1.5s success-state delay completes (avoids setState-on-
+  // unmounted-component warnings).
+  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+    };
+  }, []);
+
   async function handleSave() {
     if (!url.trim()) return;
     setSaving(true);
@@ -147,8 +174,10 @@ function UrlRow({ competitor, onSaved }: UrlRowProps) {
       }
       setJustSaved(true);
       // Show "saved" state for 1.5s, then refresh the parent list
-      // (which will remove this row since it now has a URL)
-      setTimeout(() => {
+      // (which will remove this row since it now has a URL).
+      // Parent's fetchMissing coalesces if multiple rows save in parallel.
+      refreshTimeoutRef.current = setTimeout(() => {
+        refreshTimeoutRef.current = null;
         onSaved();
       }, 1500);
     } catch (e) {
