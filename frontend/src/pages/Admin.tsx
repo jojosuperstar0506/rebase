@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Inbox } from "lucide-react";
 import { useApp } from "../context/AppContext";
+import { CompetitorXhsUrls } from "../components/admin/CompetitorXhsUrls";
 
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || "rebase-admin-2026";
 
@@ -329,6 +330,15 @@ export default function Admin() {
         {shown.map((a, i) => (
           <ApplicantCard key={i} applicant={a} onApprove={handleApprove} colors={C} />
         ))}
+
+        {/* Apify scraper config: list competitors needing XHS profile URLs.
+            Joanna's design-system primitives (Eyebrow / Heading / Input /
+            Button / BrandChip) — visually a step ahead of the older inline-
+            styled sections above. When Admin.tsx is eventually refactored
+            to her design system, this section is already in the right
+            pattern. See: services/competitor_intel/scrapers/apify_client.py,
+            docs/SCRAPING-STRATEGY.md, issue #62. */}
+        <CompetitorXhsUrls />
       </div>
     </div>
   );
