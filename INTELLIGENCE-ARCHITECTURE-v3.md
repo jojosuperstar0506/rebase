@@ -168,7 +168,7 @@ Deploy: automatic via Vercel on every push to `main`
 - They read from `scraped_brand_profiles` and `scraped_products`, write to `analysis_results`
 - All new pipelines should follow the `--workspace-id UUID` / `--all` argparse pattern
 - The backend API is Node.js at `backend/server.js`, runs on ECS via PM2 (`pm2 restart rebase-backend` after changes)
-- ECS SSH: root @ 8.217.242.191, password `RebaseAdmin2026` (needs rotation before prod)
+- ECS SSH: root @ 8.217.242.191, password `<DB_PASSWORD>` (needs rotation before prod)
 - Database: PostgreSQL on ECS, tunnel via `ssh -L 5432:localhost:5432 root@8.217.242.191 -N`
 
 ### If you want to work on the scraper

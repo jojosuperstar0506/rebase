@@ -24,7 +24,7 @@ Shared setup script: `services/competitor_intel/setup_profiles.py` handles QR-co
 Shared runner: `services/competitor_intel/scrape_runner.py` with `--mode browser`.
 
 **Joanna's SSH key is already on ECS** (Will added it at `/home/joanna/.ssh/authorized_keys`).
-Password for root@8.217.242.191 is `RebaseAdmin2026` if she needs it for admin.
+Password for root@8.217.242.191 is `<DB_PASSWORD>` if she needs it for admin.
 
 ---
 
@@ -76,9 +76,9 @@ playwright install chromium
 ssh -L 5432:localhost:5432 joanna@8.217.242.191 -N
 ```
 
-(Will configured SSH key auth for `joanna@ecs`. No password prompt expected. If it asks for one, SSH to root first with `RebaseAdmin2026` and verify key install.)
+(Will configured SSH key auth for `joanna@ecs`. No password prompt expected. If it asks for one, SSH to root first with `<DB_PASSWORD>` and verify key install.)
 
-**Verify:** in another terminal, `psql "postgresql://rebase_app:RebaseAdmin2026@localhost:5432/rebase" -c "\dt"` lists tables.
+**Verify:** in another terminal, `psql "postgresql://rebase_app:<DB_PASSWORD>@localhost:5432/rebase" -c "\dt"` lists tables.
 
 ---
 
@@ -91,7 +91,7 @@ In the repo root (`~/projects/rebase/`), create `.env`:
 ```bash
 # Scraper config
 SCRAPER_PROFILE_DIR=/Users/joanna/rebase-scraper-profile
-DATABASE_URL=postgresql://rebase_app:RebaseAdmin2026@localhost:5432/rebase
+DATABASE_URL=postgresql://rebase_app:<DB_PASSWORD>@localhost:5432/rebase
 
 # Crypto key (ask Will — same key as ECS uses to encrypt cookies)
 REBASE_COOKIE_KEY=<ask-will-for-this>
@@ -136,7 +136,7 @@ python -m services.competitor_intel.scrape_runner --platform xhs --brand "Songmo
 #### 3d. Verify data landed in ECS DB
 
 ```bash
-psql "postgresql://rebase_app:RebaseAdmin2026@localhost:5432/rebase" -c \
+psql "postgresql://rebase_app:<DB_PASSWORD>@localhost:5432/rebase" -c \
 "SELECT brand_name, follower_count, engagement_metrics, scraped_at
  FROM scraped_brand_profiles
  WHERE platform='xhs' AND brand_name='Songmont'
@@ -157,7 +157,7 @@ Rate-limit-safe: the runner has 45–90s jittered delay between brands. Don't in
 
 **Verify all brands at once:**
 ```bash
-psql "postgresql://rebase_app:RebaseAdmin2026@localhost:5432/rebase" -c \
+psql "postgresql://rebase_app:<DB_PASSWORD>@localhost:5432/rebase" -c \
 "SELECT brand_name, follower_count, scraped_at FROM scraped_brand_profiles
  WHERE platform='xhs' AND scraped_at > NOW() - INTERVAL '1 hour'
  ORDER BY brand_name;"
@@ -177,7 +177,7 @@ python -m services.competitor_intel.setup_profiles --platform douyin
 python -m services.competitor_intel.scrape_runner --platform douyin --brand "Songmont" --mode browser --limit 1
 
 # 4c. Verify
-psql "postgresql://rebase_app:RebaseAdmin2026@localhost:5432/rebase" -c \
+psql "postgresql://rebase_app:<DB_PASSWORD>@localhost:5432/rebase" -c \
 "SELECT brand_name, follower_count FROM scraped_brand_profiles
  WHERE platform='douyin' AND brand_name='Songmont'
  ORDER BY scraped_at DESC LIMIT 1;"
@@ -223,7 +223,7 @@ The existing `sycm_scraper.py` uses **生意参谋** (SYCM / Seller's Compass) �
 #### 6a. Verify her OMI workspace exists and has competitors
 
 ```bash
-psql "postgresql://rebase_app:RebaseAdmin2026@localhost:5432/rebase" -c \
+psql "postgresql://rebase_app:<DB_PASSWORD>@localhost:5432/rebase" -c \
 "SELECT w.brand_name AS workspace, c.brand_name AS competitor, c.tier
  FROM workspace_competitors c
  JOIN workspaces w ON w.id = c.workspace_id
@@ -240,7 +240,7 @@ If workspace doesn't exist: she creates one via the CI Settings page of the Reba
 **SSH to ECS** (open a new terminal):
 
 ```bash
-ssh root@8.217.242.191  # password: RebaseAdmin2026
+ssh root@8.217.242.191  # password: <DB_PASSWORD>
 cd ~/rebase
 set -a && source backend/.env && set +a
 

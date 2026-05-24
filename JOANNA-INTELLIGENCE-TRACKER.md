@@ -78,7 +78,7 @@ ssh -L 5432:localhost:5432 joanna@8.217.242.191 -N
 cd /Users/joannazhang/rebase
 python3 -c "
 import psycopg2
-conn = psycopg2.connect('postgresql://rebase_app:RebaseAdmin2026@localhost:5432/rebase')
+conn = psycopg2.connect('postgresql://rebase_app:<DB_PASSWORD>@localhost:5432/rebase')
 cur = conn.cursor()
 cur.execute('SELECT COUNT(*) FROM workspace_competitors')
 print(f'Connected! {cur.fetchone()[0]} competitors in database.')
@@ -105,7 +105,7 @@ python3 -m services.competitor_intel.scrape_runner --platform douyin --tier watc
 **Trigger scoring (replace workspace_id with real value from DB):**
 ```bash
 curl -X POST -H "Content-Type: application/json" \
-  -H "x-rebase-secret: a9231db3907bef4f146cea299efa9f37960781fd5f191ae5f369ba3742e082ea" \
+  -H "x-rebase-secret: <API_SECRET_REDACTED>" \
   -d '{"workspace_id":"<actual-workspace-id>"}' \
   "http://8.217.242.191:3000/api/ci/run-analysis"
 ```
