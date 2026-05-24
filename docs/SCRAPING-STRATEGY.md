@@ -238,3 +238,70 @@ Will completed the manual Apify Console test today against `zhorex/rednote-xiaoh
 **Decision:** Pivot from `mode: "search"` to `mode: "user_posts"` for production scraping. user_posts targets a brand's profile URL directly and (per documentation) returns rich per-post data. Each brand requires a one-time userUrl config — Songmont's URL is the first one Will captured manually from the XHS web UI. The `apify_client.py` wrapper will be updated to call user_posts as the primary path. Search mode remains available in the wrapper for future UGC-monitoring use cases but is not part of the daily scrape pipeline.
 
 **Cost implication of pivot:** user_posts mode pricing (TBD — will verify in A2 manual test) likely similar order of magnitude to search ($5-10 per 1k results). Per-brand cost stays in the $0.10-0.30/run range Joanna's original cost table assumed.
+
+---
+
+## A1.5 Findings + Tier B decision — William, 2026-05-24
+
+After A1, we tried zhorex's `user_posts` mode for Songmont's actual profile URL. Five total Apify test runs across two days:
+
+| Test | Mode | Target | Result |
+|---|---|---|---|
+| 1 | search | "Songmont" | 10 items but unrelated (algorithmic feed) |
+| 2 | user_posts | Songmont | **0 items, login modal hit** |
+| 3 | user_posts | Songmont + 6 cookies | 0 items, login modal closed but page empty |
+| 4 (T1) | user_posts | Songmont + cookies + xsec_token | 0 items |
+| 5 (T2) | user_posts | celebrity (张含韵) + cookies + xsec_token | 0 items |
+| 6 (T3) | profile | Songmont | 0 items; actor's own log: *"anonymous access likely gated"* |
+| 7 (T4) | search | Chinese keyword "穿搭" | 10 items but unrelated to query |
+
+**Verdict on `zhorex/rednote-xiaohongshu-scraper`:** structurally broken for our use case. user_posts + profile modes return 0 items for ANY user; search ignores the searchQuery parameter and returns the cookie owner's algorithmic feed regardless of input.
+
+### Pivot to easyapi
+
+Researched alternatives on Apify marketplace. Identified `easyapi/rednote-xiaohongshu-user-posts-scraper` as the most credible candidate:
+- Specialized actor (vs zhorex's all-in-one)
+- Auto-handles authentication via residential proxies + their own cookie pool
+- Does NOT accept user cookies — we don't pass cookieString
+- Pricing: $4.99 / 1000 results (same as zhorex)
+
+**Test 8 (T5)** with easyapi: returned 10 REAL Songmont posts (titles about 层蓝 Cengai collection campaign with 张婧仪, like counts 15-7478, mixed video/normal types). Fixture saved as `services/competitor_intel/scrapers/fixtures/apify_easyapi_user_posts_songmont_2026-05-24.json`.
+
+### Tier B coverage chosen
+
+After confirming easyapi works, we evaluated coverage tiers:
+
+| Tier | Actors per brand | Cost (20 brands/day) | Scoring coverage |
+|---|---|---|---|
+| A — Bare bones | user_posts only | ~$30/mo | d3 partial, no d2 = no momentum score |
+| **B — Minimum viable** ⭐ | **user_posts + profile** | **~$60/mo** | **d2 + d3 — credible brief possible** |
+| C — Adequate | + comments actor | ~$90/mo | + real d6 sentiment |
+| D — Full | + search actor | ~$120/mo | All dimensions (modulo search-actor quality) |
+
+**Tier B chosen.** Rationale: d2 + d3 are the foundation of the Weekly Action Kit verdict. d4/d6 are enrichment, deferable to A4 follow-up PR after first paying customer asks for sentiment analysis. Cost ($60/mo at 20 brands daily) comfortably within Joanna's $80-110/mo budget.
+
+### What easyapi user_posts gives vs misses
+
+**Populated:**
+- `display_title` → top_notes[].title
+- `interact_info.liked_count` (as string '6,739') → top_notes[].likes (parsed to int)
+- `type` (video/normal) → top_notes[].type
+- `user.nickname`, `user.user_id` → top_notes[].author_name + d2 brand identity
+- `cover.url_default` → top_notes[].cover_url (image_count derived as 1)
+
+**Empty by design (Tier B limitation):**
+- `content` (post body text)
+- `tags` (hashtags)
+- `comments`/`shares`/`saves` counts
+- `note_id` (always empty — we derive a stable ID from cover URL hash)
+- multi-image arrays
+
+Documented via assertion tests in `test_apify_client.py::test_mapper_documents_missing_fields_for_easyapi`. If a future easyapi version starts populating these, the test fails and prompts the mapper to take advantage.
+
+### Cookie story under Tier B
+
+We don't need `XHS_SESSION_COOKIE` anymore. easyapi authenticates internally via their residential proxy + cookie pool. `backend/.env` keeps `APIFY_API_TOKEN` only. Removes the entire burner-account cookie-refresh maintenance burden — `cookie_monitor.py` from A5 is now defunct for the easyapi path (kept in tree as code-history reference; can be deleted in follow-up cleanup).
+
+### Per-brand profile URL config
+
+easyapi's actors take `profileUrls` as input — meaning each competitor brand needs a one-time-config XHS profile URL. Currently bootstrap via env var `XHS_PROFILE_URL_<BRAND_NAME>` (e.g., `XHS_PROFILE_URL_SONGMONT`). A3 follow-up: persist as a `xhs_profile_url` column on `workspace_competitors` so admin UI can set it without env hacks.
