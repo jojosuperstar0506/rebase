@@ -522,6 +522,92 @@ app.get('/api/admin/pending-scrapes', async (req, res) => {
   }
 });
 
+// PATCH /api/admin/competitors/:id/xhs-url
+// Admin sets the XHS profile URL for a single workspace_competitors row.
+// Used in the "first 5 prospects" manual config flow: after a customer
+// finishes onboarding (AI suggests competitors → customer confirms list),
+// Will/Joanna manually finds each competitor's XHS profile URL and sets it
+// here. Once set, the daily cron in USE_APIFY=true mode picks up the URL
+// and scrapes via easyapi. See issue #62 / migration 013.
+//
+// Validation:
+//   - URL must point to www.rednote.com or www.xiaohongshu.com /user/profile/<id>
+//   - Pass null/empty string to clear a previously-set URL
+//
+// Auth: matches the rest of /api/admin/* (no middleware today; security
+// debt tracked separately).
+app.patch('/api/admin/competitors/:id/xhs-url', async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ error: 'Missing competitor id' });
+
+    let { xhs_profile_url } = req.body || {};
+    if (xhs_profile_url === undefined) {
+      return res.status(400).json({ error: 'Missing xhs_profile_url in body' });
+    }
+
+    // Normalize: allow null/empty to clear
+    if (xhs_profile_url === '' || xhs_profile_url === null) {
+      xhs_profile_url = null;
+    } else if (typeof xhs_profile_url !== 'string') {
+      return res.status(400).json({ error: 'xhs_profile_url must be a string or null' });
+    } else {
+      // Validate URL shape — must be xiaohongshu.com or rednote.com profile path
+      const xhsRegex = /^https?:\/\/(www\.)?(rednote|xiaohongshu)\.com\/user\/profile\/[a-zA-Z0-9]+/;
+      if (!xhsRegex.test(xhs_profile_url)) {
+        return res.status(400).json({
+          error: 'Invalid xhs_profile_url',
+          hint: 'Must look like https://www.rednote.com/user/profile/<userId> or https://www.xiaohongshu.com/user/profile/<userId>',
+        });
+      }
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE workspace_competitors
+          SET xhs_profile_url = $1
+        WHERE id = $2
+        RETURNING id, workspace_id, brand_name, xhs_profile_url`,
+      [xhs_profile_url, id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Competitor not found' });
+    }
+
+    res.json({ competitor: rows[0] });
+  } catch (err) {
+    console.error('[CI] PATCH competitors/:id/xhs-url error:', err.message);
+    res.status(500).json({ error: 'Failed to update xhs_profile_url' });
+  }
+});
+
+// GET /api/admin/competitors/missing-xhs-url
+// List all competitors across all workspaces that don't have an XHS profile
+// URL set yet. Used by admin dashboard to find the "needs URL configuration"
+// queue. Returns competitor + workspace metadata so admin can prioritize.
+app.get('/api/admin/competitors/missing-xhs-url', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT wc.id,
+              wc.brand_name,
+              wc.workspace_id,
+              wc.tier,
+              wc.added_via,
+              wc.created_at,
+              w.brand_name AS workspace_brand_name,
+              w.user_id AS workspace_user_id
+         FROM workspace_competitors wc
+         JOIN workspaces w ON w.id = wc.workspace_id
+        WHERE wc.xhs_profile_url IS NULL
+        ORDER BY wc.created_at DESC`
+    );
+    res.json({ competitors: rows, count: rows.length });
+  } catch (err) {
+    console.error('[CI] GET competitors/missing-xhs-url error:', err.message);
+    res.status(500).json({ error: 'Failed to list competitors missing URLs' });
+  }
+});
+
 // GET /api/admin/applicants — list all applicants (pending + approved)
 app.get("/api/admin/applicants", (req, res) => {
   const applicants = loadAllApplicants();

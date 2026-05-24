@@ -331,3 +331,54 @@ This is XHS's design choice (anti-scraping privacy measure on public profile pag
 - Deferred until first paying customer asks for momentum scoring or we have budget pressure
 
 **Mapper handles this gracefully** — `_parse_count()` takes lower bounds, exposes the raw fuzzy string alongside as `d2.followers_display`, so the Brief UI can show "≥10K followers" (transparent) instead of "10,000 followers" (misleading).
+
+---
+
+## Customer-Facing UX & Operational Flow (M-C, 2026-05-24)
+
+The integration between Joanna's existing onboarding wizard and the Apify scraper is now in place via migration 013 + admin endpoint. Customer journey:
+
+### What the customer experiences
+
+1. **Sign up** — enters their own brand name + category + price range
+2. **AI suggests competitors** — `POST /api/v2/onboarding/suggest-competitors` calls Claude with brand context; returns 6-8 suggestions enriched with platform_ids from KNOWN_BRANDS registry
+3. **Confirm / edit competitor list** — `CompetitorsStep.tsx` lets them toggle AI suggestions and add their own. Min 3, max 12.
+4. **Save** — `POST /api/v2/onboarding/competitors` writes rows to `workspace_competitors` (brand_name + tier + platform_ids + added_via)
+5. **(Behind the scenes)** Admin (Will/Joanna for first 5 prospects) sets `xhs_profile_url` per competitor via `PATCH /api/admin/competitors/:id/xhs-url`
+6. **Next-day cron** — `scrape_runner.run_tier_scrape('xhs', 'watchlist')` with `USE_APIFY=true` reads workspace_competitors → for each row with `xhs_profile_url`, calls easyapi via `ApifyScraperClient` → writes to `scraped_brand_profiles` + `scraped_products`
+7. **Brief generated** by the existing scoring pipelines from the DB data — customer wakes up to a populated Weekly Action Kit
+
+### What the admin (Will/Joanna) does for first 5 prospects
+
+After each customer completes onboarding, admin gets a notification (or watches `GET /api/admin/competitors/missing-xhs-url` queue). For each of their 3-12 competitors:
+
+1. Search the competitor's brand name on `rednote.com`
+2. Find their official account, copy the profile URL
+3. `PATCH /api/admin/competitors/:id/xhs-url` with `{"xhs_profile_url": "https://www.rednote.com/user/profile/<userId>"}`
+
+**Time cost:** ~10-20 minutes per customer (5-10 competitors × 2-3 min lookup each).
+
+### What's deferred (M-E in future PRs)
+
+| Item | What it replaces | When to build |
+|---|---|---|
+| Customer-facing "paste your competitor's XHS URL" step in wizard | Admin manual step 5 above | After first 5 prospects, if URL collection bottlenecks onboarding |
+| Auto-resolve brand_name → XHS URL via easyapi search actor | Same | When we know which brands typical prospects pick (informs match quality target) |
+| Pre-populated XHS URL in KNOWN_BRANDS registry for top 100 SMB-relevant brands | Same | When admin manual work scales painfully (>5 hrs/week) |
+
+### Files touched (migration 013 + M-C plumbing)
+
+- `backend/migrations/013_workspace_competitors_xhs_url.sql` — column add
+- `services/competitor_intel/db_bridge.py` — `get_scrape_targets` returns URL; `set_competitor_xhs_url{_by_brand}` helpers
+- `services/competitor_intel/scrape_runner.py` — passes `xhs_profile_url` from target row through `scrape_brand` → `_scrape_brand_via_apify`
+- `services/competitor_intel/scrapers/apify_client.py` — unchanged (already accepts `xhs_profile_url` in the brand dict)
+- `backend/server.js` — `PATCH /api/admin/competitors/:id/xhs-url` + `GET /api/admin/competitors/missing-xhs-url`
+
+### Cost re-estimate after Songmont validation
+
+Earlier estimate: ~$60/month at 20 brands daily. Actual:
+- user_posts: $0.05/brand × 20 brands = $1/day
+- profile: $0.005/brand × 20 brands = $0.10/day
+- **Total: ~$1.10/day = ~$33/month** at 20 brands daily
+
+Half the earlier estimate. Still includes apify subscription tier ($29/mo Starter); pay-per-use stays well under $100/mo even at 50+ brands daily.

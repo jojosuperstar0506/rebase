@@ -63,16 +63,75 @@ def get_conn():
 
 
 def get_scrape_targets(tier='watchlist'):
-    """Get all unique brands that need scraping at the given tier level."""
+    """Get all unique brands that need scraping at the given tier level.
+
+    Returns rows with: brand_name, platform_ids (JSONB), xhs_profile_url.
+    xhs_profile_url is populated when admin has configured the URL for the
+    Apify path (USE_APIFY=true). For the existing Playwright path it can
+    be ignored.
+
+    Note: DISTINCT now spans (brand_name, platform_ids, xhs_profile_url).
+    Same brand across workspaces with the same config is returned once;
+    differing configs return multiple rows (rare in practice — same XHS
+    profile URL per brand is the norm).
+    """
     conn = get_conn()
     try:
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT DISTINCT brand_name, platform_ids
+                SELECT DISTINCT brand_name, platform_ids, xhs_profile_url
                 FROM workspace_competitors
                 WHERE tier = %s
             """, (tier,))
             return cur.fetchall()
+    finally:
+        conn.close()
+
+
+def set_competitor_xhs_url(competitor_id, xhs_profile_url):
+    """Set the XHS profile URL for a competitor row. Used by the admin endpoint.
+
+    Args:
+        competitor_id: UUID of the workspace_competitors row
+        xhs_profile_url: full URL (e.g., https://www.rednote.com/user/profile/...),
+                         or None to clear
+
+    Returns: dict with updated row (id, brand_name, xhs_profile_url) or None if not found.
+    """
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE workspace_competitors
+                SET xhs_profile_url = %s
+                WHERE id = %s
+                RETURNING id, workspace_id, brand_name, xhs_profile_url
+            """, (xhs_profile_url, competitor_id))
+            row = cur.fetchone()
+            conn.commit()
+            return row
+    finally:
+        conn.close()
+
+
+def set_competitor_xhs_url_by_brand(workspace_id, brand_name, xhs_profile_url):
+    """Convenience: set URL by (workspace_id, brand_name) instead of competitor_id.
+
+    Useful for the first-prospects-manual-config workflow where admin
+    knows the workspace + brand name but not the UUID.
+    """
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE workspace_competitors
+                SET xhs_profile_url = %s
+                WHERE workspace_id = %s AND brand_name = %s
+                RETURNING id, brand_name, xhs_profile_url
+            """, (xhs_profile_url, workspace_id, brand_name))
+            row = cur.fetchone()
+            conn.commit()
+            return row
     finally:
         conn.close()
 

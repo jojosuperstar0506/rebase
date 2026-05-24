@@ -177,18 +177,32 @@ def _save_result(platform: str, brand_name: str, tier: str, result, cookies: str
 
 # ─── API mode ────────────────────────────────────────────────────────────────
 
-async def scrape_brand(platform: str, brand_name: str, keyword: str, tier: str, cookies: str = None):
+async def scrape_brand(
+    platform: str,
+    brand_name: str,
+    keyword: str,
+    tier: str,
+    cookies: str = None,
+    xhs_profile_url: str = None,
+):
     """Scrape a single brand via httpx API mode.
 
     A3 (issue #62): when USE_APIFY=true and platform is XHS, route through
     ApifyScraperClient instead of the in-house Playwright/httpx scraper.
     Default (USE_APIFY=false or unset) keeps the existing behavior unchanged.
+
+    xhs_profile_url (M-C, migration 013): if the caller pre-fetched the per-
+    competitor URL from workspace_competitors.xhs_profile_url, pass it through
+    to the Apify path. Falls back to env var XHS_PROFILE_URL_<BRAND> if None.
     """
     # ── A3 feature-flag branch: Apify path for XHS ──
     # Only XHS is wired in A3. A4 adds Douyin + Taobao. All other platforms
     # continue using the existing scraper regardless of USE_APIFY setting.
     if os.environ.get("USE_APIFY", "false").lower() == "true" and platform == "xhs":
-        return await _scrape_brand_via_apify(platform, brand_name, keyword, tier)
+        return await _scrape_brand_via_apify(
+            platform, brand_name, keyword, tier,
+            xhs_profile_url=xhs_profile_url,
+        )
 
     # ── existing httpx/Playwright path — unchanged ──
     ScraperClass = PLATFORM_SCRAPERS.get(platform)
@@ -219,7 +233,13 @@ async def scrape_brand(platform: str, brand_name: str, keyword: str, tier: str, 
         return False
 
 
-async def _scrape_brand_via_apify(platform: str, brand_name: str, keyword: str, tier: str) -> bool:
+async def _scrape_brand_via_apify(
+    platform: str,
+    brand_name: str,
+    keyword: str,
+    tier: str,
+    xhs_profile_url: str = None,
+) -> bool:
     """A3 — route a single brand scrape through ApifyScraperClient.
 
     Reads APIFY_API_TOKEN from env (no XHS_SESSION_COOKIE needed — easyapi
@@ -228,9 +248,10 @@ async def _scrape_brand_via_apify(platform: str, brand_name: str, keyword: str, 
     object shape) and writes the apify_client.data_dict directly to
     save_brand_profile().
 
-    Brand dict must include 'xhs_profile_url' (one-time-config per brand)
-    since easyapi's user_posts and profile actors both require a profile URL
-    input — search-by-keyword is not used (validated unreliable during A1.5).
+    xhs_profile_url is the per-competitor XHS profile URL from the DB
+    (workspace_competitors.xhs_profile_url, populated by admin via
+    PATCH /api/admin/competitors/:id/xhs-url). Falls back to env var
+    XHS_PROFILE_URL_<BRAND> for bootstrap/demo workflows.
 
     Returns True on success/partial, False on failure.
     """
@@ -246,16 +267,17 @@ async def _scrape_brand_via_apify(platform: str, brand_name: str, keyword: str, 
         print("[ERROR/apify] USE_APIFY=true but APIFY_API_TOKEN env var not set")
         return False
 
-    # Fetch the brand's pre-configured XHS profile URL. For now, read from a
-    # JSON column on workspace_competitors or fall back to env-var lookup.
-    # TODO(A3 followup): persist xhs_profile_url per competitor in the DB
-    # (one-time admin UI). Until then, env var XHS_PROFILE_URL_<BRAND> is
-    # the bootstrap mechanism for the demo workspace.
-    profile_url = os.environ.get(f"XHS_PROFILE_URL_{brand_name.upper().replace(' ', '_')}")
+    # XHS profile URL: prefer the per-competitor DB column (migration 013),
+    # fall back to env var XHS_PROFILE_URL_<BRAND> for bootstrap/demo workflows.
+    # The DB-column path is what production should use — admin configures via
+    # PATCH /api/admin/competitors/:id/xhs-url after AI suggests competitors.
+    profile_url = xhs_profile_url or os.environ.get(
+        f"XHS_PROFILE_URL_{brand_name.upper().replace(' ', '_')}"
+    )
     if not profile_url:
-        print(f"[ERROR/apify] No XHS profile URL configured for brand '{brand_name}'. "
-              f"Set XHS_PROFILE_URL_{brand_name.upper().replace(' ', '_')} env var "
-              f"OR migrate to per-competitor xhs_profile_url DB column (A3 followup).")
+        print(f"[SKIP/apify] No XHS profile URL configured for brand '{brand_name}'. "
+              f"Set via admin PATCH /api/admin/competitors/:id/xhs-url, "
+              f"OR set XHS_PROFILE_URL_{brand_name.upper().replace(' ', '_')} env var for bootstrap.")
         return False
 
     print(f"[SCRAPE/apify] {platform} / {brand_name} (profile: {profile_url}, tier: {tier})")
@@ -309,7 +331,13 @@ async def run_tier_scrape(platform: str, tier: str):
         brand_name = target['brand_name']
         platform_ids = target.get('platform_ids') or {}
         keyword = platform_ids.get(platform, brand_name)
-        ok = await scrape_brand(platform, brand_name, keyword, tier, cookies)
+        # M-C: per-competitor XHS profile URL from DB column (migration 013).
+        # None for non-XHS platforms or when admin hasn't configured it yet.
+        xhs_profile_url = target.get('xhs_profile_url') if platform == 'xhs' else None
+        ok = await scrape_brand(
+            platform, brand_name, keyword, tier, cookies,
+            xhs_profile_url=xhs_profile_url,
+        )
         if ok:
             success += 1
         await asyncio.sleep(5)
