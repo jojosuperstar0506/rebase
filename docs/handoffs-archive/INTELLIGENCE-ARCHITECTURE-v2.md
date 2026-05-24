@@ -105,7 +105,7 @@ The table IS the contract. No syncing needed on data format.
 | Backend (Node.js + Express) | ECS `8.217.242.191:3000` | Running via PM2 |
 | PostgreSQL database | ECS localhost:5432 | Connected, all tables exist |
 | `DATABASE_URL` | `.env` on ECS | Correct password set |
-| `API_SECRET` | ECS `.env` + Vercel env | Synced (both `a9231db...`) |
+| `API_SECRET` | ECS `.env` + Vercel env | Synced (both `<API_SECRET_REDACTED>`) |
 | `DEEPSEEK_API_KEY` | ECS `.env` | Set (`sk-0fe6c...`) |
 | Python dependencies | ECS | `psycopg2`, `httpx` installed |
 | All 12 scoring pipelines | `services/competitor_intel/pipelines/` | Code complete, committed |
@@ -448,7 +448,8 @@ Open `.env` in a text editor and set these values (**replace the placeholder val
 
 ```env
 # Database — use localhost because the SSH tunnel (Step 5) maps it to ECS
-DATABASE_URL=postgresql://rebase_app:RebaseAdmin2026@localhost:5432/rebase
+# Get the password from William; do NOT paste real values here.
+DATABASE_URL=postgresql://rebase_app:<DB_PASSWORD>@localhost:5432/rebase
 
 # Scraper profile directory (from Step 3 — adjust path for your machine)
 # Mac example:
@@ -456,14 +457,20 @@ SCRAPER_PROFILE_DIR=/Users/joanna/rebase-scraper-profile
 # Windows example:
 # SCRAPER_PROFILE_DIR=C:/rebase-scraper-profile
 
-# API secret — must match ECS and Vercel (do not change this value)
-API_SECRET=a9231db3907bef4f146cea299efa9f37960781fd5f191ae5f369ba3742e082ea
+# API secret — must match ECS and Vercel. Get from William.
+API_SECRET=<API_SECRET_FROM_WILLIAM>
 
 # DeepSeek — needed if you run scoring locally (otherwise only ECS needs it)
-DEEPSEEK_API_KEY=sk-0fe6c7101cd64e548249164887f2ac95
+DEEPSEEK_API_KEY=<DEEPSEEK_KEY_FROM_WILLIAM>
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-chat
 ```
+
+> **🔒 NOTE (added 2026-05-24 after secret-leak incident):** the original
+> version of this doc had real secret values written inline. They were
+> rotated when the leak was discovered. Never commit live secret values
+> to docs — use placeholders like `<DEEPSEEK_KEY_FROM_WILLIAM>` and pass
+> the real values via WeChat/Slack/encrypted note instead.
 
 **Important:** The `DATABASE_URL` uses `localhost:5432` — this works because the SSH tunnel in Step 5 forwards your local port 5432 to the ECS database. Do NOT change this to the ECS IP directly.
 
@@ -490,7 +497,7 @@ ssh -L 15432:localhost:5432 joanna@8.217.242.191 -N
 ```
 Then update your `.env` to use port 15432:
 ```env
-DATABASE_URL=postgresql://rebase_app:RebaseAdmin2026@localhost:15432/rebase
+DATABASE_URL=postgresql://rebase_app:<DB_PASSWORD>@localhost:15432/rebase
 ```
 
 **If SSH fails with "permission denied":**
@@ -504,7 +511,7 @@ In a **different terminal** from the SSH tunnel, run:
 ```bash
 python3 -c "
 import psycopg2
-conn = psycopg2.connect('postgresql://rebase_app:RebaseAdmin2026@localhost:5432/rebase')
+conn = psycopg2.connect('postgresql://rebase_app:<DB_PASSWORD>@localhost:5432/rebase')
 cur = conn.cursor()
 cur.execute('SELECT COUNT(*) FROM workspace_competitors')
 print(f'Connected! {cur.fetchone()[0]} competitors in database.')
@@ -560,7 +567,7 @@ This will scrape all brands in the database: CASSILE, Songmont, 古良吉吉, j,
 ```bash
 python3 -c "
 import psycopg2
-conn = psycopg2.connect('postgresql://rebase_app:RebaseAdmin2026@localhost:5432/rebase')
+conn = psycopg2.connect('postgresql://rebase_app:<DB_PASSWORD>@localhost:5432/rebase')
 cur = conn.cursor()
 cur.execute('SELECT platform, brand_name, scraped_at FROM scraped_brand_profiles ORDER BY scraped_at DESC LIMIT 10')
 for row in cur.fetchall():
@@ -583,7 +590,7 @@ Now that scraped data exists, trigger the AI scoring engine. You can do this two
 **Option B: Via command line** (if frontend isn't accessible)
 ```bash
 curl -X POST -H "Content-Type: application/json" \
-  -H "x-rebase-secret: a9231db3907bef4f146cea299efa9f37960781fd5f191ae5f369ba3742e082ea" \
+  -H "x-rebase-secret: <API_SECRET_REDACTED>" \
   -d '{"workspace_id":"0cf0e691-89f4-46f5-8c6f-ad227339e600"}' \
   "http://8.217.242.191:3000/api/ci/run-analysis"
 ```
@@ -593,7 +600,7 @@ curl -X POST -H "Content-Type: application/json" \
 Wait 30-60 seconds for the pipelines to finish, then check status:
 
 ```bash
-curl -H "x-rebase-secret: a9231db3907bef4f146cea299efa9f37960781fd5f191ae5f369ba3742e082ea" \
+curl -H "x-rebase-secret: <API_SECRET_REDACTED>" \
   "http://8.217.242.191:3000/api/ci/analysis/status?workspace_id=0cf0e691-89f4-46f5-8c6f-ad227339e600"
 ```
 
@@ -740,7 +747,7 @@ Open browser DevTools (Network tab) while on the Intelligence page:
 | "Backend unreachable" | ECS_URL wrong in Vercel | Check Vercel env vars |
 | 502 Bad Gateway | ECS server down | SSH to ECS, run `pm2 restart rebase-backend` |
 | All scores are 0 or empty | No scraped data | Run scraper first (Section 8) |
-| "password authentication failed" | DB password mismatch | Run `ALTER USER rebase_app WITH PASSWORD 'RebaseAdmin2026';` on ECS |
+| "password authentication failed" | DB password mismatch | Run `ALTER USER rebase_app WITH PASSWORD '<DB_PASSWORD>';` on ECS |
 | Pipeline spawned but no results | Python import errors | Check `pm2 logs --lines 50` on ECS |
 | Cookies expired | Platform auth expired | Re-run `setup_profiles --platform xhs` |
 
