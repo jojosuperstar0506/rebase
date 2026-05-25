@@ -754,6 +754,86 @@ export default function CIBrief() {
           </div>
         )}
 
+        {/* Competitor-set-change warning — a SEPARATE staleness signal from
+            the day-age one above. Catches two real data-quality scenarios
+            that Will surfaced 2026-05-26:
+              1. ADDITIONS: customer added new competitors after the brief
+                 was generated → brief doesn't mention them
+              2. REMOVALS: customer removed competitors that the brief's
+                 LLM text still references (PR #111 fixed the data layer
+                 but not the LLM narrative)
+            Either case warrants a regenerate. We catch additions via
+            competitor.created_at > brief.generated_at, and removals by
+            comparing brand names in brief.moves vs current competitor list.
+            Limitation: doesn't catch deletions if those brands never
+            appeared in brief.moves (e.g., they had no data → no event). */}
+        {!regenerating && brief.generated_at && (() => {
+          const briefDate = new Date(brief.generated_at);
+          const ownBrand = workspace?.brand_name || '';
+          const currentBrandSet = new Set([
+            ownBrand,
+            ...competitors.map((c) => c.brand_name),
+          ]);
+          // Additions: any competitor created after brief was generated
+          const added = competitors.filter(
+            (c) => c.created_at && new Date(c.created_at) > briefDate
+          );
+          // Removals: any brand mentioned in brief.moves that's not in current set
+          const briefBrands = Array.isArray(brief.moves)
+            ? Array.from(new Set(brief.moves.map((m) => m.brand).filter(Boolean)))
+            : [];
+          const removed = briefBrands.filter((b) => !currentBrandSet.has(b));
+
+          if (added.length === 0 && removed.length === 0) return null;
+
+          // Compose a single human-readable message naming the deltas. Cap
+          // the lists at 3 so a brand-soup workspace doesn't blow up the banner.
+          function fmtList(names: string[], maxShow = 3): string {
+            if (names.length === 0) return '';
+            if (names.length <= maxShow) return names.join(', ');
+            return `${names.slice(0, maxShow).join(', ')} +${names.length - maxShow}`;
+          }
+
+          const addedNames = added.map((c) => c.brand_name);
+          const parts: string[] = [];
+          if (added.length > 0) {
+            parts.push(lang === 'zh'
+              ? `新增 ${added.length} 个竞品 (${fmtList(addedNames)})`
+              : `${added.length} new competitor${added.length === 1 ? '' : 's'} added (${fmtList(addedNames)})`);
+          }
+          if (removed.length > 0) {
+            parts.push(lang === 'zh'
+              ? `已移除 ${removed.length} 个竞品仍在简报中提及 (${fmtList(removed)})`
+              : `${removed.length} removed competitor${removed.length === 1 ? '' : 's'} still referenced in this brief (${fmtList(removed)})`);
+          }
+          const message = parts.join(' · ');
+
+          return (
+            <div style={{
+              marginBottom: 24,
+              padding: '12px 16px',
+              background: '#f59e0b14',
+              border: '1px solid #f59e0b55',
+              borderRadius: 10,
+              fontSize: 13,
+              color: C.t2,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              lineHeight: 1.6,
+            }}>
+              <span style={{ fontSize: 16 }}>👥</span>
+              <span>
+                {message}.
+                {' '}
+                {lang === 'zh'
+                  ? '点击上方"更新本周简报"以纳入当前竞品列表。'
+                  : `Click "Refresh This Week's Brief" above to regenerate with the current competitor list.`}
+              </span>
+            </div>
+          );
+        })()}
+
         {/* ─── SECTION 1: Verdict ─────────────────────────────────────── */}
         {/* Layout (when verdict.pressure_points is present — the structured shape):
               Hero band:    trend pill · context label · headline · 1-line summary
