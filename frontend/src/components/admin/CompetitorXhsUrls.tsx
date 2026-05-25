@@ -35,6 +35,12 @@ export function CompetitorXhsUrls() {
   const [competitors, setCompetitors] = useState<MissingUrlCompetitor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // Scrape trigger state — separate from queue state because they're
+  // independent operations (queue = "URLs to paste", scrape = "kick off
+  // Apify for all watchlist brands").
+  const [scraping, setScraping] = useState(false);
+  const [scrapeMsg, setScrapeMsg] = useState("");
+  const [scrapeOk, setScrapeOk] = useState(false);
   // Coalesce parallel refresh calls: when two UrlRows both call onSaved()
   // within their 1.5s success window, we want ONE refresh, not two. Tracks
   // an in-flight refresh so the second caller is a no-op.
@@ -43,6 +49,30 @@ export function CompetitorXhsUrls() {
   // strict-mode dev / when admin navigates away mid-fetch.
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
+
+  // Trigger the scraper. Fire-and-forget on the server side; we just need
+  // to confirm the spawn succeeded and surface the response to the admin.
+  async function handleRunScraper() {
+    setScraping(true);
+    setScrapeMsg("");
+    setScrapeOk(false);
+    try {
+      const res = await fetch("/api/admin/scrape", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Scrape trigger failed");
+      if (mounted.current) {
+        setScrapeOk(true);
+        setScrapeMsg(data.message || "Scraper started.");
+      }
+    } catch (e) {
+      if (mounted.current) {
+        setScrapeOk(false);
+        setScrapeMsg(e instanceof Error ? e.message : "Scrape trigger failed");
+      }
+    } finally {
+      if (mounted.current) setScraping(false);
+    }
+  }
 
   const fetchMissing = useCallback(async () => {
     if (refreshInFlight.current) return;
@@ -74,6 +104,49 @@ export function CompetitorXhsUrls() {
 
   return (
     <section className="mt-12">
+      {/* ── Run scraper now panel ──────────────────────────────────────
+          Operationally, the admin flow is: paste URLs in the queue below →
+          click this button → wait ~2-5 min → customer's Settings page
+          state-aware UX flips from "setting up" to "ready". The 12hr
+          freshness guard makes this safe to click repeatedly. */}
+      <div
+        className="mb-8 p-5 rounded-[var(--radius-md)]"
+        style={{
+          border: "1px dashed var(--color-border)",
+          backgroundColor: "var(--color-surface-elevated)",
+        }}
+      >
+        <Eyebrow>// admin · apify scraper · trigger</Eyebrow>
+        <Heading as={3} size="card" className="mt-2 mb-2">
+          Run XHS scraper now
+        </Heading>
+        <p className="font-mono text-xs text-[var(--color-text-muted)] leading-relaxed mb-4 max-w-prose">
+          // Spawns scrape_runner --tier watchlist on ECS. Already-fresh brands
+          <br />
+          // (scraped &lt;12hr ago) are skipped — safe to click after pasting
+          <br />
+          // new URLs in the queue below.
+        </p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <Button onClick={handleRunScraper} disabled={scraping}>
+            {scraping ? "starting…" : "run scraper"}
+          </Button>
+          {scrapeMsg && (
+            <span
+              className="font-mono text-xs"
+              style={{
+                color: scrapeOk
+                  ? "var(--color-success)"
+                  : "var(--color-danger)",
+              }}
+            >
+              {scrapeOk ? "✓ " : "✗ "}
+              {scrapeMsg}
+            </span>
+          )}
+        </div>
+      </div>
+
       <div className="mb-5">
         <Eyebrow>// admin · apify scraper · xhs profile urls</Eyebrow>
         <Heading as={3} size="card" className="mt-2">
