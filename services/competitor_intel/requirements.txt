@@ -13,8 +13,8 @@ anthropic>=0.39.0
 # Browser automation (for local/cloud scraping with browser mode)
 playwright>=1.40.0
 
-# Async support
-asyncio-compat>=0.1.0
+# Postgres driver (used by db_bridge.py)
+psycopg2-binary>=2.9.0
 
 # Data processing
 python-dateutil>=2.8.0
