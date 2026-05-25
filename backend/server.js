@@ -1244,12 +1244,19 @@ app.get('/api/ci/dashboard', async (req, res) => {
       [workspaceId]
     );
 
-    // Get latest scores for each competitor
+    // Get latest scores for each competitor — filtered to currently-tracked
+    // competitors (workspace_competitors) + own brand. Same pattern as
+    // /api/ci/intelligence and /api/ci/composite-indices.
     const { rows: scores } = await pool.query(
       `SELECT DISTINCT ON (competitor_name, metric_type)
          competitor_name, metric_type, metric_version, score, ai_narrative, analyzed_at
        FROM analysis_results
        WHERE workspace_id = $1
+         AND competitor_name IN (
+           SELECT brand_name FROM workspace_competitors WHERE workspace_id = $1
+           UNION
+           SELECT brand_name FROM workspaces WHERE id = $1
+         )
        ORDER BY competitor_name, metric_type, analyzed_at DESC`,
       [workspaceId]
     );
@@ -2298,11 +2305,21 @@ app.get('/api/ci/analytics', async (req, res) => {
     // shows the underlying numbers (growth rates, voice share, platform
     // breakdown, etc.) — closes Joanna's gap analysis #16 (backend rich,
     // frontend renders thin).
+    //
+    // Filtered to currently-tracked competitors only (analysis_results
+    // is append-only; removed competitors' rows stay in DB for re-add
+    // history but shouldn't render). Same UNION pattern as the other
+    // per-competitor endpoints.
     const { rows: scoreRows } = await pool.query(
       `SELECT DISTINCT ON (competitor_name, metric_type)
               competitor_name, metric_type, score, raw_inputs
          FROM analysis_results
         WHERE workspace_id = $1
+          AND competitor_name IN (
+            SELECT brand_name FROM workspace_competitors WHERE workspace_id = $1
+            UNION
+            SELECT brand_name FROM workspaces WHERE id = $1
+          )
         ORDER BY competitor_name, metric_type, analyzed_at DESC`,
       [workspaceId]
     );
@@ -2734,12 +2751,21 @@ app.get('/api/ci/domain-scores', async (req, res) => {
     if (wsRows.length === 0) return res.status(404).json({ error: 'Workspace not found' });
     const ownBrand = wsRows[0].brand_name || '';
 
+    // Filtered to currently-tracked competitors (CASSILE/FOXER/xx etc.
+    // were leaking into the "You vs competitors · 3-domain scores" chart
+    // even after the customer removed them — caught from Will's screenshot
+    // 2026-05-26).
     const { rows: rollups } = await pool.query(
       `SELECT DISTINCT ON (competitor_name, metric_type)
               competitor_name, metric_type, score
          FROM analysis_results
         WHERE workspace_id = $1
           AND metric_type = ANY($2::text[])
+          AND competitor_name IN (
+            SELECT brand_name FROM workspace_competitors WHERE workspace_id = $1
+            UNION
+            SELECT brand_name FROM workspaces WHERE id = $1
+          )
         ORDER BY competitor_name, metric_type, analyzed_at DESC`,
       [workspaceId, ['consumer_domain', 'product_domain', 'marketing_domain']]
     );
@@ -3577,11 +3603,21 @@ app.get('/api/ci/brand-insights', async (req, res) => {
   const lang = req.query.lang === 'en' ? 'en' : 'zh';
 
   try {
+    // Filtered to currently-tracked competitors only — the verdict cards
+    // were rendering FOXER, CASSILE, xx (removed competitors) on Will's
+    // OMI workspace, 2026-05-26.
     const { rows } = await pool.query(`
       SELECT DISTINCT ON (competitor_name)
         competitor_name, ai_narrative, analyzed_at
       FROM analysis_results
-      WHERE workspace_id = $1 AND metric_type = 'brand_insight' AND ai_narrative IS NOT NULL
+      WHERE workspace_id = $1
+        AND metric_type = 'brand_insight'
+        AND ai_narrative IS NOT NULL
+        AND competitor_name IN (
+          SELECT brand_name FROM workspace_competitors WHERE workspace_id = $1
+          UNION
+          SELECT brand_name FROM workspaces WHERE id = $1
+        )
       ORDER BY competitor_name, analyzed_at DESC
     `, [workspace_id]);
 
