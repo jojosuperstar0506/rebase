@@ -183,10 +183,19 @@ export default function IndexScatterPlot({ data }: IndexScatterPlotProps) {
                         fill={fill}
                         stroke={p.isOwn ? C.ac : C.s1}
                         strokeWidth={p.isOwn ? 2 : 1.5} />
-                <text x={cx} y={cy - r - 6} fontSize={p.isOwn ? 12 : 11}
-                      fontWeight={p.isOwn ? 800 : 600}
-                      fill={p.isOwn ? C.ac : C.tx}
-                      textAnchor="middle">{p.brand}</text>
+                {/* Labels: ALWAYS show own brand (it's the anchor reference).
+                    For competitors, show only on hover — when many brands
+                    cluster (common in early-data scenarios where everyone's
+                    bunched near the origin), always-on labels overlap and
+                    become unreadable. Hover gives precision without visual
+                    chaos. Caught 2026-05-26: 7 OMI competitors clustered,
+                    labels were illegible (URBAN REVIVO became "URB...VIVO"). */}
+                {(p.isOwn || isHovered) && (
+                  <text x={cx} y={cy - r - 6} fontSize={p.isOwn ? 12 : 11}
+                        fontWeight={p.isOwn ? 800 : 600}
+                        fill={p.isOwn ? C.ac : C.tx}
+                        textAnchor="middle">{p.brand}</text>
+                )}
                 {isHovered && (
                   <text x={cx} y={cy + r + 14} fontSize={10} fill={C.t2}
                         textAnchor="middle">
@@ -214,8 +223,8 @@ export default function IndexScatterPlot({ data }: IndexScatterPlotProps) {
       {/* Legend hint */}
       <div style={{ marginTop: 10, fontSize: 11, color: C.t3, lineHeight: 1.5 }}>
         {lang === 'zh'
-          ? '点 = 品牌; 蓝色高亮 = 你的品牌; 虚线 = 中位分隔线 (50 或 0). 鼠标悬停查看精确分数.'
-          : 'Each dot = a brand; blue halo = your brand; dashed lines = midpoint (50 or 0). Hover any dot for exact scores.'}
+          ? '点 = 品牌; 蓝色高亮 = 你的品牌; 虚线 = 中位分隔线 (50 或 0). 鼠标悬停查看品牌名和精确分数.'
+          : 'Each dot = a brand; blue halo = your brand; dashed lines = midpoint (50 or 0). Hover any dot to see the brand name + exact scores.'}
       </div>
     </div>
   );

@@ -1385,12 +1385,21 @@ app.get('/api/ci/intelligence', async (req, res) => {
     if (!isValidUuid(workspaceId)) return res.status(404).json({ error: 'Workspace not initialized', workspace_id: workspaceId });
     const lang = req.query.lang === 'en' ? 'en' : 'zh';
 
-    // Get ALL latest results per competitor × metric_type
+    // Get ALL latest results per competitor × metric_type, filtered to
+    // CURRENTLY-TRACKED competitors only (analysis_results is append-only;
+    // removed competitors' historical rows stay in DB so re-adding them
+    // instantly restores their history, but we shouldn't display them).
+    // UNION includes own brand so workspace_brand never gets filtered out.
     const { rows } = await pool.query(
       `SELECT DISTINCT ON (competitor_name, metric_type)
          competitor_name, metric_type, score, raw_inputs, ai_narrative, analyzed_at
        FROM analysis_results
        WHERE workspace_id = $1
+         AND competitor_name IN (
+           SELECT brand_name FROM workspace_competitors WHERE workspace_id = $1
+           UNION
+           SELECT brand_name FROM workspaces WHERE id = $1
+         )
        ORDER BY competitor_name, metric_type, analyzed_at DESC`,
       [workspaceId]
     );
@@ -2461,6 +2470,19 @@ app.get('/api/ci/indices', async (req, res) => {
     // Latest composite_indices row per (competitor, index_name).
     // Distinct on the (competitor, index) pair so historical reruns don't
     // double-count. computed_at DESC picks the freshest snapshot.
+    //
+    // IMPORTANT — filter to CURRENTLY-TRACKED competitors only. composite_indices
+    // is append-only: when a customer removes a competitor from
+    // workspace_competitors, the historical scored rows stay (we keep them so
+    // re-adding the same brand instantly shows its history). But the Analytics
+    // view should only render brands the customer is currently watching, or
+    // they see ghost rows from competitors they thought they removed.
+    //
+    // Caught 2026-05-26 during Will's first end-to-end test: he removed
+    // competitors via Settings and they kept appearing in the scatter plot.
+    //
+    // The UNION includes the workspace's OWN brand_name so the user's own
+    // scores always render even though they're not in workspace_competitors.
     const { rows: indexRows } = await pool.query(
       `SELECT DISTINCT ON (competitor_name, index_name)
               competitor_name, index_name, index_version, pillar,
@@ -2468,6 +2490,11 @@ app.get('/api/ci/indices', async (req, res) => {
               direction, delta, computed_at
          FROM composite_indices
         WHERE workspace_id = $1
+          AND competitor_name IN (
+            SELECT brand_name FROM workspace_competitors WHERE workspace_id = $1
+            UNION
+            SELECT brand_name FROM workspaces WHERE id = $1
+          )
         ORDER BY competitor_name, index_name, computed_at DESC`,
       [workspaceId]
     );
