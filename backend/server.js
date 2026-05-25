@@ -627,13 +627,18 @@ app.get('/api/admin/competitors/missing-xhs-url', async (req, res) => {
 // pasting fresh XHS URLs.
 //
 // Behavior:
-//   - Spawns scrape_runner --platform xhs --tier watchlist (detached).
-//   - Per-brand freshness guard (FRESHNESS_THRESHOLD_HOURS=12) skips brands
-//     scraped in the last 12 hrs, so this is safe to click repeatedly —
-//     re-triggering won't double-spend on Apify for brands already covered.
+//   - Spawns scrape_runner --platform xhs --tier watchlist --force-rescrape
+//     (detached). The --force-rescrape flag is intentional: when admin
+//     clicks the button, that IS the explicit choice to scrape now even
+//     if data is <12h fresh. The freshness guard exists to prevent cron+
+//     manual collision via the CRON path — manual admin clicks should
+//     always honor the user's intent. (Will's product call 2026-05-26.)
 //   - Returns immediately (200 + queued message). Actual scrape runs in
 //     background; admin watches /var/log/rebase/* or apify_run_log table.
-//   - Cost: $0 for brands skipped by freshness guard; ~$0.25 per fresh brand.
+//   - Cost: ~$0.25 per brand in the watchlist (no freshness skip).
+//   - Tradeoff: admin can double-spend by clicking the button twice in
+//     a row. That's the admin's explicit choice — surfaced via the
+//     response message so it's visible.
 //
 // NOT scoped per workspace today: scrape_runner --tier watchlist already
 // scrapes the de-duplicated brand list across all workspaces. Adding a
@@ -652,6 +657,7 @@ app.post('/api/admin/scrape', async (req, res) => {
       '-m', 'services.competitor_intel.scrape_runner',
       '--platform', 'xhs',
       '--tier', 'watchlist',
+      '--force-rescrape',
     ], {
       cwd: repoRoot,
       env: { ...process.env },
@@ -660,11 +666,11 @@ app.post('/api/admin/scrape', async (req, res) => {
     });
     proc.unref();
 
-    console.log(`[ADMIN] Triggered watchlist scrape (pid: ${proc.pid})`);
+    console.log(`[ADMIN] Triggered watchlist scrape with --force-rescrape (pid: ${proc.pid})`);
 
     res.json({
       started: true,
-      message: 'Watchlist scrape queued. Already-fresh brands will be skipped (12hr guard).',
+      message: 'Watchlist scrape queued (force-rescrape — every brand will be re-fetched, ~$0.25/brand).',
       pid: proc.pid || null,
     });
   } catch (err) {
