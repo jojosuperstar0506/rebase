@@ -16,6 +16,12 @@ playwright>=1.40.0
 # Postgres driver (used by db_bridge.py)
 psycopg2-binary>=2.9.0
 
+# YAML config loader (used by scraping_config.py for scraping_rules.yml)
+pyyaml>=6.0
+
+# Cookie encryption (used by db_bridge.py for connections_credentials)
+cryptography>=42.0
+
 # Data processing
 python-dateutil>=2.8.0
 
