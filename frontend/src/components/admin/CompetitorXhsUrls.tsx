@@ -385,3 +385,251 @@ function UrlRow({ competitor, onSaved }: UrlRowProps) {
     </div>
   );
 }
+
+// ─── Edit existing URLs section ────────────────────────────────────────
+// Sibling to the "awaiting URL" queue: lists every competitor that ALREADY
+// has a URL set, with an editable pre-filled input so admin can fix wrong
+// URLs (wrong account, wrong domain, typo) without SSHing to ECS to run
+// SQL UPDATEs.
+//
+// Concrete trigger (Will, 2026-05-26): admin pasted URLs from XHS search
+// results, but the URLs were 'wrong' — pointed to the wrong account
+// entirely. With no in-UI edit path, the only recovery was psql UPDATE.
+// This panel makes the edit path first-class.
+//
+// Saves use the same PATCH /api/admin/competitors/:id/xhs-url endpoint
+// as the awaiting-URL queue. The backend auto-normalizes
+// xiaohongshu.com → rednote.com so admins don't have to think about
+// the actor's domain quirk.
+interface SetUrlCompetitor extends MissingUrlCompetitor {
+  xhs_profile_url: string;
+}
+
+export function CompetitorXhsUrlsEdit() {
+  const [competitors, setCompetitors] = useState<SetUrlCompetitor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const refreshInFlight = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
+
+  const fetchWithUrl = useCallback(async () => {
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
+    if (mounted.current) {
+      setLoading(true);
+      setError("");
+    }
+    try {
+      const res = await fetch("/api/admin/competitors/with-xhs-url");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load");
+      if (mounted.current) {
+        setCompetitors(Array.isArray(data.competitors) ? data.competitors : []);
+      }
+    } catch (e) {
+      if (mounted.current) {
+        setError(e instanceof Error ? e.message : "Failed to load");
+      }
+    } finally {
+      if (mounted.current) setLoading(false);
+      refreshInFlight.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchWithUrl();
+  }, [fetchWithUrl]);
+
+  // Group by workspace just like the awaiting queue
+  const groups = new Map<string, {
+    workspaceUserId: string;
+    workspaceBrandName: string;
+    competitors: SetUrlCompetitor[];
+  }>();
+  for (const c of competitors) {
+    const key = c.workspace_user_id || c.workspace_id;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        workspaceUserId: c.workspace_user_id,
+        workspaceBrandName: c.workspace_brand_name || c.workspace_id.slice(0, 8),
+        competitors: [],
+      });
+    }
+    groups.get(key)!.competitors.push(c);
+  }
+  const sortedGroups = Array.from(groups.values()).sort((a, b) =>
+    a.workspaceBrandName.localeCompare(b.workspaceBrandName)
+  );
+
+  return (
+    <section className="mt-12">
+      <div className="mb-5">
+        <Eyebrow>// admin · apify scraper · edit existing urls</Eyebrow>
+        <Heading as={3} size="card" className="mt-2">
+          Edit configured XHS profile URLs
+        </Heading>
+        <p className="font-mono text-xs text-[var(--color-text-muted)] mt-2 leading-relaxed max-w-prose">
+          // {competitors.length} competitor{competitors.length === 1 ? "" : "s"} have URLs set.
+          <br />
+          // Replace the value below to fix a wrong URL. Save triggers a
+          <br />
+          // PATCH; xiaohongshu.com is auto-normalized to rednote.com.
+        </p>
+      </div>
+
+      {loading && (
+        <div className="font-mono text-sm text-[var(--color-text-muted)]">
+          // loading…
+        </div>
+      )}
+
+      {error && (
+        <div
+          className="px-4 py-3 mb-4 rounded-[var(--radius-xs)]"
+          style={{
+            border: "1px solid var(--color-danger)",
+            backgroundColor: "color-mix(in srgb, var(--color-danger) 10%, transparent)",
+          }}
+        >
+          <span className="font-mono text-sm text-[var(--color-danger)]">
+            // error: {error}
+          </span>
+        </div>
+      )}
+
+      {!loading && !error && competitors.length === 0 && (
+        <div className="font-mono text-sm text-[var(--color-text-muted)]">
+          // no competitors have URLs set yet (use the queue above first)
+        </div>
+      )}
+
+      {!loading && !error && competitors.length > 0 && (
+        <div className="flex flex-col gap-6">
+          {sortedGroups.map((g) => (
+            <div key={g.workspaceUserId}>
+              <div className="mb-3 pb-2" style={{
+                borderBottom: "1px dashed var(--color-border-hairline)",
+              }}>
+                <Eyebrow>
+                  // {g.workspaceBrandName} · invite code {g.workspaceUserId}
+                </Eyebrow>
+                <div className="font-mono text-xs text-[var(--color-text-muted)] mt-1">
+                  // {g.competitors.length} configured
+                </div>
+              </div>
+              <div className="flex flex-col gap-3">
+                {g.competitors.map((c) => (
+                  <EditableUrlRow key={c.id} competitor={c} onSaved={fetchWithUrl} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ─── One editable row ─────────────────────────────────────────────────
+// Like UrlRow but pre-fills the input with the current URL. Save sends
+// the same PATCH; backend auto-normalizes the domain.
+function EditableUrlRow({ competitor, onSaved }: {
+  competitor: SetUrlCompetitor;
+  onSaved: () => void;
+}) {
+  const [url, setUrl] = useState(competitor.xhs_profile_url);
+  const [saving, setSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+  const [rowError, setRowError] = useState("");
+  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+    };
+  }, []);
+
+  // Sync if parent refreshes (e.g., admin paste in queue above also affects
+  // this list when a row moves from awaiting → has-URL).
+  useEffect(() => {
+    setUrl(competitor.xhs_profile_url);
+  }, [competitor.xhs_profile_url]);
+
+  const isDirty = url.trim() !== competitor.xhs_profile_url;
+
+  async function handleSave() {
+    if (!url.trim() || !isDirty) return;
+    setSaving(true);
+    setRowError("");
+    try {
+      const res = await fetch(`/api/admin/competitors/${competitor.id}/xhs-url`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ xhs_profile_url: url.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const msg = data.hint || data.error || "Save failed";
+        throw new Error(msg);
+      }
+      setJustSaved(true);
+      // After save: refresh parent so we see the canonical (auto-normalized)
+      // URL the backend stored. Short delay so admin sees the ✓ saved state.
+      refreshTimeoutRef.current = setTimeout(() => {
+        refreshTimeoutRef.current = null;
+        setJustSaved(false);
+        onSaved();
+      }, 1500);
+    } catch (e) {
+      setRowError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      className="p-4 rounded-[var(--radius-xs)]"
+      style={{
+        border: `1px solid var(${justSaved ? "--color-success" : "--color-border-hairline"})`,
+        backgroundColor: "var(--color-raised)",
+      }}
+    >
+      <div className="flex items-start justify-between mb-3 gap-4 flex-wrap">
+        <BrandChip name={competitor.brand_name} category={competitor.tier} />
+        <div className="font-mono text-xs text-[var(--color-text-muted)]">
+          // added via {competitor.added_via}
+          {" · "}
+          {new Date(competitor.created_at).toLocaleDateString()}
+        </div>
+      </div>
+
+      <Label htmlFor={`edit-url-${competitor.id}`}>XHS profile URL</Label>
+      <div className="flex gap-3 items-stretch mt-1">
+        <div className="flex-1">
+          <Input
+            id={`edit-url-${competitor.id}`}
+            value={url}
+            onChange={(e) => { setUrl(e.target.value); setRowError(""); }}
+            placeholder="https://www.rednote.com/user/profile/..."
+            disabled={saving || justSaved}
+          />
+        </div>
+        <Button
+          onClick={handleSave}
+          disabled={saving || justSaved || !url.trim() || !isDirty}
+          variant={justSaved ? "accent" : "primary"}
+          size="md"
+        >
+          {saving ? "saving…" : justSaved ? "✓ saved" : "update"}
+        </Button>
+      </div>
+
+      {rowError && (
+        <div className="font-mono text-xs text-[var(--color-danger)] mt-2">
+          // {rowError}
+        </div>
+      )}
+    </div>
+  );
+}
