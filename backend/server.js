@@ -564,8 +564,9 @@ app.patch('/api/admin/competitors/:id/xhs-url', async (req, res) => {
 
       // Validate canonical shape — domain + /user/profile/<24-hex-ish-id>
       // Tightened from \w+ to [a-f0-9]{16,32} to match real XHS user-id format.
-      const xhsRegex = /^https?:\/\/(www\.)?(rednote|xiaohongshu)\.com\/user\/profile\/[a-f0-9]{16,32}$/i;
-      if (!xhsRegex.test(xhs_profile_url)) {
+      const xhsRegex = /^https?:\/\/(www\.)?(rednote|xiaohongshu)\.com\/user\/profile\/([a-f0-9]{16,32})$/i;
+      const match = xhs_profile_url.match(xhsRegex);
+      if (!match) {
         return res.status(400).json({
           error: 'Invalid xhs_profile_url',
           hint: 'After stripping any ?xsec_token=... query, URL must look like ' +
@@ -573,6 +574,15 @@ app.patch('/api/admin/competitors/:id/xhs-url', async (req, res) => {
                 '(e.g., https://www.rednote.com/user/profile/58c7d02b82ec3977dd42c218)',
         });
       }
+
+      // Auto-normalize to rednote.com — the Apify easyapi user_posts actor
+      // silently returns 0 items when given xiaohongshu.com URLs (it works
+      // correctly with rednote.com). Same canonical UID either way, so we
+      // store the rednote.com form to avoid the actor's domain quirk.
+      // Caught 2026-05-26 during first 7-brand admin paste session: 2 of
+      // 7 brands returned 0 user_posts despite valid profiles, all using
+      // xiaohongshu.com URLs.
+      xhs_profile_url = `https://www.rednote.com/user/profile/${match[3]}`;
     }
 
     const { rows } = await pool.query(
@@ -618,6 +628,37 @@ app.get('/api/admin/competitors/missing-xhs-url', async (req, res) => {
   } catch (err) {
     console.error('[CI] GET competitors/missing-xhs-url error:', err.message);
     res.status(500).json({ error: 'Failed to list competitors missing URLs' });
+  }
+});
+
+// GET /api/admin/competitors/with-xhs-url
+// Sibling endpoint to missing-xhs-url. Lists competitors that ALREADY
+// have a URL set, so admin can edit/fix bad URLs (wrong account, wrong
+// domain, typo) without SSHing into ECS to run SQL UPDATEs. Includes
+// xhs_profile_url so the frontend can render edit-in-place inputs
+// pre-filled with the current value. Same shape otherwise so the
+// frontend can reuse the same workspace-grouped rendering.
+app.get('/api/admin/competitors/with-xhs-url', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT wc.id,
+              wc.brand_name,
+              wc.workspace_id,
+              wc.tier,
+              wc.added_via,
+              wc.created_at,
+              wc.xhs_profile_url,
+              w.brand_name AS workspace_brand_name,
+              w.user_id AS workspace_user_id
+         FROM workspace_competitors wc
+         JOIN workspaces w ON w.id = wc.workspace_id
+        WHERE wc.xhs_profile_url IS NOT NULL
+        ORDER BY w.brand_name, wc.brand_name`
+    );
+    res.json({ competitors: rows, count: rows.length });
+  } catch (err) {
+    console.error('[CI] GET competitors/with-xhs-url error:', err.message);
+    res.status(500).json({ error: 'Failed to list competitors with URLs' });
   }
 });
 

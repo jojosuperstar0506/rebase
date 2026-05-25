@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Inbox } from "lucide-react";
 import { useApp } from "../context/AppContext";
-import { CompetitorXhsUrls } from "../components/admin/CompetitorXhsUrls";
+import { CompetitorXhsUrls, CompetitorXhsUrlsEdit } from "../components/admin/CompetitorXhsUrls";
 
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || "rebase-admin-2026";
 
@@ -339,6 +339,12 @@ export default function Admin() {
             pattern. See: services/competitor_intel/scrapers/apify_client.py,
             docs/SCRAPING-STRATEGY.md, issue #62. */}
         <CompetitorXhsUrls />
+
+        {/* Edit-existing-URLs panel — sibling to the awaiting-URL queue
+            above. Lets admin fix wrong URLs (wrong account, wrong domain,
+            typo) without SSHing to ECS. Added 2026-05-26 after Will hit
+            the case during first 7-brand admin paste flow. */}
+        <CompetitorXhsUrlsEdit />
       </div>
     </div>
   );
