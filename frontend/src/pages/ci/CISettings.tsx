@@ -1704,6 +1704,127 @@ function StartAnalysisCard({ C, lang, competitorCount, workspaceName, isMobile }
   );
 }
 
+// ── Data sources status (3-state machine) ────────────────────────
+// Derived state from competitor data, not a separate flag:
+//   pending_setup → any competitor has xhs_profile_url IS NULL
+//   scraping      → URLs set but no scrape data yet
+//   ready         → all URLs + recent scrape data (StartAnalysisCard renders)
+//
+// Shown ABOVE the would-be StartAnalysisCard when state != ready. Replaces
+// the analysis CTA with a curation-in-progress banner so the user has
+// honest expectations + we (admin) have time to provision XHS profile URLs
+// in /admin. Once admin completes both paste-URL + run-scrape steps, the
+// state auto-derives to "ready" and StartAnalysisCard appears.
+function DataSourcesStatus({
+  competitors, needsSetup, needsScrape, C, lang, isMobile,
+}: {
+  competitors: CICompetitor[];
+  needsSetup: number;
+  needsScrape: number;
+  C: ReturnType<typeof useApp>['colors'];
+  lang: string;
+  isMobile: boolean;
+}) {
+  const total = competitors.length;
+  const connected = total - needsSetup;
+  const isSettingUp = needsSetup > 0;
+
+  // Visual: same shape as StartAnalysisCard so the transition between
+  // "setting up" and "ready" feels like the same panel changing, not a
+  // jarring layout shift. Dashed border + muted accent = "in progress".
+  return (
+    <div style={{
+      background: `linear-gradient(135deg, ${C.s1} 0%, ${C.s2} 100%)`,
+      border: `2px dashed ${C.t3}66`,
+      borderRadius: 16,
+      padding: isMobile ? '20px 16px' : '28px 32px',
+      marginBottom: 24,
+      textAlign: 'center',
+    }}>
+      {/* Eyebrow — monospace label, matches Joanna's section title convention */}
+      <div style={{
+        fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.16em',
+        textTransform: 'uppercase', color: C.t3, marginBottom: 12,
+      }}>
+        {lang === 'zh'
+          ? (isSettingUp ? '// 数据源 · 配置中' : '// 数据源 · 抓取中')
+          : (isSettingUp ? '// data sources · setting up' : '// data sources · fetching')}
+      </div>
+
+      {/* Headline */}
+      <div style={{
+        fontSize: isMobile ? 16 : 18, fontWeight: 700, color: C.tx,
+        marginBottom: 8, lineHeight: 1.4,
+      }}>
+        {isSettingUp
+          ? (lang === 'zh' ? '正在连接您的竞品 XHS 数据源' : "Connecting your competitors' XHS profiles")
+          : (lang === 'zh' ? '正在抓取最新竞争情报' : 'Fetching the latest competitive intelligence')}
+      </div>
+
+      {/* Body — sets expectation without over-promising. "Email" copy is
+          aspirational tonight; emails not yet wired (TODO follow-up). */}
+      <p style={{
+        fontSize: 13, color: C.t2, marginBottom: 18, lineHeight: 1.7,
+        maxWidth: 520, margin: '0 auto 18px',
+      }}>
+        {isSettingUp ? (
+          lang === 'zh'
+            ? '我们的团队正在为您手动整理 XHS 官方账号链接。完成后会通过邮件通知您，工作日通常在 1 小时内。'
+            : "Our team is curating the official XHS profile links for your competitors. We'll email you when ready — typically within an hour during business hours."
+        ) : (
+          lang === 'zh'
+            ? '马上就好 — 数据源已配置，正在拉取最新内容。'
+            : 'Almost done — sources are configured, pulling the latest content now.'
+        )}
+      </p>
+
+      {/* Progress chips — one per competitor, color-coded by state.
+          Reuses the dashed-pill aesthetic from Coverage Pending so the
+          user sees consistent visual grammar across the app. */}
+      <div style={{
+        display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center',
+        marginBottom: 4,
+      }}>
+        {competitors.map(c => {
+          const ready = !!c.xhs_profile_url && !!c.last_scraped_at;
+          const partial = !!c.xhs_profile_url && !c.last_scraped_at;
+          const pending = !c.xhs_profile_url;
+          const fg = ready ? C.success : partial ? C.ac : C.t3;
+          const bg = ready ? `${C.success}18` : partial ? `${C.ac}18` : C.s2;
+          const label = ready
+            ? (lang === 'zh' ? '✓ 已就绪' : '✓ ready')
+            : partial
+              ? (lang === 'zh' ? '· 抓取中' : '· fetching')
+              : (lang === 'zh' ? '· 配置中' : '· connecting');
+          return (
+            <span key={c.id} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              padding: '4px 10px', borderRadius: 12, fontSize: 11,
+              fontWeight: 600, background: bg, color: fg,
+              border: `1px dashed ${fg}44`,
+              fontFamily: 'var(--font-mono)',
+            }}>
+              <span style={{ color: C.tx, fontWeight: 700 }}>{c.brand_name}</span>
+              <span>{label}</span>
+            </span>
+          );
+        })}
+      </div>
+
+      {/* Footer — explicit count so user sees overall progress at a glance */}
+      <div style={{ fontSize: 12, color: C.t3, marginTop: 14 }}>
+        {isSettingUp
+          ? (lang === 'zh'
+              ? `${connected}/${total} 已连接`
+              : `${connected} of ${total} connected`)
+          : (lang === 'zh'
+              ? `${total}/${total} 已连接 · 抓取中`
+              : `${total} of ${total} connected · scraping`)}
+      </div>
+    </div>
+  );
+}
+
 // ── Reset Data card ──────────────────────────────────────────────
 // Sits right under Brand Profile rather than at the bottom of the page.
 // Use case: user typed "Nike" + got AI competitor suggestions, then
@@ -1952,7 +2073,17 @@ export default function CISettings() {
 
   const workspace = getCIWorkspace();
   const analysisStarted = localStorage.getItem('rebase_ci_analysis_started') === 'true';
-  const showStartCard = !!(workspace?.brand_name) && competitors.length > 0 && !analysisStarted;
+
+  // 3-state derived from competitor data. The frontend never SETS state;
+  // it READS what's in the DB (xhs_profile_url presence + last_scraped_at
+  // freshness via lateral join in GET /api/ci/competitors). When admin
+  // pastes a URL in /admin and triggers the scraper, the next refresh
+  // here picks it up — no manual flag flipping anywhere.
+  const needsSetup = competitors.filter(c => !c.xhs_profile_url).length;
+  const needsScrape = competitors.filter(c => c.xhs_profile_url && !c.last_scraped_at).length;
+  const dataReady = competitors.length > 0 && needsSetup === 0 && needsScrape === 0;
+  const showStartCard = !!(workspace?.brand_name) && competitors.length > 0 && !analysisStarted && dataReady;
+  const showSetupStatus = competitors.length > 0 && !dataReady;
 
   return (
     <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: isMobile ? '16px 12px' : '32px 24px', fontFamily: 'var(--font-sans)' }}>
@@ -2092,7 +2223,25 @@ export default function CISettings() {
           )}
         </Section>
 
-        {/* 3 — Start Analysis card (shown when ready) */}
+        {/* 3a — Data sources status (shown when competitors exist but data
+                isn't ready yet — replaces StartAnalysisCard during the
+                admin-curation window). Renders honest "we're setting up"
+                copy + per-competitor progress chips, sets expectation that
+                we'll email when ready. Once admin completes paste-URL +
+                scrape, the dataReady check below flips and StartCard
+                renders in this same spot. */}
+        {showSetupStatus && (
+          <DataSourcesStatus
+            competitors={competitors}
+            needsSetup={needsSetup}
+            needsScrape={needsScrape}
+            C={C}
+            lang={lang}
+            isMobile={isMobile}
+          />
+        )}
+
+        {/* 3b — Start Analysis card (shown when ready) */}
         {showStartCard && (
           <StartAnalysisCard
             C={C}

@@ -621,6 +621,58 @@ app.get('/api/admin/competitors/missing-xhs-url', async (req, res) => {
   }
 });
 
+// POST /api/admin/scrape — trigger an immediate watchlist scrape across all
+// workspaces. Used by the admin /admin page's "Run scraper now" button so
+// admin (Will) doesn't need to SSH into ECS just to kick off a scrape after
+// pasting fresh XHS URLs.
+//
+// Behavior:
+//   - Spawns scrape_runner --platform xhs --tier watchlist (detached).
+//   - Per-brand freshness guard (FRESHNESS_THRESHOLD_HOURS=12) skips brands
+//     scraped in the last 12 hrs, so this is safe to click repeatedly —
+//     re-triggering won't double-spend on Apify for brands already covered.
+//   - Returns immediately (200 + queued message). Actual scrape runs in
+//     background; admin watches /var/log/rebase/* or apify_run_log table.
+//   - Cost: $0 for brands skipped by freshness guard; ~$0.25 per fresh brand.
+//
+// NOT scoped per workspace today: scrape_runner --tier watchlist already
+// scrapes the de-duplicated brand list across all workspaces. Adding a
+// per-workspace mode is a later optimization if costs grow.
+app.post('/api/admin/scrape', async (req, res) => {
+  try {
+    const { spawn } = require('child_process');
+    const path = require('path');
+    const repoRoot = process.cwd().replace('/backend', '');
+    const pythonBin = process.env.PYTHON_BIN || 'python3';
+
+    // Spawn detached: scrape may take 30s-5min depending on brand count.
+    // We don't await — admin gets an instant "queued" response and watches
+    // logs / apify_run_log for completion.
+    const proc = spawn(pythonBin, [
+      '-m', 'services.competitor_intel.scrape_runner',
+      '--platform', 'xhs',
+      '--tier', 'watchlist',
+    ], {
+      cwd: repoRoot,
+      env: { ...process.env },
+      detached: true,
+      stdio: 'ignore',
+    });
+    proc.unref();
+
+    console.log(`[ADMIN] Triggered watchlist scrape (pid: ${proc.pid})`);
+
+    res.json({
+      started: true,
+      message: 'Watchlist scrape queued. Already-fresh brands will be skipped (12hr guard).',
+      pid: proc.pid || null,
+    });
+  } catch (err) {
+    console.error('[ADMIN] POST scrape error:', err.message);
+    res.status(500).json({ error: 'Failed to trigger scrape' });
+  }
+});
+
 // GET /api/admin/applicants — list all applicants (pending + approved)
 app.get("/api/admin/applicants", (req, res) => {
   const applicants = loadAllApplicants();
