@@ -7,6 +7,7 @@
   "rewrites": [
     { "source": "/api/admin/applicants", "destination": "/api/admin" },
     { "source": "/api/admin/approve", "destination": "/api/admin" },
+    { "source": "/api/admin/:path*", "destination": "/api/admin?path=:path*" },
     { "source": "/api/save-survey", "destination": "/api/submit-lead" },
     { "source": "/api/ci/:path*", "destination": "/api/ci?path=:path*" },
     { "source": "/api/v2/:path*", "destination": "/api/v2?path=:path*" },
