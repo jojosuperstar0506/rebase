@@ -195,7 +195,19 @@ SELECT brand_name, COUNT(DISTINCT workspace_id) AS workspace_count
  GROUP BY brand_name
  HAVING COUNT(DISTINCT workspace_id) > 1
  ORDER BY workspace_count DESC;
+
+-- Last-scraped timestamp per brand per platform (drives freshness guard)
+SELECT brand_name, platform, MAX(scraped_at) AS last_scraped
+  FROM scraped_brand_profiles
+ GROUP BY brand_name, platform
+ ORDER BY last_scraped DESC;
 ```
+
+> 💡 The freshness guard in `scrape_runner.py` uses
+> `db_bridge.get_brand_last_scraped_at(platform, brand_name)` (which runs
+> the per-brand version of that query) to skip brands scraped within
+> `FRESHNESS_THRESHOLD_HOURS` (default 12). Override with `--force-rescrape`
+> on the CLI when you want a guaranteed fresh pull.
 
 ---
 

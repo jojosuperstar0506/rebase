@@ -178,6 +178,39 @@ def log_apify_run(payload):
         print(f"[WARN] apify_run_log insert failed: {exc}")
 
 
+def get_brand_last_scraped_at(platform, brand_name):
+    """Return the most recent scraped_at TIMESTAMPTZ for a (platform, brand) tuple.
+
+    Used by the freshness guard in scrape_runner.py to skip brands that were
+    scraped recently. Returns None if the brand has never been scraped on this
+    platform, or if any DB error occurs (best-effort — never block a scrape on
+    this check).
+
+    Args:
+        platform: 'xhs' | 'douyin' | 'sycm'
+        brand_name: exact brand_name as stored in scraped_brand_profiles
+
+    Returns: datetime or None
+    """
+    try:
+        conn = get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT MAX(scraped_at) AS last_scraped
+                      FROM scraped_brand_profiles
+                     WHERE platform = %s AND brand_name = %s
+                """, (platform, brand_name))
+                row = cur.fetchone()
+                return row['last_scraped'] if row else None
+        finally:
+            conn.close()
+    except Exception as exc:
+        # Best-effort. If freshness lookup fails, don't block the scrape.
+        print(f"[WARN] get_brand_last_scraped_at({platform}, {brand_name}) failed: {exc}")
+        return None
+
+
 def get_brand_cookies(platform):
     """Get decrypted active cookies for a platform."""
     from .crypto_utils import decrypt_cookies
