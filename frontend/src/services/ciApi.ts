@@ -234,6 +234,14 @@ export interface Competitor {
   added_via: string;
   created_at: string;
   /**
+   * Canonical XHS profile URL for this competitor. Auto-populated by
+   * addCompetitor() when platform_ids.xhs is present in the brand registry
+   * lookup — replaces the manual /admin paste step. Stored in
+   * workspace_competitors.xhs_profile_url. Falls back to NULL when the
+   * brand isn't in the registry → admin can still paste manually.
+   */
+  xhs_profile_url?: string | null;
+  /**
    * #18: per-brand data freshness. Latest scrape timestamp from
    * scraped_brand_profiles for this competitor (any platform). Null when
    * no scrape data exists yet. Surfaced on the Brief workspace context
@@ -242,6 +250,24 @@ export interface Competitor {
    */
   last_scraped_at?: string | null;
   last_scrape_platform?: string | null;
+}
+
+/**
+ * Build the canonical XHS profile URL from a brand's XHS user id. The id
+ * comes from the brand registry (BrandResolution.platform_ids.xhs) — when
+ * present, the scraper can run immediately, no admin paste needed.
+ *
+ * Returns null when the id is missing or doesn't match the XHS UID shape
+ * (hex, 16-32 chars). Caller falls back to manual paste flow.
+ *
+ * Pure function — testable in isolation. Lives here (not in CISettings.tsx)
+ * so any future competitor-add path (onboarding, AI suggest, link paste)
+ * automatically benefits via addCompetitor() below.
+ */
+export function buildXhsProfileUrl(xhsUserId: string | undefined | null): string | null {
+  if (!xhsUserId || typeof xhsUserId !== 'string') return null;
+  if (!/^[a-f0-9]{16,32}$/i.test(xhsUserId)) return null;
+  return `https://www.rednote.com/user/profile/${xhsUserId}`;
 }
 
 export async function getCompetitors(workspaceId?: string): Promise<{ data: Competitor[]; source: 'api' | 'local' }> {
@@ -256,6 +282,19 @@ export async function getCompetitors(workspaceId?: string): Promise<{ data: Comp
 }
 
 export async function addCompetitor(competitor: Partial<Competitor> & { workspace_id?: string }): Promise<Competitor | null> {
+  // Auto-populate xhs_profile_url from platform_ids.xhs when missing.
+  // Without this, every newly-added competitor would need a separate admin
+  // /admin manual-paste step before the scraper could touch them — friction
+  // we explicitly built /admin to handle, but the registry already knows
+  // the XHS UID for any brand it has in its DB, so the manual paste is
+  // unnecessary 90% of the time. Caller can still pass an explicit
+  // xhs_profile_url to override (e.g., admin manual flow for off-registry brands).
+  if (!competitor.xhs_profile_url && competitor.platform_ids && typeof competitor.platform_ids === 'object') {
+    const xhsId = (competitor.platform_ids as Record<string, string>).xhs;
+    const url = buildXhsProfileUrl(xhsId);
+    if (url) competitor.xhs_profile_url = url;
+  }
+
   if (competitor.workspace_id && competitor.workspace_id !== 'local') {
     const apiData = await tryApi<Competitor>('/competitors', {
       method: 'POST',

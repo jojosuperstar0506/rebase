@@ -1070,7 +1070,7 @@ app.get('/api/ci/competitors', async (req, res) => {
 // POST /api/ci/competitors — add a competitor
 app.post('/api/ci/competitors', async (req, res) => {
   try {
-    const { workspace_id, brand_name, tier, platform_ids, added_via } = req.body;
+    const { workspace_id, brand_name, tier, platform_ids, added_via, xhs_profile_url } = req.body;
 
     // Guard: reject brand names that look like platform identifiers (old paste-link bug).
     // Patterns blocked: "XHS: 62848d...", "Douyin: MS4wLjAB...", "淘宝: xxx", etc.
@@ -1084,12 +1084,33 @@ app.post('/api/ci/competitors', async (req, res) => {
       });
     }
 
+    // Sanitize xhs_profile_url if the frontend sent one (auto-populated from
+    // platform_ids.xhs via ciApi.buildXhsProfileUrl). Mirrors the PATCH
+    // /api/admin/competitors/:id/xhs-url validator: strip query/fragment,
+    // accept either xiaohongshu.com or rednote.com, require 16-32 hex id.
+    // Malformed urls → null (skip, don't reject the whole competitor add).
+    let cleanXhsUrl = null;
+    if (xhs_profile_url && typeof xhs_profile_url === 'string') {
+      const stripped = xhs_profile_url.trim().split('?')[0].split('#')[0];
+      const match = stripped.match(/^https:\/\/(www\.)?(xiaohongshu|rednote)\.com\/user\/profile\/([a-f0-9]{16,32})$/i);
+      if (match) {
+        cleanXhsUrl = `https://www.rednote.com/user/profile/${match[3]}`;
+      }
+    }
+
+    // ON CONFLICT preserves an existing xhs_profile_url when the new value
+    // is NULL — re-adds via the UI mustn't clobber an admin's manual paste.
+    // EXCLUDED.xhs_profile_url is the new (incoming) value; the original
+    // table reference is the existing row.
     const { rows } = await pool.query(
-      `INSERT INTO workspace_competitors (workspace_id, brand_name, tier, platform_ids, added_via)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (workspace_id, brand_name) DO UPDATE SET tier = $3, platform_ids = $4
+      `INSERT INTO workspace_competitors (workspace_id, brand_name, tier, platform_ids, added_via, xhs_profile_url)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (workspace_id, brand_name) DO UPDATE SET
+         tier = $3,
+         platform_ids = $4,
+         xhs_profile_url = COALESCE(EXCLUDED.xhs_profile_url, workspace_competitors.xhs_profile_url)
        RETURNING *`,
-      [workspace_id, brand_name, tier || 'watchlist', platform_ids, added_via || 'manual']
+      [workspace_id, brand_name, tier || 'watchlist', platform_ids, added_via || 'manual', cleanXhsUrl]
     );
 
     res.status(201).json(rows[0]);
