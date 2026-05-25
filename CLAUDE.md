@@ -4,6 +4,19 @@
 > and every Claude Code session. Read this first. When conventions change,
 > update this file in the same PR.
 
+## Before You Touch Data, the DB, or ECS — read `docs/SCHEMA.md` first
+
+**Required reading whenever the task involves any of:**
+- Writing SQL against the production DB (especially on ECS at `8.217.242.191`)
+- Adding or modifying a file in `backend/migrations/`
+- Debugging "where does X data live" or "why is field Y empty in the UI"
+- Touching anything in `services/competitor_intel/db_bridge.py`
+- Adding columns the frontend reads (must match the schema doc's "Where does X live?" table)
+
+`docs/SCHEMA.md` is the **single source of truth** for the 17-table layout (5 conceptual layers: identity → raw scrape → scored → brief → operational). It has the data-flow diagram, a "Where does X live?" lookup, and the 7 SQL recipes we keep rewriting.
+
+**If you change a migration, you MUST update `docs/SCHEMA.md` in the same PR.** Drift between code and the schema doc is worse than no doc.
+
 ## Collaboration Rules
 
 ### `main` is production
@@ -34,8 +47,8 @@
 | `services/competitor_intel/` | OMI competitive-intel pipeline | Joanna |
 | `services/diagnostics/` | Intake + analysis + report | William |
 | `services/{agent-executor,multi-agent,workflow-engine,cost-engine,product-agent}/` | Python services | see CODEOWNERS |
-| `backend/migrations/` | Postgres schema — numbered SQL only | William |
-| `docs/`, `ROADMAP.md`, `README.md` | Shared docs | Both |
+| `backend/migrations/` | Postgres schema — numbered SQL only. **Updating here = update `docs/SCHEMA.md` in same PR** | William |
+| `docs/`, `ROADMAP.md`, `README.md` | Shared docs. `docs/SCHEMA.md` = DB cheat-sheet (read before SQL/migration work) | Both |
 
 - `.github/CODEOWNERS` auto-requests the right reviewer when you touch an
   area. Trust it — if it pings the other founder, that area isn't yours.
@@ -90,6 +103,9 @@ This ensures we can switch from Alibaba Cloud Hong Kong to Guangzhou (or any oth
 - **GitHub Issues** — the live task board. What we're working on now.
 - **`.github/CODEOWNERS`** — who owns which directory; drives PR review routing.
 - **`CLAUDE.md`** — this file. The shared rulebook (humans + AI sessions).
+- **`docs/SCHEMA.md`** — DB cheat-sheet. 17 tables, 5 layers, "where does X live" lookup, SQL recipes. **Read before any DB/migration work.**
+- **`docs/SCRAPING-STRATEGY.md`** — current scraping approach (Apify Tier B via easyapi actors).
+- **`docs/SCRAPING-DEPLOY-RUNBOOK.md`** — phased ECS deploy procedure for the scraper.
 - **`.env.example`** — template with all variable names and comments. Copy to `.env` for local dev.
 - **`.env`** — your actual secrets. NEVER commit this (it's in `.gitignore`).
 - **`ROADMAP.md`** — strategy: 5-layer product plan, sprints, cloud strategy. Not task-level tracking.
