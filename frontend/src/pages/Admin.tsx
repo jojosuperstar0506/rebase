@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Inbox } from "lucide-react";
 import { useApp } from "../context/AppContext";
-import { CompetitorXhsUrls, CompetitorXhsUrlsEdit } from "../components/admin/CompetitorXhsUrls";
+import { CompetitorXhsUrls, CompetitorXhsUrlsEdit, WorkspaceOwnBrandUrls } from "../components/admin/CompetitorXhsUrls";
 
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || "rebase-admin-2026";
 
@@ -345,6 +345,13 @@ export default function Admin() {
             typo) without SSHing to ECS. Added 2026-05-26 after Will hit
             the case during first 7-brand admin paste flow. */}
         <CompetitorXhsUrlsEdit />
+
+        {/* Workspace own-brand URLs (PR #116, migration 016). Without
+            this, the workspace's own brand (workspaces.brand_name) never
+            gets scraped — analytics charts show '你的品牌' as 0. Admin
+            pastes the URL here, scraper picks it up on next run, scoring
+            includes the own brand. */}
+        <WorkspaceOwnBrandUrls />
       </div>
     </div>
   );

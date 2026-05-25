@@ -78,7 +78,7 @@ The "who you are" layer. Slow-changing, written by the API on user action.
 
 | Table | One-line purpose | Owner writes | Frontend reads via |
 |---|---|---|---|
-| `workspaces` | One row per user's project. `brand_name`, `category`, `price_range`, `platforms` | API on onboarding | `/api/ci/workspace` |
+| `workspaces` | One row per user's project. `brand_name`, `category`, `price_range`, `platforms`. Added in migration 016: `xhs_profile_url` (admin sets via /admin so the workspace's OWN brand gets scraped + scored alongside competitors) | API on onboarding | `/api/ci/workspace` |
 | `workspace_competitors` | The list of competitors a workspace tracks. `tier='watchlist'` is the active set; `landscape` is reference. Added in migration 013: `xhs_profile_url` (auto-populated from `platform_ids.xhs` on add — see migration 015 backfill) | API on add/edit | `/api/ci/competitors` |
 | `platform_connections` | Per-workspace login state for SYCM / XHS-Analytics / Douyin-Compass. Stores AES-encrypted cookies | API on QR login | `/api/ci/connect/*` |
 | `user_ci_preferences` | UI prefs — visible metrics, alert thresholds, default time range | API on settings save | `/api/ci/preferences` |

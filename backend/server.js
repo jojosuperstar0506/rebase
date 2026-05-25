@@ -662,6 +662,101 @@ app.get('/api/admin/competitors/with-xhs-url', async (req, res) => {
   }
 });
 
+// ─── Workspace own-brand XHS URL admin endpoints ─────────────────────
+// The workspace's own brand (workspaces.brand_name) needs to be scraped
+// + scored alongside competitors, but the scraper only iterates
+// workspace_competitors — own brand has no row there. Migration 016
+// added xhs_profile_url to workspaces; these endpoints let admin
+// configure it via /admin (mirrors the competitor-URL flow).
+//
+// After admin sets a URL: scrape_runner.get_scrape_targets picks up
+// the workspace own-brand, scrapes via Apify, scoring pipeline keys on
+// brand_name and computes scores → '你的品牌' shows real number not 0.
+
+// GET /api/admin/workspaces/missing-own-brand-url — admin queue
+app.get('/api/admin/workspaces/missing-own-brand-url', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, brand_name, user_id, brand_category, created_at
+         FROM workspaces
+        WHERE xhs_profile_url IS NULL
+        ORDER BY created_at DESC`
+    );
+    res.json({ workspaces: rows, count: rows.length });
+  } catch (err) {
+    console.error('[CI] GET workspaces/missing-own-brand-url error:', err.message);
+    res.status(500).json({ error: 'Failed to list workspaces missing URLs' });
+  }
+});
+
+// GET /api/admin/workspaces/with-own-brand-url — list workspaces with URL set
+app.get('/api/admin/workspaces/with-own-brand-url', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, brand_name, user_id, brand_category, xhs_profile_url, created_at
+         FROM workspaces
+        WHERE xhs_profile_url IS NOT NULL
+        ORDER BY brand_name`
+    );
+    res.json({ workspaces: rows, count: rows.length });
+  } catch (err) {
+    console.error('[CI] GET workspaces/with-own-brand-url error:', err.message);
+    res.status(500).json({ error: 'Failed to list workspaces with URLs' });
+  }
+});
+
+// PATCH /api/admin/workspaces/:id/xhs-url — set workspace own-brand URL
+//
+// Same validation + auto-normalization (xiaohongshu.com → rednote.com) as
+// the competitor PATCH endpoint. Caught the same actor quirk: easyapi
+// user_posts actor silently returns 0 items for xiaohongshu.com URLs.
+app.patch('/api/admin/workspaces/:id/xhs-url', async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ error: 'Missing workspace id' });
+
+    let { xhs_profile_url } = req.body || {};
+    if (xhs_profile_url === undefined) {
+      return res.status(400).json({ error: 'Missing xhs_profile_url in body' });
+    }
+
+    if (xhs_profile_url === '' || xhs_profile_url === null) {
+      xhs_profile_url = null;
+    } else if (typeof xhs_profile_url !== 'string') {
+      return res.status(400).json({ error: 'xhs_profile_url must be a string or null' });
+    } else {
+      // Strip ?query + #fragment, validate, auto-normalize to rednote.com
+      xhs_profile_url = xhs_profile_url.trim().split('?')[0].split('#')[0];
+      const xhsRegex = /^https?:\/\/(www\.)?(rednote|xiaohongshu)\.com\/user\/profile\/([a-f0-9]{16,32})$/i;
+      const match = xhs_profile_url.match(xhsRegex);
+      if (!match) {
+        return res.status(400).json({
+          error: 'Invalid xhs_profile_url',
+          hint: 'URL must look like https://www.rednote.com/user/profile/<24-hex-id>',
+        });
+      }
+      xhs_profile_url = `https://www.rednote.com/user/profile/${match[3]}`;
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE workspaces
+          SET xhs_profile_url = $1, updated_at = NOW()
+        WHERE id = $2
+        RETURNING id, brand_name, xhs_profile_url`,
+      [xhs_profile_url, id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    res.json({ workspace: rows[0] });
+  } catch (err) {
+    console.error('[CI] PATCH workspaces/:id/xhs-url error:', err.message);
+    res.status(500).json({ error: 'Failed to update workspace xhs_profile_url' });
+  }
+});
+
 // POST /api/admin/scrape — trigger an immediate watchlist scrape across all
 // workspaces. Used by the admin /admin page's "Run scraper now" button so
 // admin (Will) doesn't need to SSH into ECS just to kick off a scrape after
