@@ -4,7 +4,8 @@ import { Tag, ClipboardList } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { t, T, Lang } from '../../i18n';
 import CISubNav from '../../components/ci/CISubNav';
-import { removeCompetitor as apiRemoveCompetitor, getBrandInsights } from '../../services/ciApi';
+import { removeCompetitor as apiRemoveCompetitor, getBrandInsights, runAnalysis } from '../../services/ciApi';
+import { formatRelativeTime, freshnessTier, freshnessColor, platformShortLabel } from '../../utils/freshness';
 import { useCIData } from '../../hooks/useCIData';
 // LANDSCAPE_SEED removed — was an OMI-specific 16-brand reference list that
 // leaked into every workspace's view. Per-competitor avg_price / volume now
@@ -30,6 +31,11 @@ interface CompetitorProfile {
   threat_index: number;
   wtp_score: number;
   platforms: { name: string; status: 'active' | 'partial' | 'none' }[];
+  /** Last successful scrape (ISO) — surfaced as a mono "// last scrape Nd ago"
+   *  chip on the card. Null for brands that haven't been scraped yet. */
+  last_scraped_at?: string | null;
+  /** Which platform produced the most recent scrape (e.g. 'xhs'). */
+  last_scrape_platform?: string | null;
   /** True for the "own brand" row we synthesize at the top of the list. */
   isOwnBrand?: boolean;
 }
@@ -186,6 +192,39 @@ function CompetitorCard({
           <GroupBadge group={profile.group} />
           <span style={{ fontSize: 12, color: C.t3 }}>{profile.positioning}</span>
         </div>
+        {/* Data-freshness chip — surfaces the per-competitor last_scraped_at
+            that PR #102 (12h freshness guard) writes through, so the user
+            can see at a glance whether the numbers are fresh, stale, or
+            haven't been collected yet. */}
+        {!profile.isOwnBrand && (() => {
+          const tier = freshnessTier(profile.last_scraped_at);
+          const color = freshnessColor(tier);
+          const rel = formatRelativeTime(profile.last_scraped_at, lang);
+          const plat = platformShortLabel(profile.last_scrape_platform);
+          return (
+            <div
+              style={{
+                marginTop: 8,
+                fontSize: 11,
+                color,
+                fontFamily: 'var(--font-mono)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <span
+                aria-hidden
+                style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }}
+              />
+              <span>
+                {tier === 'unknown'
+                  ? (lang === 'zh' ? '// 暂未抓取' : '// not yet scraped')
+                  : `// ${plat ? plat + ' · ' : ''}${rel}`}
+              </span>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Score bars */}
@@ -481,10 +520,36 @@ export default function CICompetitors() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [deepDiveOpen, setDeepDiveOpen] = useState<string | null>(null);
+  // Refresh-data button state — triggers runAnalysis on the current workspace
+  // which (per the 12h freshness guard, PR #102) re-scrapes platforms that
+  // are stale, then re-scores and re-narrates. Detached job, fire-and-forget.
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
+  async function handleRefreshData() {
+    if (refreshing) return;
+    const wsId = workspace?.id;
+    if (!wsId || wsId === 'mock' || wsId === 'local') return;
+    setRefreshing(true);
+    setRefreshMessage(null);
+    try {
+      const job = await runAnalysis(wsId);
+      if (job?.job_id) {
+        setRefreshMessage(lang === 'zh' ? '已开始更新…' : 'refresh started…');
+      } else {
+        setRefreshMessage(lang === 'zh' ? '无法启动更新' : 'could not start refresh');
+      }
+    } catch {
+      setRefreshMessage(lang === 'zh' ? '无法启动更新' : 'could not start refresh');
+    }
+    setTimeout(() => setRefreshing(false), 1500);
+    setTimeout(() => setRefreshMessage(null), 4000);
+  }
 
   const profiles = useMemo<CompetitorProfile[]>(() => {
     const buildProfile = (brand_name: string, id: string, tier: 'watchlist' | 'landscape',
                           added_via: string, created_at: string,
+                          last_scraped_at: string | null = null,
+                          last_scrape_platform: string | null = null,
                           isOwnBrand = false): CompetitorProfile => {
       // Placeholder values — real per-competitor pricing/volume come from
       // scraped_brand_profiles (XHS/Tmall only today). Seeded random keeps
@@ -507,12 +572,21 @@ export default function CICompetitors() {
       return {
         id, brand_name, tier, added_via, created_at,
         avg_price, est_monthly_volume, positioning, group,
-        momentum_score, threat_index, wtp_score, platforms, isOwnBrand,
+        momentum_score, threat_index, wtp_score, platforms,
+        last_scraped_at, last_scrape_platform, isOwnBrand,
       };
     };
 
     const competitorProfiles = rawCompetitors.map(c =>
-      buildProfile(c.brand_name, c.id, c.tier, c.added_via, c.created_at, false),
+      buildProfile(
+        c.brand_name, c.id, c.tier, c.added_via, c.created_at,
+        // last_scraped_at + last_scrape_platform come from the Competitor API
+        // (workspace_competitors LATERAL join). Will surface as a freshness
+        // chip on each card; null for brands we haven't scraped yet.
+        (c as unknown as { last_scraped_at?: string | null }).last_scraped_at ?? null,
+        (c as unknown as { last_scrape_platform?: string | null }).last_scrape_platform ?? null,
+        false,
+      ),
     );
 
     // Prepend the user's own brand as row 1 — one of the core fixes from the
@@ -530,6 +604,7 @@ export default function CICompetitors() {
         'watchlist',       // own brand always counts as a tracked brand
         'own_brand',
         new Date().toISOString(),
+        null, null,
         true,
       );
       return [ownProfile, ...competitorProfiles];
@@ -646,6 +721,29 @@ export default function CICompetitors() {
             <span style={{ color: C.t3, fontSize: 13, fontFamily: 'var(--font-mono)' }}>{filtered.length} {t(T.ci.xCompetitors, lang)}</span>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            {/* Refresh-data — kicks off run-analysis (which re-scrapes stale
+                platforms via PR #102's freshness guard, then re-scores). */}
+            <button
+              onClick={handleRefreshData}
+              disabled={refreshing}
+              title={refreshMessage || (lang === 'zh' ? '更新数据' : 'refresh data')}
+              style={{
+                ...btnBase(false),
+                minHeight: 44,
+                opacity: refreshing ? 0.6 : 1,
+                cursor: refreshing ? 'default' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <span aria-hidden>{refreshing ? '⟳' : '↻'}</span>
+              <span>
+                {refreshing
+                  ? (refreshMessage || (lang === 'zh' ? '更新中…' : 'refreshing…'))
+                  : (lang === 'zh' ? '更新数据' : 'refresh data')}
+              </span>
+            </button>
             <button onClick={() => setViewMode('cards')} style={{ ...btnBase(viewMode === 'cards'), minHeight: 44 }}>{t(T.ci.cardView, lang)}</button>
             <button onClick={() => setViewMode('compare')} style={{ ...btnBase(viewMode === 'compare'), minHeight: 44 }}>{t(T.ci.compareView, lang)}</button>
             {/* Export buttons */}

@@ -7,6 +7,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { t, T } from '../../i18n';
 import CISubNav from '../../components/ci/CISubNav';
+import { PlatformHealthPanel } from '../../components/ci/PlatformHealthPanel';
 import { CISettingsSkeleton } from '../../components/ci/CISkeleton';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import {
@@ -2155,6 +2156,11 @@ export default function CISettings() {
 
         {/* 1 — Brand Profile */}
         <BrandProfileSection C={C} lang={lang} isMobile={isMobile} />
+
+        {/* 1a — Data source health (PR #105 hooked up the connections
+            API; this surfaces it user-side so they see active/expiring/
+            expired status + last-scrape recency per platform). */}
+        <PlatformHealthPanel />
 
         {/* 1b — Reset Data (sits right under Brand Profile so it's reachable
                   without scrolling past the AI suggestions panel). */}

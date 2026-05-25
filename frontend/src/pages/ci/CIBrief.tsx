@@ -187,7 +187,7 @@ export default function CIBrief() {
   const { colors: C, lang } = useApp();
   const bp = useBreakpoint();
   const isMobile = bp === 'mobile';
-  const { workspace, competitors } = useCIData();
+  const { workspace, competitors, connections } = useCIData();
   const navigate = useNavigate();
 
   const [brief, setBrief] = useState<WeeklyBrief | null>(null);
@@ -548,10 +548,50 @@ export default function CIBrief() {
 
   if (!brief) {
     const compCount = competitors.length;
+    // Connection state shapes the empty-state message. Order matters:
+    // (1) expired/error wins over expiring; (2) expiring wins over OK; (3)
+    // having any active connection at all means the scraper is set up so
+    // we use the "being built" copy; (4) zero connections + zero competitors
+    // = brand-new workspace, "set up your watchlist" copy. (Mirrors the
+    // freshness-guard semantics PR #102 introduced backend-side.)
+    const broken = (connections || []).filter(c => c.status === 'expired' || c.status === 'error');
+    const expiring = (connections || []).filter(c => c.status === 'expiring');
     return (
       <div style={pageStyle}>
         <div style={container}>
           <CISubNav />
+
+          {/* Connection-issue banner — shown above the pending hero when any
+              data source is broken/expiring, so the user knows the wait is
+              real-but-fixable rather than "the product is silent." */}
+          {(broken.length > 0 || expiring.length > 0) && (
+            <div
+              className="mt-6 rounded-[var(--radius-md)] p-4 flex items-start gap-3"
+              style={{
+                background: broken.length > 0
+                  ? 'var(--color-danger, #c44848)22'
+                  : 'var(--color-warning, #b8741a)22',
+                border: '1px solid ' + (broken.length > 0
+                  ? 'var(--color-danger, #c44848)55'
+                  : 'var(--color-warning, #b8741a)55'),
+                fontFamily: 'var(--font-mono)',
+              }}
+            >
+              <span aria-hidden style={{ flexShrink: 0, marginTop: 2 }}>!</span>
+              <div className="flex flex-col gap-1 text-sm">
+                <span style={{ fontWeight: 600 }}>
+                  {broken.length > 0
+                    ? (lang === 'zh' ? '// 数据源异常' : '// data source issue')
+                    : (lang === 'zh' ? '// 数据源即将过期' : '// data source expiring')}
+                </span>
+                <span style={{ color: 'var(--color-text-muted)' }}>
+                  {lang === 'zh'
+                    ? `${(broken[0] || expiring[0]).platform} 的连接需要处理 — 前往「设置」查看`
+                    : `${(broken[0] || expiring[0]).platform} needs attention — see Settings`}
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Post-onboarding landing — the brief is being generated.
               Builder-energy treatment: dark inverse hero + a recap of what
