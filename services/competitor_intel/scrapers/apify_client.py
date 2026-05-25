@@ -402,7 +402,24 @@ class ApifyScraperClient:
         for attempt in range(1, self._max_retries + 1):
             try:
                 run = self._client.actor(actor_id).call(run_input=actor_input)
-                items = list(self._client.dataset(run["defaultDatasetId"]).iterate_items())
+                # apify-client v3 returns a Pydantic model (snake_case attrs);
+                # v2 returned a dict with camelCase keys. Handle both so we
+                # don't pin to one SDK major version.
+                dataset_id = (
+                    getattr(run, "default_dataset_id", None)
+                    or (run.get("defaultDatasetId") if isinstance(run, dict) else None)
+                )
+                run_id = (
+                    getattr(run, "id", None)
+                    or (run.get("id", "") if isinstance(run, dict) else "")
+                )
+                if not dataset_id:
+                    raise ApifyScrapeError(
+                        f"Actor run returned no dataset id (run object type: {type(run).__name__})",
+                        actor=actor_id,
+                        brand=brand,
+                    )
+                items = list(self._client.dataset(dataset_id).iterate_items())
 
                 cost_estimate = self._estimate_cost(actor_id, len(items))
                 self._log_cost({
@@ -413,7 +430,7 @@ class ApifyScraperClient:
                     "items_returned": len(items),
                     "estimated_cost_usd": cost_estimate,
                     "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                    "run_id": run.get("id", ""),
+                    "run_id": run_id,
                 })
 
                 logger.info("apify: %s done items=%d cost=$%.4f", label, len(items), cost_estimate)
