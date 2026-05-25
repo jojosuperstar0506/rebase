@@ -196,13 +196,80 @@ export function CompetitorXhsUrls() {
       )}
 
       {!loading && !error && competitors.length > 0 && (
-        <div className="flex flex-col gap-3">
-          {competitors.map((c) => (
-            <UrlRow key={c.id} competitor={c} onSaved={fetchMissing} />
-          ))}
-        </div>
+        <WorkspaceGroupedQueue
+          competitors={competitors}
+          onSaved={fetchMissing}
+        />
       )}
     </section>
+  );
+}
+
+// ─── Workspace-grouped queue ───────────────────────────────────────────
+// Groups competitors by (workspace_user_id, workspace_brand_name) so admin
+// sees per-customer sections — much easier to triage than the previous
+// flat list, especially as the queue grows past 20-30 competitors across
+// multiple workspaces. Section headers show the invite code (= user_id)
+// so admin can mentally tie back to a specific approved customer.
+function WorkspaceGroupedQueue({
+  competitors, onSaved,
+}: {
+  competitors: MissingUrlCompetitor[];
+  onSaved: () => void;
+}) {
+  // Group by user_id. Two workspaces could in theory share a brand_name
+  // (different customers, same company name) — we key on user_id (invite
+  // code) because that's the actual primary key in the auth model.
+  const groups = new Map<string, {
+    workspaceUserId: string;
+    workspaceBrandName: string;
+    competitors: MissingUrlCompetitor[];
+  }>();
+
+  for (const c of competitors) {
+    const key = c.workspace_user_id || c.workspace_id;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        workspaceUserId: c.workspace_user_id,
+        workspaceBrandName: c.workspace_brand_name || c.workspace_id.slice(0, 8),
+        competitors: [],
+      });
+    }
+    groups.get(key)!.competitors.push(c);
+  }
+
+  // Stable ordering: by workspace brand name (alphabetical), then by
+  // each group's competitors in insertion order (which the backend
+  // already orders by created_at DESC).
+  const sortedGroups = Array.from(groups.values()).sort((a, b) =>
+    a.workspaceBrandName.localeCompare(b.workspaceBrandName)
+  );
+
+  return (
+    <div className="flex flex-col gap-6">
+      {sortedGroups.map((g) => (
+        <div key={g.workspaceUserId}>
+          {/* Section header — workspace name + invite code so admin can
+              mentally tie back to a specific customer. Mono eyebrow
+              matches Joanna's section-title convention. */}
+          <div className="mb-3 pb-2" style={{
+            borderBottom: "1px dashed var(--color-border-hairline)",
+          }}>
+            <Eyebrow>
+              // {g.workspaceBrandName} · invite code {g.workspaceUserId}
+            </Eyebrow>
+            <div className="font-mono text-xs text-[var(--color-text-muted)] mt-1">
+              // {g.competitors.length} competitor{g.competitors.length === 1 ? "" : "s"} awaiting URL
+            </div>
+          </div>
+          <div className="flex flex-col gap-3">
+            {g.competitors.map((c) => (
+              <UrlRow key={c.id} competitor={c} onSaved={onSaved} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -268,16 +335,15 @@ function UrlRow({ competitor, onSaved }: UrlRowProps) {
         backgroundColor: "var(--color-raised)",
       }}
     >
-      {/* Brand header */}
+      {/* Brand header — workspace context is in the section header above,
+          so per-row meta is just the brand chip + how/when it was added. */}
       <div className="flex items-start justify-between mb-3 gap-4 flex-wrap">
         <BrandChip
           name={competitor.brand_name}
           category={competitor.tier}
         />
         <div className="font-mono text-xs text-[var(--color-text-muted)]">
-          // workspace: {competitor.workspace_brand_name || competitor.workspace_id.slice(0, 8)}
-          {" · "}
-          added via {competitor.added_via}
+          // added via {competitor.added_via}
           {" · "}
           {new Date(competitor.created_at).toLocaleDateString()}
         </div>
