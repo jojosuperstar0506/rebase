@@ -23,13 +23,69 @@ import os
 import random
 import sys
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .db_bridge import (
     get_scrape_targets, get_brand_cookies, save_brand_profile,
     save_products, mark_connection_success, mark_connection_expired,
+    get_brand_last_scraped_at,
 )
+
+
+# ─── Freshness guard ──────────────────────────────────────────────────────────
+
+# Default freshness window: 12 hours. Tunable via env var so we can adjust
+# without code change (e.g., set to 4 during a heavy debug session). Setting
+# to 0 effectively disables the guard.
+DEFAULT_FRESHNESS_THRESHOLD_HOURS = 12
+
+
+def _freshness_threshold_hours() -> float:
+    """Read FRESHNESS_THRESHOLD_HOURS env var, fall back to default. Floats OK
+    so we can use e.g. 0.5 in tests."""
+    raw = os.environ.get("FRESHNESS_THRESHOLD_HOURS")
+    if raw is None or raw == "":
+        return float(DEFAULT_FRESHNESS_THRESHOLD_HOURS)
+    try:
+        return float(raw)
+    except ValueError:
+        print(f"[WARN] Invalid FRESHNESS_THRESHOLD_HOURS={raw!r}, "
+              f"falling back to {DEFAULT_FRESHNESS_THRESHOLD_HOURS}h")
+        return float(DEFAULT_FRESHNESS_THRESHOLD_HOURS)
+
+
+def _is_brand_fresh(platform: str, brand_name: str, threshold_hours: float = None):
+    """Return (is_fresh, age_hours_or_none) for a brand on a platform.
+
+    Pure read, no side effects. Used by run_single_brand + run_tier_scrape
+    to short-circuit duplicate scrapes within the freshness window.
+
+    If the brand has never been scraped on this platform, returns (False, None)
+    so the caller knows there's no prior run to compare against.
+
+    Args:
+        platform: 'xhs' | 'douyin' | 'sycm'
+        brand_name: exact brand_name as stored in scraped_brand_profiles
+        threshold_hours: override the default; usually None to read env var
+
+    Returns: (bool, float or None)
+    """
+    if threshold_hours is None:
+        threshold_hours = _freshness_threshold_hours()
+    if threshold_hours <= 0:
+        return (False, None)
+
+    last = get_brand_last_scraped_at(platform, brand_name)
+    if last is None:
+        return (False, None)
+
+    # last is TZ-aware (from psycopg2 + TIMESTAMPTZ); normalize for comparison.
+    now = datetime.now(timezone.utc)
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    age_hours = (now - last).total_seconds() / 3600.0
+    return (age_hours < threshold_hours, age_hours)
 from .scrapers.xhs_scraper import XhsScraper
 from .scrapers.douyin_scraper import DouyinScraper
 
@@ -322,18 +378,35 @@ async def _scrape_brand_via_apify(
     return True
 
 
-async def run_tier_scrape(platform: str, tier: str):
-    """Scrape all brands at a tier via API mode."""
+async def run_tier_scrape(platform: str, tier: str, force_rescrape: bool = False):
+    """Scrape all brands at a tier via API mode.
+
+    Freshness guard: per-brand, skips any brand scraped <FRESHNESS_THRESHOLD_HOURS
+    ago (default 12). Use force_rescrape=True to override for ALL brands in
+    this run (CLI: --force-rescrape).
+    """
     targets = get_scrape_targets(tier)
     if not targets:
         print(f"[INFO] No {tier} targets to scrape for {platform}")
         return
 
     cookies = get_brand_cookies(f'{platform}_analytics') or get_brand_cookies(platform)
-    print(f"[START] Scraping {len(targets)} {tier} brands on {platform} (api mode)")
+    print(f"[START] Scraping {len(targets)} {tier} brands on {platform} (api mode)"
+          + (" [force_rescrape=true]" if force_rescrape else ""))
     success = 0
+    skipped_fresh = 0
     for target in targets:
         brand_name = target['brand_name']
+
+        # Freshness guard. Skip-and-continue, don't count as failure.
+        if not force_rescrape:
+            is_fresh, age_hours = _is_brand_fresh(platform, brand_name)
+            if is_fresh:
+                print(f"[SKIP/fresh] {platform} / {brand_name}: "
+                      f"scraped {age_hours:.1f}h ago")
+                skipped_fresh += 1
+                continue
+
         platform_ids = target.get('platform_ids') or {}
         keyword = platform_ids.get(platform, brand_name)
         # M-C: per-competitor XHS profile URL from DB column (migration 013).
@@ -347,7 +420,9 @@ async def run_tier_scrape(platform: str, tier: str):
             success += 1
         await asyncio.sleep(5)
 
-    print(f"[DONE] {platform} {tier}: {success}/{len(targets)} brands scraped successfully")
+    skipped_msg = f", {skipped_fresh} skipped (fresh)" if skipped_fresh else ""
+    print(f"[DONE] {platform} {tier}: {success}/{len(targets)} brands scraped"
+          f"{skipped_msg}")
 
 
 # ─── Browser mode ─────────────────────────────────────────────────────────────
@@ -557,8 +632,23 @@ def _flatten_snapshot(node: dict, depth: int = 0) -> str:
     return '\n'.join(parts)
 
 
-async def run_single_brand(platform: str, brand_name: str, mode: str = 'api'):
-    """Scrape a single brand on demand."""
+async def run_single_brand(platform: str, brand_name: str, mode: str = 'api',
+                            force_rescrape: bool = False):
+    """Scrape a single brand on demand.
+
+    Freshness guard: if the brand was scraped <FRESHNESS_THRESHOLD_HOURS ago
+    (default 12), skip the scrape entirely. Use force_rescrape=True to override
+    (CLI: --force-rescrape).
+    """
+    if not force_rescrape:
+        is_fresh, age_hours = _is_brand_fresh(platform, brand_name)
+        if is_fresh:
+            print(f"[SKIP/fresh] {platform} / {brand_name}: "
+                  f"scraped {age_hours:.1f}h ago "
+                  f"(threshold={_freshness_threshold_hours()}h). "
+                  f"Use --force-rescrape to override.")
+            return
+
     if mode == 'browser':
         try:
             from playwright.async_api import async_playwright
@@ -605,15 +695,23 @@ def main():
     parser.add_argument('--limit', type=int, default=0,
                         help='Browser mode only: scrape at most N brands per run (0 = all). '
                              'Useful for testing without burning rate budget.')
+    parser.add_argument('--force-rescrape', action='store_true',
+                        help='Override the freshness guard. Without this flag, brands '
+                             f'scraped within the last {DEFAULT_FRESHNESS_THRESHOLD_HOURS}h '
+                             '(or FRESHNESS_THRESHOLD_HOURS env var) are skipped to avoid '
+                             'duplicate cost. Use when you want a guaranteed-fresh pull.')
     args = parser.parse_args()
 
     if args.brand:
-        asyncio.run(run_single_brand(args.platform, args.brand, mode=args.mode))
+        asyncio.run(run_single_brand(args.platform, args.brand,
+                                     mode=args.mode,
+                                     force_rescrape=args.force_rescrape))
     elif args.tier:
         if args.mode == 'browser':
             asyncio.run(run_tier_scrape_browser(args.platform, args.tier, limit=args.limit))
         else:
-            asyncio.run(run_tier_scrape(args.platform, args.tier))
+            asyncio.run(run_tier_scrape(args.platform, args.tier,
+                                        force_rescrape=args.force_rescrape))
     else:
         print("Error: specify --tier or --brand")
         sys.exit(1)
