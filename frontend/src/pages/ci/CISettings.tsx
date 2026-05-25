@@ -362,8 +362,13 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
 
   function selectNameSuggestion(brand: BrandResolution) {
     setNameInput(brand.brand_name);
+    // Guard against the API returning platform_ids: null (the DB column is
+    // nullable even though the TS type is non-nullable). Without this guard,
+    // Object.entries(null) throws "Cannot convert undefined or null to object".
     setResolvedPlatformIds(
-      Object.fromEntries(Object.entries(brand.platform_ids).filter(([, v]) => v != null)) as Record<string, string>
+      Object.fromEntries(
+        Object.entries(brand.platform_ids || {}).filter(([, v]) => v != null)
+      ) as Record<string, string>
     );
     setResolveSource(brand.source);
     setShowNameDrop(false);
@@ -413,8 +418,9 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
     } else if (Object.keys(platformIds).length === 0) {
       const resolved = await resolveBrand(name);
       if (resolved) {
+        // Guard against API returning platform_ids: null (DB column nullable).
         platformIds = Object.fromEntries(
-          Object.entries(resolved.platform_ids).filter(([, v]) => v != null)
+          Object.entries(resolved.platform_ids || {}).filter(([, v]) => v != null)
         ) as Record<string, string>;
         setResolveSource(resolved.source);
       }
@@ -671,7 +677,7 @@ function AddCompetitorSection({ C, lang, competitors, onAdd }: {
               }}>
                 {resolveSource === 'default' ? t(T.ci.newBrand, lang as any) : t(T.ci.knownBrand, lang as any)}
               </span>
-              {Object.entries(resolvedPlatformIds).map(([plat, id]) => (
+              {Object.entries(resolvedPlatformIds || {}).map(([plat, id]) => (
                 <span key={plat} style={{ fontSize: 11, color: C.t3 }}>{plat}: {id}</span>
               ))}
             </div>
@@ -1219,9 +1225,13 @@ function CompetitorList({ C, lang, competitors, onChange, isMobile, readOnly = f
                 {c.brand_name}
               </span>
             )}
-            {!isEditing && Object.keys(c.platform_ids).length > 0 && (
+            {/* Guard with `|| {}` — DB column platform_ids is nullable, but
+                the TS type says it's required. Hitting a null here on initial
+                render crashes the whole Settings page with "Cannot convert
+                undefined or null to object". Defensive everywhere we touch it. */}
+            {!isEditing && Object.keys(c.platform_ids || {}).length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
-                {Object.entries(c.platform_ids).map(([plat, id]) => (
+                {Object.entries(c.platform_ids || {}).map(([plat, id]) => (
                   <span key={plat} style={{ fontSize: 11, color: C.t3 }}>
                     <span style={{ color: PLATFORM_COLORS[plat] ?? C.ac, fontWeight: 600 }}>{PLATFORM_LABELS[plat] ?? plat}</span>: {id}
                   </span>
