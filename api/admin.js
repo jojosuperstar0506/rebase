@@ -1,12 +1,52 @@
 // GET  /api/admin → list applicants (was /api/admin/applicants)
 // POST /api/admin → approve applicant (was /api/admin/approve)
+// ALSO acts as a wildcard proxy for /api/admin/:path* — vercel.json rewrites
+// those to /api/admin?path=... and we forward to ECS at /api/admin/:path*.
 // Consolidated into one function to stay within Vercel Hobby plan's 12-function limit.
 
 export default async function handler(req, res) {
+  const ecsUrl = process.env.ECS_URL;
+  if (!ecsUrl) return res.status(500).json({ error: "Server configuration error: ECS_URL not set" });
+
+  // ── Wildcard proxy: /api/admin/:path* ────────────────────────────
+  // Mirrors api/ci.js — Vercel rewrites the sub-path into ?path=, we read it
+  // back and forward to the ECS backend with the appropriate method/body.
+  // This is how /api/admin/competitors/missing-xhs-url, /api/admin/competitors/:id/xhs-url,
+  // and /api/admin/scrape reach the ECS handlers. Without this, those requests
+  // hit Vercel's 404 page and the frontend crashes parsing HTML as JSON
+  // ("Unexpected token '<', '<!doctype'...").
+  const rawPath = req.query.path;
+  if (rawPath !== undefined && rawPath !== null && rawPath !== "") {
+    const subPath = Array.isArray(rawPath) ? rawPath.join("/") : String(rawPath);
+    const query = { ...req.query };
+    delete query.path;
+    const qs = new URLSearchParams(query).toString();
+    const url = `${ecsUrl}/api/admin/${subPath}${qs ? "?" + qs : ""}`;
+    try {
+      const fetchOpts = {
+        method: req.method,
+        headers: {
+          "Content-Type": "application/json",
+          "x-rebase-secret": process.env.API_SECRET || "",
+        },
+      };
+      if (req.method === "POST" || req.method === "PUT" || req.method === "PATCH") {
+        fetchOpts.body = JSON.stringify(req.body || {});
+      }
+      const response = await fetch(url, fetchOpts);
+      const text = await response.text();
+      let data;
+      try { data = text ? JSON.parse(text) : {}; }
+      catch { data = { error: "Backend returned non-JSON", raw: text.slice(0, 200) }; }
+      return res.status(response.status).json(data);
+    } catch (e) {
+      console.error(`[proxy] admin/${subPath} error:`, e.message);
+      return res.status(502).json({ error: "Failed to reach backend: " + e.message });
+    }
+  }
+
   // ── GET: list applicants ─────────────────────────────────────────
   if (req.method === "GET") {
-    const ecsUrl = process.env.ECS_URL;
-    if (!ecsUrl) return res.status(500).json({ error: "Server configuration error: ECS_URL not set" });
     try {
       const response = await fetch(`${ecsUrl}/api/admin/applicants`, {
         method: "GET",
@@ -22,8 +62,7 @@ export default async function handler(req, res) {
   // ── POST: approve applicant ──────────────────────────────────────
   if (req.method === "POST") {
     try {
-      const ecsUrl = process.env.ECS_URL;
-      if (!ecsUrl) return res.status(500).json({ error: "ECS_URL not configured" });
+      // ecsUrl already validated at function top; no need to re-declare/check.
 
       // Forward to ECS to generate invite code + mark approved
       const ecsRes = await fetch(`${ecsUrl}/api/admin/approve`, {
