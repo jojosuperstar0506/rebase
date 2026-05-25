@@ -1220,13 +1220,140 @@ app.post('/api/ci/competitors', async (req, res) => {
 });
 
 // DELETE /api/ci/competitors/:id — remove a competitor
+// DELETE /api/ci/competitors/:id — removes a competitor and cascade-deletes
+// its scored data so the customer's "remove" actually removes everything,
+// not just the tracking row.
+//
+// Will's product call 2026-05-26: "shouldn't we remove all these competitors,
+// filtering out does work but we should remove it." Right call. Previous
+// behavior left analysis_results + composite_indices rows in the DB as
+// zombies (PR #111/#114 filtered them at read time, but DB grew forever
+// and every new read endpoint had to remember the filter).
+//
+// What we delete (per-workspace, scoped to this brand):
+//   - analysis_results
+//   - composite_indices
+//
+// What we DON'T delete (intentionally):
+//   - scraped_brand_profiles / scraped_products — GLOBAL across workspaces.
+//     Other customers may track the same brand; deleting these would erase
+//     their scraped data too.
+//   - weekly_briefs / content_recommendations etc. — text-narrative tables
+//     that mention competitors but aren't keyed by competitor_name. PR #113
+//     handles staleness UX so customer sees a warning when brief references
+//     removed brands, with a Refresh CTA to regenerate.
+//
+// Tradeoff: re-adding the same brand later means losing trend history and
+// triggering a re-scrape (~$0.25 cost). Acceptable for current low-volume
+// stage; could add soft-delete + 30-day undo later if customers complain.
 app.delete('/api/ci/competitors/:id', async (req, res) => {
   try {
-    await pool.query('DELETE FROM workspace_competitors WHERE id = $1', [req.params.id]);
-    res.json({ success: true });
+    // Look up the row first so we know which (workspace_id, brand_name)
+    // pair to cascade against. RETURNING * gives us both atomically.
+    const { rows } = await pool.query(
+      'DELETE FROM workspace_competitors WHERE id = $1 RETURNING workspace_id, brand_name',
+      [req.params.id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Competitor not found' });
+    }
+    const { workspace_id, brand_name } = rows[0];
+
+    // Cascade — per-workspace + per-brand scored data.
+    const { rowCount: deletedAnalysis } = await pool.query(
+      'DELETE FROM analysis_results WHERE workspace_id = $1 AND competitor_name = $2',
+      [workspace_id, brand_name]
+    );
+    const { rowCount: deletedIndices } = await pool.query(
+      'DELETE FROM composite_indices WHERE workspace_id = $1 AND competitor_name = $2',
+      [workspace_id, brand_name]
+    );
+
+    console.log(`[CI] Deleted competitor ${brand_name} from workspace ${workspace_id} ` +
+                `(analysis_results: ${deletedAnalysis}, composite_indices: ${deletedIndices})`);
+
+    res.json({
+      success: true,
+      deleted: {
+        competitor: { workspace_id, brand_name },
+        analysis_results: deletedAnalysis,
+        composite_indices: deletedIndices,
+      },
+    });
   } catch (err) {
     console.error('[CI] DELETE competitor error:', err.message);
     res.status(500).json({ error: 'Failed to delete competitor' });
+  }
+});
+
+// POST /api/ci/workspace/:id/reset — cascade-deletes ALL per-workspace
+// content (competitors + scored data + briefs + alerts). Keeps the
+// workspace row itself so customer can re-onboard without losing their
+// account/invite-code association.
+//
+// Used by the "Reset all data" button in CISettings.tsx. Previously that
+// button only cleared localStorage, which was misleading — DB stayed
+// dirty. This endpoint makes "reset" mean reset.
+//
+// Same intentional non-deletes as the competitor DELETE: scraped_* tables
+// are global and other workspaces may rely on them.
+app.post('/api/ci/workspace/:id/reset', async (req, res) => {
+  try {
+    const workspace_id = req.params.id;
+    if (!isValidUuid(workspace_id)) {
+      return res.status(400).json({ error: 'Invalid workspace_id' });
+    }
+
+    // Verify the workspace exists before doing anything destructive.
+    const { rows: wsRows } = await pool.query(
+      'SELECT id, brand_name FROM workspaces WHERE id = $1',
+      [workspace_id]
+    );
+    if (wsRows.length === 0) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    // Cascade-delete all per-workspace tables. Order doesn't matter logically
+    // (no foreign keys between these), but we log counts for visibility.
+    const deletions = {};
+    for (const [table, label] of [
+      ['workspace_competitors', 'workspace_competitors'],
+      ['analysis_results', 'analysis_results'],
+      ['composite_indices', 'composite_indices'],
+      ['analysis_narratives', 'analysis_narratives'],
+      ['weekly_briefs', 'weekly_briefs'],
+      ['content_recommendations', 'content_recommendations'],
+      ['product_opportunities', 'product_opportunities'],
+      ['white_space_opportunities', 'white_space_opportunities'],
+      ['ci_alerts', 'ci_alerts'],
+      ['ci_analysis_jobs', 'ci_analysis_jobs'],
+    ]) {
+      try {
+        const { rowCount } = await pool.query(
+          `DELETE FROM ${table} WHERE workspace_id = $1`,
+          [workspace_id]
+        );
+        deletions[label] = rowCount;
+      } catch (e) {
+        // Table might not exist in some deployments — log and continue.
+        // Don't fail the whole reset for one missing table.
+        console.warn(`[CI] Reset: skipping ${table} (${e.message})`);
+        deletions[label] = 0;
+      }
+    }
+
+    console.log(`[CI] Workspace reset ${workspace_id} (${wsRows[0].brand_name}):`,
+                JSON.stringify(deletions));
+
+    res.json({
+      success: true,
+      workspace_id,
+      workspace_brand_name: wsRows[0].brand_name,
+      deleted: deletions,
+    });
+  } catch (err) {
+    console.error('[CI] POST workspace/:id/reset error:', err.message);
+    res.status(500).json({ error: 'Failed to reset workspace' });
   }
 });
 

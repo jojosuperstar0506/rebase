@@ -1837,11 +1837,45 @@ function ResetDataCard({ C, lang, onReset, isMobile }: {
   isMobile: boolean;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState('');
 
-  function handleReset() {
+  async function handleReset() {
+    setResetting(true);
+    setResetError('');
+
+    // Server-side cascade-delete first — competitors, analysis_results,
+    // composite_indices, briefs, alerts, etc. for this workspace.
+    // Previously this button only cleared localStorage, which was misleading
+    // (DB stayed dirty — removed brands kept appearing in analytics for
+    // weeks). Now the button matches its label: 'reset all data' actually
+    // resets all data, server-side too. (Will's call 2026-05-26.)
+    try {
+      const { getWorkspace } = await import('../../services/ciApi');
+      const wsResp = await getWorkspace();
+      const wsId = wsResp.data?.id;
+      if (wsId && wsId !== 'local') {
+        const res = await fetch(`/api/ci/workspace/${wsId}/reset`, {
+          method: 'POST',
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `Server returned ${res.status}`);
+        }
+        // Log the cascade counts in console so admin can see what cleared.
+        const result = await res.json().catch(() => ({}));
+        console.log('[CI] Workspace reset complete:', result.deleted);
+      }
+    } catch (e) {
+      // Don't block the local-clear path — even if server-side fails, we
+      // still want to clear localStorage so the customer's view resets.
+      // Surface the error inline so admin knows something went wrong.
+      setResetError(e instanceof Error ? e.message : 'Server reset failed');
+      console.error('[CI] Server-side reset failed:', e);
+    }
+
     // Clear all CI localStorage keys (workspace, competitors, connections,
-    // analysis flags, welcome banner state, and the multi-workspace cache
-    // added in this PR — the active id and the known-workspaces list).
+    // analysis flags, welcome banner state, and the multi-workspace cache).
     localStorage.removeItem('rebase_ci_workspace');
     localStorage.removeItem('rebase_ci_competitors');
     localStorage.removeItem('rebase_ci_connections');
@@ -1851,10 +1885,16 @@ function ResetDataCard({ C, lang, onReset, isMobile }: {
     localStorage.removeItem('rebase_ci_last_visit');
     localStorage.removeItem('rebase_ci_active_workspace_id');
     localStorage.removeItem('rebase_ci_known_workspaces');
+
     onReset();
     window.dispatchEvent(new CustomEvent('ci-data-updated'));
     setConfirming(false);
-    window.location.href = '/ci/settings';
+    setResetting(false);
+    // Only redirect on success — if server-side errored, stay on page so
+    // customer sees the error message + can retry / contact us.
+    if (!resetError) {
+      window.location.href = '/ci/settings';
+    }
   }
 
   return (
@@ -1898,39 +1938,50 @@ function ResetDataCard({ C, lang, onReset, isMobile }: {
           {lang === 'zh' ? '重置所有数据' : 'Reset all data'}
         </button>
       ) : (
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
-          <span style={{ fontSize: 12, color: C.danger, fontWeight: 600 }}>
-            {lang === 'zh' ? '确定？' : 'Sure?'}
-          </span>
-          <button
-            onClick={handleReset}
-            style={{
-              background: C.danger,
-              border: 'none',
-              color: '#fff',
-              padding: '8px 16px',
-              borderRadius: 8,
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            {lang === 'zh' ? '确认重置' : 'Yes, reset'}
-          </button>
-          <button
-            onClick={() => setConfirming(false)}
-            style={{
-              background: 'transparent',
-              border: `1px solid ${C.bd}`,
-              color: C.t2,
-              padding: '8px 14px',
-              borderRadius: 8,
-              fontSize: 12,
-              cursor: 'pointer',
-            }}
-          >
-            {lang === 'zh' ? '取消' : 'Cancel'}
-          </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: C.danger, fontWeight: 600 }}>
+              {lang === 'zh' ? '确定？' : 'Sure?'}
+            </span>
+            <button
+              onClick={handleReset}
+              disabled={resetting}
+              style={{
+                background: resetting ? C.t3 : C.danger,
+                border: 'none',
+                color: '#fff',
+                padding: '8px 16px',
+                borderRadius: 8,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: resetting ? 'default' : 'pointer',
+              }}
+            >
+              {resetting
+                ? (lang === 'zh' ? '正在重置…' : 'resetting…')
+                : (lang === 'zh' ? '确认重置' : 'Yes, reset')}
+            </button>
+            <button
+              onClick={() => { setConfirming(false); setResetError(''); }}
+              disabled={resetting}
+              style={{
+                background: 'transparent',
+                border: `1px solid ${C.bd}`,
+                color: C.t2,
+                padding: '8px 14px',
+                borderRadius: 8,
+                fontSize: 12,
+                cursor: resetting ? 'default' : 'pointer',
+              }}
+            >
+              {lang === 'zh' ? '取消' : 'Cancel'}
+            </button>
+          </div>
+          {resetError && (
+            <div style={{ fontSize: 11, color: C.danger, fontFamily: 'var(--font-mono)' }}>
+              // {resetError}
+            </div>
+          )}
         </div>
       )}
     </div>
