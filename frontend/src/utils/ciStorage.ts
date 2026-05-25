@@ -16,6 +16,16 @@ export interface CICompetitor {
   platform_ids: Record<string, string>;
   added_via: 'manual' | 'link_paste' | 'ai_suggestion' | 'onboarding';
   created_at: string;
+  /** Optional fields returned by GET /api/ci/competitors when present.
+   *  - xhs_profile_url: set by addCompetitor() auto-populate from registry,
+   *    or by admin via PATCH /api/admin/competitors/:id/xhs-url. Drives the
+   *    DataSourcesStatus state machine in CISettings.
+   *  - last_scraped_at: lateral-join freshness from scraped_brand_profiles
+   *    (#18). Null when no scrape data exists yet.
+   *  Both optional because localStorage-only rows (offline mode) won't
+   *  carry them; only API-hydrated rows will. */
+  xhs_profile_url?: string | null;
+  last_scraped_at?: string | null;
 }
 
 export interface CIConnection {
