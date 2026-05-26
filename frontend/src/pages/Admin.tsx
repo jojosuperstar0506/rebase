@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { Inbox } from "lucide-react";
 import { useApp } from "../context/AppContext";
-import { CompetitorXhsUrls, CompetitorXhsUrlsEdit, WorkspaceOwnBrandUrls } from "../components/admin/CompetitorXhsUrls";
+// Legacy URL queue components are no longer mounted here (PR #119 removed
+// the Operations tab). The components still live in CompetitorXhsUrls.tsx
+// for any other page that wants the flat-list view.
 import { AdminCustomersView } from "../components/admin/AdminCustomersView";
 
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || "rebase-admin-2026";
@@ -99,11 +101,12 @@ function ApplicantCard({ applicant, onApprove, colors }: {
   );
 }
 
-// Top-level tabs for the redesigned admin (PR #118, 2026-05-26).
-// Will's UX call: data-centric "all URLs needing setup" view was forcing
-// admin to scroll through 3 sections per customer. Per-customer cards
-// (Customers tab) replace that with a focused per-customer workflow.
-type AdminTab = "applicants" | "customers" | "operations";
+// Top-level tabs. Started as 3 (Applicants / Customers / Operations) in
+// PR #118 — but Operations was redundant: every URL/scrape action it
+// offered was already better-handled per-customer in the Customers tab.
+// Will called this out 2026-05-26: "customer tab contains everything
+// for operation tab. Is there need to keep operation tab". Dropped to 2.
+type AdminTab = "applicants" | "customers";
 
 export default function Admin() {
   const { colors: C } = useApp();
@@ -263,7 +266,6 @@ export default function Admin() {
           {([
             { key: "applicants" as const, label: "Applicants", badge: pending.length },
             { key: "customers" as const, label: "Customers", badge: null },
-            { key: "operations" as const, label: "Operations", badge: null },
           ]).map((t) => {
             const isActive = activeTab === t.key;
             return (
@@ -301,58 +303,13 @@ export default function Admin() {
           })}
         </div>
 
-        {/* W5: Pending scrapes — workspaces created by onboarding but no
-            scrape data yet. Each one needs a manual scrape on a residential
-            IP machine until Phase D customer installer ships.
-            Shown on Operations tab; legacy banner kept for now. */}
-        {activeTab === "operations" && pendingScrapes.length > 0 && (
-          <div style={{ background: C.s1, border: `1px solid ${C.warning ?? C.bd}`, borderRadius: 8, padding: 16, marginBottom: 20 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: C.tx }}>
-                ⏳ {pendingScrapes.length} workspace{pendingScrapes.length === 1 ? "" : "s"} pending first scrape
-              </div>
-              <div style={{ fontSize: 12, color: C.t3 }}>
-                Run scrape locally for each, then refresh
-              </div>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {pendingScrapes.map((ws) => (
-                <div key={ws.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "8px 12px", background: C.s2, borderRadius: 6 }}>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: C.tx }}>
-                      {ws.brand_name}{" "}
-                      <span style={{ color: C.t3, fontWeight: 400 }}>
-                        ({ws.brand_category || "—"})
-                      </span>
-                    </div>
-                    <div style={{ fontSize: 11, color: C.t3, marginTop: 2, fontFamily: "monospace" }}>
-                      id={ws.id.slice(0, 8)} · user={ws.user_id} · {ws.competitor_count} competitor{ws.competitor_count === 1 ? "" : "s"}
-                    </div>
-                    {ws.competitors && ws.competitors.length > 0 && (
-                      <div style={{ fontSize: 11, color: C.t2, marginTop: 4 }}>
-                        Competitors: {ws.competitors.join(", ")}
-                      </div>
-                    )}
-                  </div>
-                  <code
-                    onClick={(e) => {
-                      const text = `python -m services.competitor_intel.scrape_runner --workspace-id ${ws.id} --tier watchlist --mode browser`;
-                      navigator.clipboard?.writeText(text);
-                      const el = e.currentTarget;
-                      const orig = el.textContent;
-                      el.textContent = "copied ✓";
-                      setTimeout(() => { el.textContent = orig; }, 1200);
-                    }}
-                    title="Click to copy the scrape command"
-                    style={{ fontSize: 10, color: C.ac, background: C.bg, padding: "4px 8px", borderRadius: 4, cursor: "pointer", whiteSpace: "nowrap", marginLeft: 12 }}
-                  >
-                    copy scrape cmd
-                  </code>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Removed in PR #119: W5 pre-Apify pending-scrapes banner. It
+            used to render here when activeTab === 'operations'. Every
+            status it surfaced (workspaces needing first scrape) is now
+            shown per-customer on the Customers tab via the consolidated
+            /api/admin/customers endpoint's status object. fetchPendingScrapes
+            is kept in state for now in case we want to resurface this
+            data elsewhere — no behavioral impact. */}
 
         {/* ── APPLICANTS TAB ─────────────────────────────────────────── */}
         {activeTab === "applicants" && (
@@ -398,26 +355,12 @@ export default function Admin() {
           <AdminCustomersView />
         )}
 
-        {/* ── OPERATIONS TAB ─────────────────────────────────────────── */}
-        {/* Global scrape trigger + legacy URL queues + admin diagnostics.
-            Customer-specific URL/scrape work now lives on the Customers tab
-            (per-customer cards). The legacy URL queues are still mounted
-            here as a fallback / for backward compatibility — admins who've
-            internalized the old data-centric view can keep using them, but
-            the Customers tab is the new default workflow. */}
-        {activeTab === "operations" && (
-          <div className="flex flex-col gap-8">
-            <div className="font-mono text-xs text-[var(--color-text-muted)]">
-              // global ops — scrape everything, view legacy URL queues
-            </div>
-
-            {/* Legacy URL queues — same functionality as Customers tab but
-                organized as flat lists. Kept for fallback / debugging. */}
-            <CompetitorXhsUrls />
-            <CompetitorXhsUrlsEdit />
-            <WorkspaceOwnBrandUrls />
-          </div>
-        )}
+        {/* Operations tab removed in PR #119. CompetitorXhsUrls,
+            CompetitorXhsUrlsEdit, WorkspaceOwnBrandUrls components still
+            live in components/admin/CompetitorXhsUrls.tsx for any other
+            page that wants the flat-list view — we just don't mount them
+            on /admin anymore. Customers tab handles every workflow they
+            used to cover, per-customer. */}
       </div>
     </div>
   );
