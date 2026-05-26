@@ -2,19 +2,17 @@
 
 > Single source of truth for product progress. Pull this up every session.
 
-**Last updated:** 2026-05-04
+**Last updated:** 2026-05-26
+
+> **How task tracking works now:** GitHub Issues are the live task list. Milestones (M1/M2/M3) = phases. `area:` labels = layers (data/agent/frontend/backend/infra/gtm/docs/intelligence). Three-level hierarchy: Epics (#83-#94) → Sub-issues → Tasks (one PR each). This file (ROADMAP.md) is strategy — quarter-level what & why, not task-level. See `CLAUDE.md` § "Roadmap & team rituals" for the full convention.
 
 > **In-flight reference docs (read first if you're catching up):**
-> - 📋 **`WILLIAM-TO-JOANNA-2026-05-04.md`** — **William's most recent handoff: V1 trust polish + V1.5 UI shipped to main; pushback on composite indices V1.5; 3 options for next sequence**
-> - 🔒 **`SPEC-COMPOSITE-INDICES-V1.md`** — 3-pillar / 12-index spec; **§10 answers locked 2026-05-04**; implementation deferred pending snapshot table + customer signal
-> - `HANDOFF-FROM-PREV-SESSION-2026-05-04.md` — Will's pickup doc for next session
-> - `OPEN-TODOS-FOR-JOANNA-2026-05-03.md` — Will's coverage-audit matrix
-> - `WILL-TO-JOANNA-2026-04-30.md` — Will's Day 1 + Day 2 + lifecycle handoff (prior)
-> - `WILLIAM-HANDOFF-2026-04-23.md` — Joanna's scraper hardening handoff to William
-> - `DATA-FLOW-AND-METRICS-ANALYSIS-2026-05-02.md` — pipeline trace + 3 data-quality issues (all resolved by Will's W1-W4)
-> - `FRONTEND-BACKEND-GAP-ANALYSIS-2026-05-02.md` — endpoint inventory + 22-item workplan (mostly resolved)
-> - `METRIC-LOGIC-INVESTIGATION-2026-05-02.md` — dark-metric root causes (partly superseded by indices spec)
-> - `SPEC-COMPARISON-SETS-V2.md` — Comparison sets + auto-segmentation spec (V2 work, owner: William)
+> - 📋 **`docs/handoffs-archive/HANDOFF-2026-05-26-from-will-to-joanna.md`** — **Will's most recent handoff: Apify Tier B live on ECS, customer-centric admin UX, own-brand scoring, cascade-delete (~24 PRs #96-#127)**
+> - 🗄 **`docs/SCHEMA.md`** — DB cheat-sheet. 17 tables across 5 layers. **Read before any SQL/migration/ECS work** (now required by CLAUDE.md)
+> - **GitHub Epics #83-#94** — work spine. Each is a 4-6 week deliverable spanning multiple layers
+> - **GitHub milestones M1/M2/M3** — phases. M1 = ship to first paying customer (current focus)
+> - 🔒 **`docs/active/SPEC-COMPOSITE-INDICES-V1.md`** — 3-pillar / 12-index spec; §10 answers locked 2026-05-04; implementation deferred pending snapshot table + customer signal
+> - `docs/active/SPEC-COMPARISON-SETS-V2.md` — Comparison sets + auto-segmentation spec (V2 work)
 
 ---
 
@@ -60,7 +58,37 @@ Converts prospects to believers               Proves intelligence layer works on
 
 ---
 
-## Where We Are Now (as of 2026-05-04)
+## Where We Are Now (as of 2026-05-26)
+
+**Phase:** M1 — Ship to first paying customer. OMI is the canonical demo brand.
+
+**Tonight's session highlights** (Will, 2026-05-26 — ~24 PRs #96-#127, see handoff doc):
+- **Apify Tier B scraping live on ECS** — easyapi user_posts + profile actors, Python 3.11 venv, weekly Sunday 2am cron, $29/mo Starter plan subscribed. End-to-end verified on Songmont (50 notes, $0.255). Per-brand cost: $0.50-$1.00.
+- **Customer-centric admin UX** — replaced fragmented "data-centric" view with per-customer cards (`/admin` Customers tab). Per-workspace scrape trigger + URL editing inline. Operations tab removed as redundant.
+- **Own-brand scoring closed** — workspaces.xhs_profile_url + helper `get_competitors_with_own_brand()` applied to all 11 scoring pipelines. OMI's own brand now scored alongside competitors on every metric.
+- **Data quality protection** — cascade-delete on competitor removal + workspace reset endpoint. 5 analytics endpoints filter zombie data. Brief staleness banner when competitor set drifts since brief generation.
+- **Schema docs** — `docs/SCHEMA.md` written as the single source of truth for 17 tables × 5 layers. CLAUDE.md updated to require reading it before any DB work.
+
+**Active work against M1:**
+| Epic | Status | Notes |
+|---|---|---|
+| #88 Land 1 paying brand | 🟢 Demo-ready | OMI + Apify + own-brand scoring all live. Blocked on pricing decision (#75) + target list |
+| #87 Self-serve onboarding | 🟡 Partial | Signup flow exists; #132 (frontend over-polling 429 bug) is the visible blocker for first demo |
+| #86 Pipeline parameterized by customer | 🟢 80% | Phase 2 brand→XHS auto-resolve deferred (#129) — Apify search actor broken |
+| #85 Multi-tenant data layer | 🟢 75% | Cascade-delete + workspace-id filtering live; integration test still TODO |
+| #84 Branch protection + CI | ✅ Done | CODEOWNERS + workflow active |
+| #83 HTTPS on ECS | 🔴 Not started | Vercel auth proxy still in place |
+
+**Active follow-up sub-issues spun out tonight:** #129 (brand→XHS auto-resolve), #130 (body content scraping), #131 (cost optimization 50→20), #132 (over-polling 429 bug — `priority: now`), #133 (backup script hardening).
+
+**Operational posture:**
+- Apify Starter $29/mo + $29 credit covers ~1 customer. Cost optimization (#131) before customer #2.
+- Weekly Sunday 2am cron on ECS via /root/rebase/.venv/bin/python (not system python3).
+- DB backups need hardening (#133) — caught 22-day gap tonight from path-change cron failure.
+
+---
+
+## Where We Were (as of 2026-05-04)
 
 | Stream | Owner | Status | Layer | Notes |
 |--------|-------|--------|-------|-------|
