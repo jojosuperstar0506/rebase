@@ -107,6 +107,80 @@ def get_scrape_targets(tier='watchlist'):
         conn.close()
 
 
+def get_competitors_with_own_brand(workspace_id):
+    """Return workspace_competitors rows PLUS a synthetic row for the
+    workspace's own brand. Used by every scoring pipeline so the
+    customer's own brand gets scored alongside competitors.
+
+    Without this, scoring pipelines that iterate workspace_competitors
+    only would skip the own brand — analysis_results would have no rows
+    for the workspace's brand_name, so the 3-domain chart and 12 metric
+    cards would render '你的品牌' as 0 even when scrape data exists.
+
+    The synthetic row uses 'added_via': 'self' so callers can distinguish
+    it if needed. It carries the workspace's xhs_profile_url (migration 016)
+    so per-brand data lookups work the same as for real competitors.
+
+    De-dup: if a competitor row with the same brand_name (case-insensitive)
+    already exists in workspace_competitors, we don't add a duplicate
+    synthetic row. This shouldn't normally happen but the guard prevents
+    double-scoring weirdness.
+
+    Same pattern composite_indices.py uses inline (lines 1139-1141);
+    extracted here so every pipeline can share one implementation.
+
+    Args:
+        workspace_id: UUID of the workspace
+
+    Returns:
+        list[dict] — competitor rows. Always includes own brand at index 0
+        unless it was already in workspace_competitors.
+    """
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT * FROM workspace_competitors WHERE workspace_id = %s",
+                (workspace_id,),
+            )
+            competitors = list(cur.fetchall())
+
+            cur.execute(
+                "SELECT id, brand_name, brand_category, created_at, xhs_profile_url "
+                "FROM workspaces WHERE id = %s",
+                (workspace_id,),
+            )
+            workspace = cur.fetchone()
+
+            if workspace and (workspace.get("brand_name") or "").strip():
+                own = workspace["brand_name"].strip()
+                already_present = any(
+                    (c.get("brand_name") or "").strip().lower() == own.lower()
+                    for c in competitors
+                )
+                if not already_present:
+                    # Synthetic row — shape matches workspace_competitors
+                    # well enough that downstream pipelines don't need to
+                    # know it's synthetic. id=None signals 'no DB row';
+                    # most pipelines only read brand_name + platform_ids
+                    # + tier, so the missing id is fine.
+                    own_row = {
+                        "id": None,
+                        "workspace_id": workspace_id,
+                        "brand_name": own,
+                        "tier": "watchlist",
+                        "added_via": "self",
+                        "platform_ids": {},
+                        "created_at": workspace.get("created_at"),
+                        "xhs_profile_url": workspace.get("xhs_profile_url"),
+                    }
+                    # Put own brand first so it leads in any iteration logs.
+                    competitors.insert(0, own_row)
+            return competitors
+    finally:
+        conn.close()
+
+
 def set_workspace_xhs_url(workspace_id, xhs_profile_url):
     """Set the workspace's own-brand XHS profile URL. Used by admin endpoint
     PATCH /api/admin/workspaces/:id/xhs-url (server.js).

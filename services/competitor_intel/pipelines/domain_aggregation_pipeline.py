@@ -161,12 +161,12 @@ def run_for_workspace(workspace_id: str) -> int:
                 print(f"[WARN] Workspace {workspace_id} not found")
                 return 0
 
-            # All competitors in this workspace
-            cur.execute(
-                "SELECT brand_name FROM workspace_competitors WHERE workspace_id = %s",
-                (workspace_id,),
-            )
-            competitors = [r["brand_name"] for r in cur.fetchall()]
+            # All competitors in this workspace + the workspace's own brand
+            # (PR #120). Without the own-brand splice, the 3-domain rollup
+            # leaves '你的品牌' as 0 on the Analytics chart even when the
+            # individual metric pipelines have scored the own brand.
+            from ..db_bridge import get_competitors_with_own_brand
+            competitors = [c["brand_name"] for c in get_competitors_with_own_brand(workspace_id)]
 
             if not competitors:
                 print(f"[INFO] No competitors for workspace {workspace_id}")

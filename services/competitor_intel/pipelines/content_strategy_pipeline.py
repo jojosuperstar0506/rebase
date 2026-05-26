@@ -41,11 +41,10 @@ def run_for_workspace(workspace_id: str):
                 print(f"[WARN] Workspace {workspace_id} not found")
                 return
 
-            cur.execute(
-                "SELECT * FROM workspace_competitors WHERE workspace_id = %s",
-                (workspace_id,),
-            )
-            competitors = cur.fetchall()
+            # Include workspace's own brand (PR #120) — without this, the
+            # workspace's own brand never gets a content_strategy score.
+            from ..db_bridge import get_competitors_with_own_brand
+            competitors = get_competitors_with_own_brand(workspace_id)
             if not competitors:
                 print(f"[INFO] No competitors for workspace {workspace_id}")
                 return
