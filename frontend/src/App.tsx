@@ -2,6 +2,7 @@ import { useState, useEffect, lazy, Suspense } from "react";
 import type { CSSProperties } from "react";
 import { Routes, Route, Link, useNavigate, useLocation } from "react-router-dom";
 import { Sun, Moon } from "lucide-react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 
 import { AppProvider, useApp } from "./context/AppContext";
 import { BrandChip } from "@/components/ui/BrandChip";
@@ -376,6 +377,7 @@ export default function App() {
   return (
     <AppProvider>
       <AppRoutes />
+      <SpeedInsights />
     </AppProvider>
   );
 }
