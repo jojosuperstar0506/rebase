@@ -27,10 +27,24 @@
   the preview URL and the permanent record, not for gatekeeping.
 
 ### Branches
-- Name them `<owner>/<area>-<short-desc>` — e.g. `joanna/frontend-login-redesign`,
-  `will/backend-erp-connector`, `claude/agent-scoring-fix`.
-- One branch = one logical change. Keep branches short-lived.
-- Delete the branch after merge. Don't let branches pile up.
+- Naming patterns:
+  - `<owner>/<area>-<short-desc>` for feature work — e.g. `joanna/frontend-login-redesign`, `will/backend-erp-connector`, `claude/agent-scoring-fix`
+  - `hotfix/<short-desc>` for urgent production fixes
+  - `chore/<short-desc>` for CI, deps, config — no product change
+- Always branch off the **latest `origin/main`**, never off another feature branch.
+- One branch = one logical change. Keep branches short-lived (hours to days, not weeks).
+- Delete the branch after merge — auto-delete-head-branches is on (Settings → General).
+
+### Worktrees
+Use a worktree (`git worktree add <path> origin/main`) when:
+- You need to fix something on another branch but have WIP you don't want to stash
+- You're running long parallel operations (long tests on one branch while editing another)
+- Claude Code is doing isolated work (it auto-creates worktrees under `.claude/worktrees/`)
+
+Hygiene:
+- `git worktree list` to see active ones, `git worktree remove <path>` when done.
+- `git worktree prune` periodically to clean up orphans.
+- Aim for ≤ 2 active worktrees per founder. Don't accumulate.
 
 ### Pull Requests
 - Fill in the PR template: What changed / Why / How to test / Areas touched.
@@ -78,6 +92,47 @@
 - [ ] Build / tests pass; Vercel preview checked
 - [ ] Docs updated if behavior, API shape, or DB schema changed
 - [ ] Branch deleted after merge
+
+---
+
+## Roadmap & team rituals
+
+### Two-axis model — milestones × layers
+
+Work is organized on two independent axes — don't conflate them:
+
+- **Milestones (time)** — `M1`, `M2`, `M3` answer *when*. Each is a ~4-6 week phase ending in a user-visible outcome ("ship to first paying customer," "make it a product," "open the second product").
+- **`area:` labels (layer)** — `area: data`, `area: agent`, `area: frontend`, `area: backend`, `area: infra`, plus `area: gtm` and `area: docs` for non-engineering work. The 5 engineering areas map 1:1 to our architecture (data / agent / frontend / backend / infra). They answer *what kind of work*.
+
+Every issue carries **one milestone + one or more `area:` labels + one `owner:` label**.
+
+**The trap to avoid:** don't make milestones layer-based. Real features cross layers (a self-serve onboarding flow touches frontend + backend + data + agent + infra). Slicing milestones by layer fragments features into pieces that never add up to user value. **Slice by phase; filter by layer.**
+
+### Epics, sub-issues, tasks — three levels max
+
+- **Epics** (title prefixed `Epic — ...`) — weeks-to-months of work, cross multiple layers, deliver a user-visible outcome. Issues #83-#94 are the current epic spine.
+- **Sub-issues** — 1–5 days of work, usually a single layer. Live under an epic (referenced in the epic body or via GitHub task lists).
+- **Tasks** — atomic, one PR's worth of work. Often just a checkbox on the sub-issue.
+
+Issues are the unit of execution. Branches and PRs map to **issues**, not to layers.
+
+### Team rituals — the heartbeat
+
+| Cadence | Who | What |
+|---|---|---|
+| Daily (~5 min async) | each founder | "Yesterday / today / blocked on" in WeChat or Slack |
+| Weekly (~15 min) | both | Walk the board together. Confirm milestone progress. Re-rank Todo. |
+| Per-milestone (~30 min) | both | Retro at the end of M1, M2, M3 |
+| PR reviews | both | < 24 hour turnaround |
+
+The weekly board walk is the heartbeat. Tools don't replace it.
+
+### Automated guardrails (already on)
+
+- Branch protection on `main`: PR required, status checks required, no direct pushes
+- CODEOWNERS routes reviews by file path (`.github/CODEOWNERS`)
+- CI runs frontend build + Node tests on every PR (`.github/workflows/ci.yml`)
+- Auto-delete head branches after merge
 
 ---
 

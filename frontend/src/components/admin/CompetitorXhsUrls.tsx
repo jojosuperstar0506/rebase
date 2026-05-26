@@ -633,3 +633,245 @@ function EditableUrlRow({ competitor, onSaved }: {
     </div>
   );
 }
+
+// ─── Workspace own-brand XHS URLs ──────────────────────────────────────
+// Sibling to the competitor queues. Lists every workspace's own brand
+// (workspaces.brand_name) and lets admin paste/edit the XHS profile URL
+// for it. After this, scrape_runner picks up the workspace's own brand
+// on the next watchlist scrape — scoring computes own-brand score the
+// same way it does for competitors. Without this, the '你的品牌' row
+// in analytics charts shows 0 because the scoring pipeline has no
+// scraped data for the workspace's own brand.
+//
+// Migration 016 added xhs_profile_url to workspaces. Endpoints:
+//   GET  /api/admin/workspaces/missing-own-brand-url
+//   GET  /api/admin/workspaces/with-own-brand-url
+//   PATCH /api/admin/workspaces/:id/xhs-url
+interface WorkspaceOwnBrand {
+  id: string;
+  brand_name: string;
+  user_id: string;
+  brand_category?: string;
+  xhs_profile_url?: string;
+  created_at: string;
+}
+
+export function WorkspaceOwnBrandUrls() {
+  const [missing, setMissing] = useState<WorkspaceOwnBrand[]>([]);
+  const [configured, setConfigured] = useState<WorkspaceOwnBrand[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
+
+  const fetchAll = useCallback(async () => {
+    if (mounted.current) {
+      setLoading(true);
+      setError("");
+    }
+    try {
+      const [missRes, withRes] = await Promise.all([
+        fetch("/api/admin/workspaces/missing-own-brand-url"),
+        fetch("/api/admin/workspaces/with-own-brand-url"),
+      ]);
+      const missData = await missRes.json();
+      const withData = await withRes.json();
+      if (!missRes.ok) throw new Error(missData.error || "Failed to load missing");
+      if (!withRes.ok) throw new Error(withData.error || "Failed to load with-url");
+      if (mounted.current) {
+        setMissing(Array.isArray(missData.workspaces) ? missData.workspaces : []);
+        setConfigured(Array.isArray(withData.workspaces) ? withData.workspaces : []);
+      }
+    } catch (e) {
+      if (mounted.current) setError(e instanceof Error ? e.message : "Failed to load");
+    } finally {
+      if (mounted.current) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
+
+  const total = missing.length + configured.length;
+
+  return (
+    <section className="mt-12">
+      <div className="mb-5">
+        <Eyebrow>// admin · apify scraper · workspace own-brand urls</Eyebrow>
+        <Heading as={3} size="card" className="mt-2">
+          Workspace own-brand XHS profile URLs
+        </Heading>
+        <p className="font-mono text-xs text-[var(--color-text-muted)] mt-2 leading-relaxed max-w-prose">
+          // Set each workspace's OWN brand XHS URL so it gets scraped and scored
+          <br />
+          // alongside its competitors. Without this, '你的品牌' shows 0 on
+          <br />
+          // analytics charts because the pipeline has no scrape data for it.
+          <br />
+          // {missing.length} of {total} workspaces still need URL set.
+        </p>
+      </div>
+
+      {loading && (
+        <div className="font-mono text-sm text-[var(--color-text-muted)]">
+          // loading…
+        </div>
+      )}
+
+      {error && (
+        <div
+          className="px-4 py-3 mb-4 rounded-[var(--radius-xs)]"
+          style={{
+            border: "1px solid var(--color-danger)",
+            backgroundColor: "color-mix(in srgb, var(--color-danger) 10%, transparent)",
+          }}
+        >
+          <span className="font-mono text-sm text-[var(--color-danger)]">
+            // error: {error}
+          </span>
+        </div>
+      )}
+
+      {!loading && !error && total === 0 && (
+        <div className="font-mono text-sm text-[var(--color-text-muted)]">
+          // no workspaces in the system yet
+        </div>
+      )}
+
+      {!loading && !error && missing.length > 0 && (
+        <div className="mb-8">
+          <div className="font-mono text-xs text-[var(--color-text-muted)] mb-3 uppercase tracking-wide">
+            // awaiting URL ({missing.length})
+          </div>
+          <div className="flex flex-col gap-3">
+            {missing.map((w) => (
+              <WorkspaceUrlRow
+                key={w.id}
+                workspace={w}
+                isInitiallyEmpty={true}
+                onSaved={fetchAll}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!loading && !error && configured.length > 0 && (
+        <div>
+          <div className="font-mono text-xs text-[var(--color-text-muted)] mb-3 uppercase tracking-wide">
+            // configured ({configured.length}) — edit to fix wrong URLs
+          </div>
+          <div className="flex flex-col gap-3">
+            {configured.map((w) => (
+              <WorkspaceUrlRow
+                key={w.id}
+                workspace={w}
+                isInitiallyEmpty={false}
+                onSaved={fetchAll}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function WorkspaceUrlRow({ workspace, isInitiallyEmpty, onSaved }: {
+  workspace: WorkspaceOwnBrand;
+  isInitiallyEmpty: boolean;
+  onSaved: () => void;
+}) {
+  const [url, setUrl] = useState(workspace.xhs_profile_url || "");
+  const [saving, setSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+  const [rowError, setRowError] = useState("");
+  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+    };
+  }, []);
+  useEffect(() => {
+    setUrl(workspace.xhs_profile_url || "");
+  }, [workspace.xhs_profile_url]);
+
+  const isDirty = url.trim() !== (workspace.xhs_profile_url || "");
+  const buttonLabel = isInitiallyEmpty ? "set url" : "update";
+
+  async function handleSave() {
+    if (!url.trim() || !isDirty) return;
+    setSaving(true);
+    setRowError("");
+    try {
+      const res = await fetch(`/api/admin/workspaces/${workspace.id}/xhs-url`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ xhs_profile_url: url.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const msg = data.hint || data.error || "Save failed";
+        throw new Error(msg);
+      }
+      setJustSaved(true);
+      refreshTimeoutRef.current = setTimeout(() => {
+        refreshTimeoutRef.current = null;
+        setJustSaved(false);
+        onSaved();
+      }, 1500);
+    } catch (e) {
+      setRowError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      className="p-4 rounded-[var(--radius-xs)]"
+      style={{
+        border: `1px solid var(${justSaved ? "--color-success" : "--color-border-hairline"})`,
+        backgroundColor: "var(--color-raised)",
+      }}
+    >
+      <div className="flex items-start justify-between mb-3 gap-4 flex-wrap">
+        <BrandChip name={workspace.brand_name} category="own-brand" />
+        <div className="font-mono text-xs text-[var(--color-text-muted)]">
+          // invite code {workspace.user_id}
+          {workspace.brand_category ? ` · ${workspace.brand_category}` : ""}
+          {" · "}
+          {new Date(workspace.created_at).toLocaleDateString()}
+        </div>
+      </div>
+
+      <Label htmlFor={`ws-url-${workspace.id}`}>XHS profile URL (own brand)</Label>
+      <div className="flex gap-3 items-stretch mt-1">
+        <div className="flex-1">
+          <Input
+            id={`ws-url-${workspace.id}`}
+            value={url}
+            onChange={(e) => { setUrl(e.target.value); setRowError(""); }}
+            placeholder="https://www.rednote.com/user/profile/..."
+            disabled={saving || justSaved}
+          />
+        </div>
+        <Button
+          onClick={handleSave}
+          disabled={saving || justSaved || !url.trim() || !isDirty}
+          variant={justSaved ? "accent" : "primary"}
+          size="md"
+        >
+          {saving ? "saving…" : justSaved ? "✓ saved" : buttonLabel}
+        </Button>
+      </div>
+
+      {rowError && (
+        <div className="font-mono text-xs text-[var(--color-danger)] mt-2">
+          // {rowError}
+        </div>
+      )}
+    </div>
+  );
+}

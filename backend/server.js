@@ -662,6 +662,243 @@ app.get('/api/admin/competitors/with-xhs-url', async (req, res) => {
   }
 });
 
+// GET /api/admin/customers — consolidated per-customer view for the
+// redesigned admin page (PR #118, 2026-05-26). Returns every workspace
+// with its competitors nested + setup status flags + last-activity
+// timestamps in a single round trip. Designed for the workspace-card
+// admin UI so each card has ALL the info it needs to render status
+// without N round trips.
+app.get('/api/admin/customers', async (req, res) => {
+  try {
+    // Step 1: workspaces with own-brand freshness via lateral join.
+    const { rows: workspaces } = await pool.query(`
+      SELECT w.id, w.brand_name, w.user_id, w.brand_category,
+             w.created_at, w.updated_at, w.xhs_profile_url AS own_brand_xhs_url,
+             latest_own.scraped_at AS own_brand_last_scraped_at
+        FROM workspaces w
+   LEFT JOIN LATERAL (
+              SELECT sbp.scraped_at
+                FROM scraped_brand_profiles sbp
+               WHERE sbp.brand_name = w.brand_name
+               ORDER BY sbp.scraped_at DESC
+               LIMIT 1
+            ) latest_own ON TRUE
+       ORDER BY w.created_at DESC
+    `);
+
+    // Step 2: all competitors with their per-brand last-scraped (same
+    // lateral-join trick the GET /api/ci/competitors endpoint uses).
+    const { rows: competitors } = await pool.query(`
+      SELECT wc.id, wc.workspace_id, wc.brand_name, wc.tier, wc.added_via,
+             wc.xhs_profile_url, wc.created_at,
+             latest.scraped_at AS last_scraped_at,
+             latest.platform AS last_scrape_platform
+        FROM workspace_competitors wc
+   LEFT JOIN LATERAL (
+              SELECT sbp.scraped_at, sbp.platform
+                FROM scraped_brand_profiles sbp
+               WHERE sbp.brand_name = wc.brand_name
+               ORDER BY sbp.scraped_at DESC
+               LIMIT 1
+            ) latest ON TRUE
+       ORDER BY wc.tier, wc.brand_name
+    `);
+
+    // Step 3: stitch competitors under their workspaces + compute status.
+    const compsByWorkspace = new Map();
+    for (const c of competitors) {
+      if (!compsByWorkspace.has(c.workspace_id)) {
+        compsByWorkspace.set(c.workspace_id, []);
+      }
+      compsByWorkspace.get(c.workspace_id).push(c);
+    }
+
+    const customers = workspaces.map((w) => {
+      const comps = compsByWorkspace.get(w.id) || [];
+      const competitorsWithUrl = comps.filter((c) => c.xhs_profile_url).length;
+      const competitorsWithScrape = comps.filter((c) => c.last_scraped_at).length;
+      const ownBrandConfigured = !!w.own_brand_xhs_url;
+      const ownBrandScraped = !!w.own_brand_last_scraped_at;
+      const readyForAnalysis =
+        comps.length > 0 &&
+        competitorsWithUrl === comps.length &&
+        competitorsWithScrape === comps.length;
+
+      return {
+        workspace_id: w.id,
+        brand_name: w.brand_name,
+        user_id: w.user_id,
+        category: w.brand_category,
+        created_at: w.created_at,
+        updated_at: w.updated_at,
+        own_brand_xhs_url: w.own_brand_xhs_url,
+        own_brand_last_scraped_at: w.own_brand_last_scraped_at,
+        competitors: comps,
+        status: {
+          total_competitors: comps.length,
+          competitors_with_url: competitorsWithUrl,
+          competitors_with_scrape: competitorsWithScrape,
+          own_brand_configured: ownBrandConfigured,
+          own_brand_scraped: ownBrandScraped,
+          ready_for_analysis: readyForAnalysis,
+        },
+      };
+    });
+
+    res.json({ customers, count: customers.length });
+  } catch (err) {
+    console.error('[CI] GET admin/customers error:', err.message);
+    res.status(500).json({ error: 'Failed to list customers' });
+  }
+});
+
+// POST /api/admin/customers/:workspace_id/scrape — per-workspace scrape
+// trigger. Verifies the workspace exists, then spawns the global
+// watchlist scrape with --force-rescrape. The runner's DISTINCT
+// brand_name de-dup means this naturally scrapes the workspace's brands.
+// Other workspaces' brands also get scraped but freshness guard skips
+// recently-scraped ones, so cost overhead is bounded.
+app.post('/api/admin/customers/:workspace_id/scrape', async (req, res) => {
+  try {
+    const workspaceId = req.params.workspace_id;
+    if (!isValidUuid(workspaceId)) {
+      return res.status(400).json({ error: 'Invalid workspace_id' });
+    }
+    const { rows: wsRows } = await pool.query(
+      'SELECT id, brand_name FROM workspaces WHERE id = $1',
+      [workspaceId]
+    );
+    if (wsRows.length === 0) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    const { spawn } = require('child_process');
+    const repoRoot = process.cwd().replace('/backend', '');
+    const pythonBin = process.env.PYTHON_BIN || 'python3';
+
+    const proc = spawn(pythonBin, [
+      '-m', 'services.competitor_intel.scrape_runner',
+      '--platform', 'xhs',
+      '--tier', 'watchlist',
+      '--force-rescrape',
+    ], {
+      cwd: repoRoot,
+      env: { ...process.env, ADMIN_TRIGGERED_FOR_WORKSPACE: workspaceId },
+      detached: true,
+      stdio: 'ignore',
+    });
+    proc.unref();
+
+    console.log(`[ADMIN] Per-workspace scrape triggered for ${workspaceId} (${wsRows[0].brand_name}, pid: ${proc.pid})`);
+
+    res.json({
+      started: true,
+      workspace_id: workspaceId,
+      workspace_brand_name: wsRows[0].brand_name,
+      message: `Scrape queued for ${wsRows[0].brand_name}'s brands.`,
+      pid: proc.pid || null,
+    });
+  } catch (err) {
+    console.error('[ADMIN] POST customers/:id/scrape error:', err.message);
+    res.status(500).json({ error: 'Failed to trigger workspace scrape' });
+  }
+});
+
+// ─── Workspace own-brand XHS URL admin endpoints ─────────────────────
+// The workspace's own brand (workspaces.brand_name) needs to be scraped
+// + scored alongside competitors, but the scraper only iterates
+// workspace_competitors — own brand has no row there. Migration 016
+// added xhs_profile_url to workspaces; these endpoints let admin
+// configure it via /admin (mirrors the competitor-URL flow).
+//
+// After admin sets a URL: scrape_runner.get_scrape_targets picks up
+// the workspace own-brand, scrapes via Apify, scoring pipeline keys on
+// brand_name and computes scores → '你的品牌' shows real number not 0.
+
+// GET /api/admin/workspaces/missing-own-brand-url — admin queue
+app.get('/api/admin/workspaces/missing-own-brand-url', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, brand_name, user_id, brand_category, created_at
+         FROM workspaces
+        WHERE xhs_profile_url IS NULL
+        ORDER BY created_at DESC`
+    );
+    res.json({ workspaces: rows, count: rows.length });
+  } catch (err) {
+    console.error('[CI] GET workspaces/missing-own-brand-url error:', err.message);
+    res.status(500).json({ error: 'Failed to list workspaces missing URLs' });
+  }
+});
+
+// GET /api/admin/workspaces/with-own-brand-url — list workspaces with URL set
+app.get('/api/admin/workspaces/with-own-brand-url', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, brand_name, user_id, brand_category, xhs_profile_url, created_at
+         FROM workspaces
+        WHERE xhs_profile_url IS NOT NULL
+        ORDER BY brand_name`
+    );
+    res.json({ workspaces: rows, count: rows.length });
+  } catch (err) {
+    console.error('[CI] GET workspaces/with-own-brand-url error:', err.message);
+    res.status(500).json({ error: 'Failed to list workspaces with URLs' });
+  }
+});
+
+// PATCH /api/admin/workspaces/:id/xhs-url — set workspace own-brand URL
+//
+// Same validation + auto-normalization (xiaohongshu.com → rednote.com) as
+// the competitor PATCH endpoint. Caught the same actor quirk: easyapi
+// user_posts actor silently returns 0 items for xiaohongshu.com URLs.
+app.patch('/api/admin/workspaces/:id/xhs-url', async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ error: 'Missing workspace id' });
+
+    let { xhs_profile_url } = req.body || {};
+    if (xhs_profile_url === undefined) {
+      return res.status(400).json({ error: 'Missing xhs_profile_url in body' });
+    }
+
+    if (xhs_profile_url === '' || xhs_profile_url === null) {
+      xhs_profile_url = null;
+    } else if (typeof xhs_profile_url !== 'string') {
+      return res.status(400).json({ error: 'xhs_profile_url must be a string or null' });
+    } else {
+      // Strip ?query + #fragment, validate, auto-normalize to rednote.com
+      xhs_profile_url = xhs_profile_url.trim().split('?')[0].split('#')[0];
+      const xhsRegex = /^https?:\/\/(www\.)?(rednote|xiaohongshu)\.com\/user\/profile\/([a-f0-9]{16,32})$/i;
+      const match = xhs_profile_url.match(xhsRegex);
+      if (!match) {
+        return res.status(400).json({
+          error: 'Invalid xhs_profile_url',
+          hint: 'URL must look like https://www.rednote.com/user/profile/<24-hex-id>',
+        });
+      }
+      xhs_profile_url = `https://www.rednote.com/user/profile/${match[3]}`;
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE workspaces
+          SET xhs_profile_url = $1, updated_at = NOW()
+        WHERE id = $2
+        RETURNING id, brand_name, xhs_profile_url`,
+      [xhs_profile_url, id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    res.json({ workspace: rows[0] });
+  } catch (err) {
+    console.error('[CI] PATCH workspaces/:id/xhs-url error:', err.message);
+    res.status(500).json({ error: 'Failed to update workspace xhs_profile_url' });
+  }
+});
+
 // POST /api/admin/scrape — trigger an immediate watchlist scrape across all
 // workspaces. Used by the admin /admin page's "Run scraper now" button so
 // admin (Will) doesn't need to SSH into ECS just to kick off a scrape after

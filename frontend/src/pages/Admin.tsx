@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { Inbox } from "lucide-react";
 import { useApp } from "../context/AppContext";
-import { CompetitorXhsUrls, CompetitorXhsUrlsEdit } from "../components/admin/CompetitorXhsUrls";
+import { CompetitorXhsUrls, CompetitorXhsUrlsEdit, WorkspaceOwnBrandUrls } from "../components/admin/CompetitorXhsUrls";
+import { AdminCustomersView } from "../components/admin/AdminCustomersView";
 
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || "rebase-admin-2026";
 
@@ -98,6 +99,12 @@ function ApplicantCard({ applicant, onApprove, colors }: {
   );
 }
 
+// Top-level tabs for the redesigned admin (PR #118, 2026-05-26).
+// Will's UX call: data-centric "all URLs needing setup" view was forcing
+// admin to scroll through 3 sections per customer. Per-customer cards
+// (Customers tab) replace that with a focused per-customer workflow.
+type AdminTab = "applicants" | "customers" | "operations";
+
 export default function Admin() {
   const { colors: C } = useApp();
   // Restore auth from localStorage so navigating away and back doesn't require re-login
@@ -108,6 +115,9 @@ export default function Admin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<"all" | "pending" | "approved">("all");
+  // Default to Applicants on first load so existing admin behavior is
+  // unchanged. Admin can switch to Customers for the new per-customer view.
+  const [activeTab, setActiveTab] = useState<AdminTab>("applicants");
 
   // W5: workspaces newly created (via onboarding) that haven't been scraped yet.
   // Until Phase D customer installer ships, these need a manual scrape on
@@ -245,10 +255,57 @@ export default function Admin() {
           </button>
         </div>
 
+        {/* ── Top-level tabs (PR #118 admin redesign) ───────────────── */}
+        <div style={{
+          display: "flex", gap: 0, marginBottom: 24,
+          borderBottom: `1px solid ${C.bd}`,
+        }}>
+          {([
+            { key: "applicants" as const, label: "Applicants", badge: pending.length },
+            { key: "customers" as const, label: "Customers", badge: null },
+            { key: "operations" as const, label: "Operations", badge: null },
+          ]).map((t) => {
+            const isActive = activeTab === t.key;
+            return (
+              <button
+                key={t.key}
+                onClick={() => setActiveTab(t.key)}
+                style={{
+                  padding: "10px 18px",
+                  background: "transparent",
+                  border: "none",
+                  borderBottom: isActive ? `2px solid ${C.ac}` : "2px solid transparent",
+                  color: isActive ? C.ac : C.t2,
+                  fontSize: 14,
+                  fontWeight: isActive ? 700 : 500,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: -1,
+                }}
+              >
+                {t.label}
+                {t.badge !== null && t.badge > 0 && (
+                  <span style={{
+                    background: C.danger, color: "#fff",
+                    fontSize: 11, fontWeight: 700,
+                    padding: "1px 7px", borderRadius: 10,
+                    minWidth: 18, textAlign: "center",
+                  }}>
+                    {t.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
         {/* W5: Pending scrapes — workspaces created by onboarding but no
             scrape data yet. Each one needs a manual scrape on a residential
-            IP machine until Phase D customer installer ships. */}
-        {pendingScrapes.length > 0 && (
+            IP machine until Phase D customer installer ships.
+            Shown on Operations tab; legacy banner kept for now. */}
+        {activeTab === "operations" && pendingScrapes.length > 0 && (
           <div style={{ background: C.s1, border: `1px solid ${C.warning ?? C.bd}`, borderRadius: 8, padding: 16, marginBottom: 20 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: C.tx }}>
@@ -297,6 +354,9 @@ export default function Admin() {
           </div>
         )}
 
+        {/* ── APPLICANTS TAB ─────────────────────────────────────────── */}
+        {activeTab === "applicants" && (
+          <>
         {/* Filter tabs */}
         <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
           {(["all", "pending", "approved"] as const).map((f) => (
@@ -330,21 +390,34 @@ export default function Admin() {
         {shown.map((a, i) => (
           <ApplicantCard key={i} applicant={a} onApprove={handleApprove} colors={C} />
         ))}
+          </>
+        )}
 
-        {/* Apify scraper config: list competitors needing XHS profile URLs.
-            Joanna's design-system primitives (Eyebrow / Heading / Input /
-            Button / BrandChip) — visually a step ahead of the older inline-
-            styled sections above. When Admin.tsx is eventually refactored
-            to her design system, this section is already in the right
-            pattern. See: services/competitor_intel/scrapers/apify_client.py,
-            docs/SCRAPING-STRATEGY.md, issue #62. */}
-        <CompetitorXhsUrls />
+        {/* ── CUSTOMERS TAB (the new per-customer workspace cards) ──── */}
+        {activeTab === "customers" && (
+          <AdminCustomersView />
+        )}
 
-        {/* Edit-existing-URLs panel — sibling to the awaiting-URL queue
-            above. Lets admin fix wrong URLs (wrong account, wrong domain,
-            typo) without SSHing to ECS. Added 2026-05-26 after Will hit
-            the case during first 7-brand admin paste flow. */}
-        <CompetitorXhsUrlsEdit />
+        {/* ── OPERATIONS TAB ─────────────────────────────────────────── */}
+        {/* Global scrape trigger + legacy URL queues + admin diagnostics.
+            Customer-specific URL/scrape work now lives on the Customers tab
+            (per-customer cards). The legacy URL queues are still mounted
+            here as a fallback / for backward compatibility — admins who've
+            internalized the old data-centric view can keep using them, but
+            the Customers tab is the new default workflow. */}
+        {activeTab === "operations" && (
+          <div className="flex flex-col gap-8">
+            <div className="font-mono text-xs text-[var(--color-text-muted)]">
+              // global ops — scrape everything, view legacy URL queues
+            </div>
+
+            {/* Legacy URL queues — same functionality as Customers tab but
+                organized as flat lists. Kept for fallback / debugging. */}
+            <CompetitorXhsUrls />
+            <CompetitorXhsUrlsEdit />
+            <WorkspaceOwnBrandUrls />
+          </div>
+        )}
       </div>
     </div>
   );

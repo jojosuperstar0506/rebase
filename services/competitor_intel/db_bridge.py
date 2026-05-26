@@ -70,10 +70,18 @@ def get_scrape_targets(tier='watchlist'):
     Apify path (USE_APIFY=true). For the existing Playwright path it can
     be ignored.
 
-    Note: DISTINCT now spans (brand_name, platform_ids, xhs_profile_url).
-    Same brand across workspaces with the same config is returned once;
-    differing configs return multiple rows (rare in practice — same XHS
-    profile URL per brand is the norm).
+    Includes BOTH:
+      1. workspace_competitors rows at the requested tier (competitors)
+      2. workspaces with xhs_profile_url set (own brands — migration 016).
+         Own brands are always scraped regardless of tier — there's no
+         "tier" concept on the workspace itself.
+
+    Note: DISTINCT spans (brand_name, platform_ids, xhs_profile_url).
+    Same brand across multiple workspaces/contexts with the same config
+    is returned once; differing configs return multiple rows. The
+    scraper handles per-row independently — same brand scraped twice
+    isn't catastrophic (freshness guard would skip the second call), it
+    just costs a tiny bit more on the rare config-divergence case.
     """
     conn = get_conn()
     try:
@@ -82,8 +90,50 @@ def get_scrape_targets(tier='watchlist'):
                 SELECT DISTINCT brand_name, platform_ids, xhs_profile_url
                 FROM workspace_competitors
                 WHERE tier = %s
+
+                UNION
+
+                -- Own brands: workspace.brand_name as a target, with the
+                -- workspace's own xhs_profile_url. NULL platform_ids since
+                -- the workspace table doesn't carry the platform-keyword
+                -- structure. The scraper's apify_client.scrape_xhs_brand
+                -- only needs xhs_profile_url, so this works as-is.
+                SELECT DISTINCT brand_name, NULL::jsonb AS platform_ids, xhs_profile_url
+                FROM workspaces
+                WHERE xhs_profile_url IS NOT NULL
             """, (tier,))
             return cur.fetchall()
+    finally:
+        conn.close()
+
+
+def set_workspace_xhs_url(workspace_id, xhs_profile_url):
+    """Set the workspace's own-brand XHS profile URL. Used by admin endpoint
+    PATCH /api/admin/workspaces/:id/xhs-url (server.js).
+
+    After this, scrape_runner picks up the workspace's own brand on the
+    next tier scrape. Scoring computes own-brand score the same way it
+    does for competitors.
+
+    Args:
+        workspace_id: UUID of the workspace
+        xhs_profile_url: full rednote.com URL, or None to clear
+
+    Returns: dict with updated workspace row (id, brand_name, xhs_profile_url)
+             or None if not found.
+    """
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE workspaces
+                   SET xhs_profile_url = %s, updated_at = NOW()
+                 WHERE id = %s
+                 RETURNING id, brand_name, xhs_profile_url
+            """, (xhs_profile_url, workspace_id))
+            row = cur.fetchone()
+            conn.commit()
+            return row
     finally:
         conn.close()
 

@@ -26,6 +26,7 @@ import { MetricIcon } from '../../utils/metricIcons';
 import { useApp } from '../../context/AppContext';
 import type { ColorSet } from '../../theme/colors';
 import CISubNav from '../../components/ci/CISubNav';
+import { CIPageHeader } from '../../components/ci/CIPageHeader';
 import CIDrillDownModal from '../../components/ci/CIDrillDownModal';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useCIData } from '../../hooks/useCIData';
@@ -185,19 +186,13 @@ export default function CIAnalytics() {
       <div style={pageStyle}>
         <div style={container}>
           <CISubNav />
-          <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.t3 }}>
-              {lang === 'zh' ? '// 分析' : '// analytics'}
-            </span>
-            <h1 style={{ fontSize: isMobile ? 26 : 36, fontWeight: 700, margin: 0, letterSpacing: -0.5, fontFamily: 'var(--font-display)' }}>
-              {lang === 'zh' ? '暂无分析数据' : 'No analytics yet'}
-            </h1>
-            <p style={{ fontSize: 13, color: C.t2, margin: 0, lineHeight: 1.6, fontFamily: 'var(--font-mono)' }}>
-              // {lang === 'zh'
-                ? '竞品数据抓取并分析完成后，分析报告将显示在这里'
-                : 'analytics appear here after your first data sync + analysis run'}
-            </p>
-          </div>
+          <CIPageHeader
+            eyebrow={lang === 'zh' ? '// 分析' : '// analytics'}
+            title={lang === 'zh' ? '暂无分析数据' : 'No analytics yet'}
+            subtitle={lang === 'zh'
+              ? '// 竞品数据抓取并分析完成后，分析报告将显示在这里'
+              : '// analytics appear here after your first data sync + analysis run'}
+          />
         </div>
       </div>
     );
@@ -210,20 +205,13 @@ export default function CIAnalytics() {
       <div style={container}>
         <CISubNav />
 
-        {/* Header — page title + 1-line orientation */}
-        <header style={{ margin: '24px 0 28px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.t3 }}>
-            {lang === 'zh' ? '// 分析 · 竞争位置' : '// analytics · competitive position'}
-          </span>
-          <h1 style={{ fontSize: isMobile ? 26 : 36, fontWeight: 700, margin: 0, letterSpacing: -0.5, fontFamily: 'var(--font-display)' }}>
-            {lang === 'zh' ? '分析' : 'Analytics'}
-          </h1>
-          <p style={{ color: C.t2, fontSize: 14, margin: 0, lineHeight: 1.6, fontFamily: 'var(--font-mono)' }}>
-            // {lang === 'zh'
-              ? '本周竞争位置 + 各项指数与竞品对比'
-              : 'your competitive position + per-index comparison vs competitors'}
-          </p>
-        </header>
+        <CIPageHeader
+          eyebrow={lang === 'zh' ? '// 分析 · 竞争位置' : '// analytics · competitive position'}
+          title={lang === 'zh' ? '分析' : 'Analytics'}
+          subtitle={lang === 'zh'
+            ? '// 本周竞争位置 + 各项指数与竞品对比'
+            : '// your competitive position + per-index comparison vs competitors'}
+        />
 
         {/* Cross-link banner — visible when arriving from a Brief move's
             brand chip click. Shows which brand we're focused on + a way
