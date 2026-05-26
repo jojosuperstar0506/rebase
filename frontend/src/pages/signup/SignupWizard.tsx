@@ -9,6 +9,7 @@ import { AccountStep } from "./steps/AccountStep";
 import { BrandStep } from "./steps/BrandStep";
 import { CompetitorsStep } from "./steps/CompetitorsStep";
 import { GoalsStep } from "./steps/GoalsStep";
+import { StepIllustration } from "./illustrations";
 import { getOnboardingState } from "@/services/onboardingApi";
 
 function isValidStep(s: string | null): s is StepKey {
@@ -165,6 +166,10 @@ export default function SignupWizard() {
           className="hidden lg:flex items-start"
         >
           <div className="flex flex-col gap-6 max-w-sm pt-4">
+            {/* Per-step illustration — a small Hex-style diagram that swaps
+                with the active step (account / brand / competitors / goals).
+                See ./illustrations.tsx. */}
+            <StepIllustration step={step} className="w-full max-w-[280px]" />
             <div className="flex items-center gap-3">
               <span
                 className="inline-block w-2 h-2 rounded-full animate-pulse"
