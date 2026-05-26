@@ -7,6 +7,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { t, T } from '../../i18n';
 import CISubNav from '../../components/ci/CISubNav';
+import { CIPageHeader } from '../../components/ci/CIPageHeader';
 import { CISettingsSkeleton } from '../../components/ci/CISkeleton';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import {
@@ -2141,17 +2142,11 @@ export default function CISettings() {
       <div style={{ maxWidth: 860, margin: '0 auto' }}>
         <CISubNav />
 
-        <div style={{ marginBottom: isMobile ? 20 : 28, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.t3 }}>
-            {lang === 'zh' ? '// 设置 · 工作区' : '// settings · workspace'}
-          </span>
-          <h1 style={{ fontSize: isMobile ? 26 : 36, fontWeight: 700, margin: 0, fontFamily: 'var(--font-display)', letterSpacing: -0.5 }}>
-            {t(T.ci.settings, lang)}
-          </h1>
-          <p style={{ color: C.t2, fontSize: 14, margin: 0, fontFamily: 'var(--font-mono)' }}>
-            // {t(T.ci.subtitle, lang)}
-          </p>
-        </div>
+        <CIPageHeader
+          eyebrow={lang === 'zh' ? '// 设置 · 工作区' : '// settings · workspace'}
+          title={t(T.ci.settings, lang)}
+          subtitle={`// ${t(T.ci.subtitle, lang)}`}
+        />
 
         {/* 1 — Brand Profile */}
         <BrandProfileSection C={C} lang={lang} isMobile={isMobile} />

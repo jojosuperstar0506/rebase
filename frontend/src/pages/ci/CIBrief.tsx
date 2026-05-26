@@ -665,7 +665,9 @@ export default function CIBrief() {
           <Eyebrow>
             {lang === 'zh' ? '// 每周竞品行动简报' : '// weekly action brief'}
           </Eyebrow>
-          <Heading as={1} size="hero">
+          {/* size="section" — matches the shared CIPageHeader used on every
+              other CI page so headers are consistent tab-to-tab (issue #79) */}
+          <Heading as={1} size="section">
             {formatWeek(brief.week_of, lang)}
           </Heading>
           <div

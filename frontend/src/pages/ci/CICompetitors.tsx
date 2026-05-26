@@ -4,6 +4,7 @@ import { Tag, ClipboardList } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { t, T, Lang } from '../../i18n';
 import CISubNav from '../../components/ci/CISubNav';
+import { CIPageHeader } from '../../components/ci/CIPageHeader';
 import { removeCompetitor as apiRemoveCompetitor, getBrandInsights } from '../../services/ciApi';
 import { useCIData } from '../../hooks/useCIData';
 // LANDSCAPE_SEED removed — was an OMI-specific 16-brand reference list that
@@ -612,20 +613,14 @@ export default function CICompetitors() {
       <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: isMobile ? '16px 12px' : '32px 24px', fontFamily: 'var(--font-sans)' }}>
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
           <CISubNav />
-          <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'flex-start' }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.t3 }}>
-              {lang === 'zh' ? '// 品牌 · 竞品追踪' : '// brands · competitor watchlist'}
-            </span>
-            <h1 style={{ fontSize: isMobile ? 26 : 38, fontWeight: 700, margin: 0, fontFamily: 'var(--font-display)', letterSpacing: -0.5 }}>
-              {t(T.ci.noCompetitorsYet, lang)}
-            </h1>
-            <p style={{ color: C.t2, margin: 0, fontFamily: 'var(--font-mono)', fontSize: 13 }}>
-              // {t(T.ci.addInSettings, lang)}
-            </p>
-            <Link to="/ci/settings" style={{ background: C.ac, color: C.bg, padding: '10px 20px', borderRadius: 2, textDecoration: 'none', fontWeight: 600, fontFamily: 'var(--font-mono)', fontSize: 13 }}>
-              {t(T.ci.goToSettings, lang)} →
-            </Link>
-          </div>
+          <CIPageHeader
+            eyebrow={lang === 'zh' ? '// 品牌 · 竞品追踪' : '// brands · competitor watchlist'}
+            title={t(T.ci.noCompetitorsYet, lang)}
+            subtitle={`// ${t(T.ci.addInSettings, lang)}`}
+          />
+          <Link to="/ci/settings" style={{ background: C.ac, color: C.bg, padding: '10px 20px', borderRadius: 2, textDecoration: 'none', fontWeight: 600, fontFamily: 'var(--font-mono)', fontSize: 13, display: 'inline-block' }}>
+            {t(T.ci.goToSettings, lang)} →
+          </Link>
         </div>
       </div>
     );
@@ -637,14 +632,11 @@ export default function CICompetitors() {
         <CISubNav />
 
         {/* Page header + view toggle + export */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: isMobile ? 14 : 20, flexWrap: 'wrap', gap: 12 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.t3 }}>
-              {lang === 'zh' ? '// 品牌 · 竞品追踪' : '// brands · competitor watchlist'}
-            </span>
-            <h1 style={{ fontSize: isMobile ? 26 : 36, fontWeight: 700, margin: 0, fontFamily: 'var(--font-display)', letterSpacing: -0.5 }}>{t(T.ci.competitors, lang)}</h1>
-            <span style={{ color: C.t3, fontSize: 13, fontFamily: 'var(--font-mono)' }}>{filtered.length} {t(T.ci.xCompetitors, lang)}</span>
-          </div>
+        <CIPageHeader
+          eyebrow={lang === 'zh' ? '// 品牌 · 竞品追踪' : '// brands · competitor watchlist'}
+          title={t(T.ci.competitors, lang)}
+          subtitle={`// ${filtered.length} ${t(T.ci.xCompetitors, lang)}`}
+          right={
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <button onClick={() => setViewMode('cards')} style={{ ...btnBase(viewMode === 'cards'), minHeight: 44 }}>{t(T.ci.cardView, lang)}</button>
             <button onClick={() => setViewMode('compare')} style={{ ...btnBase(viewMode === 'compare'), minHeight: 44 }}>{t(T.ci.compareView, lang)}</button>
@@ -664,7 +656,8 @@ export default function CICompetitors() {
               </button>
             </div>
           </div>
-        </div>
+          }
+        />
 
         {/* Filter + Sort */}
         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 8, marginBottom: isMobile ? 14 : 24, flexWrap: 'wrap', alignItems: isMobile ? 'stretch' : 'center' }}>

@@ -21,6 +21,7 @@ import { MetricIcon } from '../../utils/metricIcons';
 import { useApp } from '../../context/AppContext';
 import type { ColorSet } from '../../theme/colors';
 import CISubNav from '../../components/ci/CISubNav';
+import { CIPageHeader } from '../../components/ci/CIPageHeader';
 import CIDrillDownModal from '../../components/ci/CIDrillDownModal';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useCIData } from '../../hooks/useCIData';
@@ -183,19 +184,13 @@ export default function CILibrary() {
       <div style={container}>
         <CISubNav />
 
-        <header style={{ margin: '24px 0 28px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.t3 }}>
-            {lang === 'zh' ? '// 资料库 · 归档' : '// library · archive'}
-          </span>
-          <h1 style={{ fontSize: isMobile ? 26 : 36, fontWeight: 700, margin: 0, letterSpacing: -0.5, fontFamily: 'var(--font-display)' }}>
-            {lang === 'zh' ? '资料库' : 'Library'}
-          </h1>
-          <p style={{ color: C.t2, fontSize: 14, margin: 0, fontFamily: 'var(--font-mono)' }}>
-            // {lang === 'zh'
-              ? '历史简报、已发布内容与产品概念的归档'
-              : 'past briefs, published content + product concepts — builds value over time'}
-          </p>
-        </header>
+        <CIPageHeader
+          eyebrow={lang === 'zh' ? '// 资料库 · 归档' : '// library · archive'}
+          title={lang === 'zh' ? '资料库' : 'Library'}
+          subtitle={lang === 'zh'
+            ? '// 历史简报、已发布内容与产品概念的归档'
+            : '// past briefs, published content + product concepts — builds value over time'}
+        />
 
         {/* View switcher + search */}
         <div style={{
