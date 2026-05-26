@@ -36,11 +36,12 @@ def run_for_workspace(workspace_id: str):
                 return
 
             # Get competitors
-            cur.execute(
-                "SELECT * FROM workspace_competitors WHERE workspace_id = %s",
-                (workspace_id,),
-            )
-            competitors = cur.fetchall()
+            # Include workspace's own brand (PR #120) - splices a synthetic
+            # row for workspaces.brand_name so the customer's own brand gets
+            # scored alongside competitors. Without this, the own brand renders
+            # as 0 on every analytics chart.
+            from ..db_bridge import get_competitors_with_own_brand
+            competitors = get_competitors_with_own_brand(workspace_id)
 
             if not competitors:
                 print(f"[INFO] No competitors for workspace {workspace_id}")

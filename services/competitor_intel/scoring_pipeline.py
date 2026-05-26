@@ -90,12 +90,13 @@ def compute_scores_for_workspace(workspace_id: str, job_id: str = None):
                 update_job(job_id, status="failed", error_message="Workspace not found", completed_at="NOW()")
                 return
 
-            # Get all competitors for this workspace
-            cur.execute(
-                "SELECT * FROM workspace_competitors WHERE workspace_id = %s",
-                (workspace_id,),
-            )
-            competitors = cur.fetchall()
+            # Get all competitors for this workspace, PLUS the workspace's
+            # own brand (synthetic row). Without the own-brand splice, the
+            # 12 metric cards + 3-domain chart render 0 for '你的品牌'
+            # even when scrape data exists. Same pattern composite_indices
+            # already does inline.
+            from .db_bridge import get_competitors_with_own_brand
+            competitors = get_competitors_with_own_brand(workspace_id)
 
             if not competitors:
                 print(f"[INFO] No competitors for workspace {workspace_id}")
