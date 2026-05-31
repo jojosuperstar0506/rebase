@@ -1861,7 +1861,8 @@ function deriveAggregateStatus(brandStatuses) {
 }
 
 // GET /api/ci/intelligence — all metrics for all competitors, grouped by domain
-app.get('/api/ci/intelligence', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster B)
+app.get('/api/ci/intelligence', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
@@ -2164,7 +2165,8 @@ function isValidUuid(s) {
 //   400  missing workspace_id
 //   404  no brief generated yet (frontend shows empty / "run today" CTA)
 //   500  query error
-app.get('/api/ci/brief', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster C)
+app.get('/api/ci/brief', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
@@ -2729,7 +2731,8 @@ function buildRationale(labelZh, yourScore, bestComp) {
 //   - trends is ALWAYS {}. Same reason — needs weekly snapshots.
 //   - priority_rationale is template-built (no LLM). Deterministic,
 //     never hallucinated; tone upgrades come in V2.
-app.get('/api/ci/analytics', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster D)
+app.get('/api/ci/analytics', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
@@ -2943,7 +2946,8 @@ function resolveHierarchy(brandCategory) {
 //
 // Empty rows for an index_name across all competitors signal "not yet
 // computed" — the frontend renders "Coverage pending" rather than zeros.
-app.get('/api/ci/indices', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster B)
+app.get('/api/ci/indices', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
@@ -3088,7 +3092,8 @@ app.get('/api/ci/indices', async (req, res) => {
 //
 // Joins weekly_briefs with content_recommendations + product_opportunities
 // per-week. Returns at most `limit` (default 12) entries, newest first.
-app.get('/api/ci/library', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster C)
+app.get('/api/ci/library', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
@@ -3213,7 +3218,8 @@ app.get('/api/ci/library', async (req, res) => {
 // "See all metrics" collapsible on the Brief.
 //
 // Returns DomainScores shape: { consumer/product/marketing: { own, competitors } }.
-app.get('/api/ci/domain-scores', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster B)
+app.get('/api/ci/domain-scores', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
@@ -3727,7 +3733,8 @@ app.get('/api/ci/scrape-targets', async (req, res) => {
 });
 
 // GET /api/ci/alerts — get alerts for a workspace
-app.get('/api/ci/alerts', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster D)
+app.get('/api/ci/alerts', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   const { workspace_id, unread_only, limit } = req.query;
   if (!workspace_id) return res.status(400).json({ error: 'Missing workspace_id' });
 
@@ -3790,7 +3797,8 @@ app.post('/api/ci/alerts/read', async (req, res) => {
 });
 
 // GET /api/ci/alerts/count — just the unread count (lightweight, for nav badge)
-app.get('/api/ci/alerts/count', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster D)
+app.get('/api/ci/alerts/count', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   const { workspace_id } = req.query;
   if (!workspace_id) return res.status(400).json({ error: 'Missing workspace_id' });
 
@@ -3809,7 +3817,8 @@ app.get('/api/ci/alerts/count', async (req, res) => {
 
 // GET /api/ci/trends — historical score data for trend charts
 // Query params: workspace_id, competitor, metric (momentum|threat|wtp), days (default 30)
-app.get('/api/ci/trends', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster D)
+app.get('/api/ci/trends', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   const { workspace_id, competitor, metric, days } = req.query;
 
   if (!workspace_id || !competitor) {
@@ -3861,7 +3870,8 @@ app.get('/api/ci/trends', async (req, res) => {
 
 // GET /api/ci/trends/summary — score changes for all competitors in a workspace
 // Returns: { competitors: [{ brand_name, momentum_current, momentum_7d_ago, momentum_direction, ... }] }
-app.get('/api/ci/trends/summary', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster D)
+app.get('/api/ci/trends/summary', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   const { workspace_id } = req.query;
   if (!workspace_id) return res.status(400).json({ error: 'Missing workspace_id' });
 
@@ -3970,7 +3980,8 @@ app.post('/api/ci/deep-dive', async (req, res) => {
 });
 
 // GET /api/ci/deep-dive/status — check deep dive job status
-app.get('/api/ci/deep-dive/status', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster E)
+app.get('/api/ci/deep-dive/status', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   const { job_id, workspace_id, brand_name } = req.query;
 
   let query, params;
@@ -4009,7 +4020,8 @@ app.get('/api/ci/deep-dive/status', async (req, res) => {
 });
 
 // GET /api/ci/deep-dive/result — get the full deep dive data for a brand
-app.get('/api/ci/deep-dive/result', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster E)
+app.get('/api/ci/deep-dive/result', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   const { workspace_id, brand_name } = req.query;
   if (!workspace_id || !brand_name) {
     return res.status(400).json({ error: 'Missing workspace_id or brand_name' });
@@ -4074,7 +4086,8 @@ app.get('/api/ci/deep-dive/result', async (req, res) => {
 });
 
 // GET /api/ci/brand-insights — per-brand AI insights for a workspace
-app.get('/api/ci/brand-insights', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster E)
+app.get('/api/ci/brand-insights', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   const { workspace_id } = req.query;
   if (!workspace_id) return res.status(400).json({ error: 'Missing workspace_id' });
   const lang = req.query.lang === 'en' ? 'en' : 'zh';
