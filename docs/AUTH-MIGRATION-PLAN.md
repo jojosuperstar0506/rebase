@@ -47,6 +47,31 @@ Both of those go away the moment we onboard beta users (the M1 goal). This doc c
 
 ---
 
+## Important: "drop x-user-id" ≠ "drop user identifiers"
+
+This is the most-confused part of the plan, so calling it out up-front. Two things easily blur together:
+
+| The user identifier (KEEP forever) | The `x-user-id` HTTP header (DROP in Phase 4) |
+|---|---|
+| `RB-OMI-A1B2` (invite code, or v2 UUID) | The HTTP header `x-user-id: RB-OMI-A1B2` |
+| Stored in `workspaces.user_id`, in JWT's `sub` claim, in every log line, in every DB query | One of two transport mechanisms the frontend uses to tell the backend "I am this user" |
+| Identifies the customer; appears everywhere | Just plumbing |
+
+**The same user ID travels through two channels today:**
+
+- **Channel A — Authorization header (cryptographically signed):**
+  `Authorization: Bearer eyJ...` → decoded payload: `{ sub: "RB-OMI-A1B2", ... }`. Signature proves the user really logged in.
+- **Channel B — x-user-id header (plain string):**
+  `x-user-id: RB-OMI-A1B2` → just a string. Anyone with `API_SECRET` can write any value here. No tamper protection.
+
+**Phase 4 = stop accepting Channel B, only accept Channel A.** `req.user.accountId` is still populated on every authenticated request. Logs still say `account RB-OMI-A1B2 attempted X`. DB queries still scope on `user_id = 'RB-OMI-A1B2'`. **Nothing about identification changes** — we just remove the trusted-text-input bypass.
+
+Analogy: it's like switching from "show me your name on a Post-it" to "show me your government ID." You still have a name in both cases. We just stop accepting Post-its.
+
+---
+
+---
+
 ## The two problems in one sentence each
 
 **Problem A — JWT is never verified on protected requests.** The backend's only auth check on `/api/*` is the `x-rebase-secret` header (a shared secret between Vercel and ECS, defined in `backend/server.js:39`). Anyone with that secret can spoof any user by setting `x-user-id` to any value. The JWT issued at login (`server.js:1006`, `server.js:4695`) is never `jwt.verify()`'d server-side.
