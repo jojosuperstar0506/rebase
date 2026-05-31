@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { Bell, BellOff } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -194,12 +194,20 @@ export default function CIAlertFeed({ workspaceId, competitors, source }: CIAler
 
   // Load alerts — try API, fall back to mock.
   //
-  // Fixes #132: `competitors` was previously in this deps array as a raw
-  // object reference. Parent re-renders construct a new array on every
-  // render, so this useEffect re-fired (and re-called /alerts) on every
-  // render — driving the backend 429s. Reduce to a stable string signature
-  // so we only re-fire when the actual competitor set changes.
-  const competitorsKey = competitors.map(c => c.brand_name).sort().join('|');
+  // Fix for #132: pre-fix this useEffect had `competitors` and `lang` in its
+  // dep array. Callers like CIBrief.tsx pass `competitors={[]}` as a fresh
+  // array literal on every render → useEffect ran on every parent render →
+  // /api/ci/alerts was hammered until the global rate limiter (20/min/IP)
+  // returned 429, which the user saw as "Could not start analysis".
+  //
+  // Fix: only re-fetch when workspaceId changes (the only thing that genuinely
+  // changes which alerts to load). competitors + lang are accessed via refs
+  // inside the effect so the mock-fallback path uses the latest values
+  // without re-firing the effect.
+  const competitorsRef = useRef(competitors);
+  const langRef = useRef(lang);
+  useEffect(() => { competitorsRef.current = competitors; }, [competitors]);
+  useEffect(() => { langRef.current = lang; }, [lang]);
 
   useEffect(() => {
     let cancelled = false;
@@ -216,15 +224,14 @@ export default function CIAlertFeed({ workspaceId, competitors, source }: CIAler
       }
       // API not available or no alerts — use mock data
       if (!cancelled) {
-        setAlerts(generateMockAlerts(competitors, lang as 'zh' | 'en'));
+        setAlerts(generateMockAlerts(competitorsRef.current, langRef.current as 'zh' | 'en'));
         setLoading(false);
       }
     }
 
     load();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId, competitorsKey, lang]);
+  }, [workspaceId]);
 
   // Mark a single alert as read (local state + API best-effort)
   function markOneRead(alertId: string) {
