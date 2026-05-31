@@ -1,14 +1,16 @@
-import { useEffect, useState } from "react";
 import { useApp } from "../../context/AppContext";
-import { getConnections, type PlatformConnection } from "../../services/ciApi";
+import { type PlatformConnection } from "../../services/ciApi";
 import { useCIData } from "../../hooks/useCIData";
 import { formatRelativeTime, freshnessTier, freshnessColor } from "../../utils/freshness";
 
 /**
  * Surfaces the per-platform scrape connection health (PR #105 + #102).
- * Reads `getConnections(workspaceId)` — which has been wired in `useCIData`
- * but rendered nowhere — so the user finally sees which platforms are
- * active, which cookies are expiring, when each last scraped successfully.
+ * Reads connections from useCIData (the shared hook already fetches them).
+ *
+ * Fixes #132: previously this component called getConnections again on
+ * its own useEffect, double-fetching /connections every time the panel
+ * mounted alongside useCIData's own fetch. Now it just consumes the
+ * connections that useCIData already loaded.
  *
  * Drop-in: renders nothing if there are no connections yet, so the
  * Settings page degrades gracefully for fresh workspaces.
@@ -46,17 +48,12 @@ const PLATFORM_LABEL_ZH: Record<string, string> = {
 
 export function PlatformHealthPanel() {
   const { colors: C, lang } = useApp();
-  const { workspace } = useCIData();
-  const [connections, setConnections] = useState<PlatformConnection[]>([]);
+  const { workspace, connections } = useCIData();
 
-  useEffect(() => {
-    const wsId = workspace?.id;
-    if (!wsId || wsId === "mock" || wsId === "local") return;
-    getConnections(wsId)
-      .then((r) => setConnections(r.data || []))
-      .catch(() => setConnections([]));
-  }, [workspace?.id]);
-
+  // Don't render for mock / local workspaces — same guard as before, just
+  // expressed against the shared data.
+  const wsId = workspace?.id;
+  if (!wsId || wsId === "mock" || wsId === "local") return null;
   if (connections.length === 0) return null;
 
   return (
