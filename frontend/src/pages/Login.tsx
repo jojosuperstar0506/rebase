@@ -57,7 +57,7 @@ export default function Login() {
         </Link>
         <button
           onClick={() => setLang(lang === "en" ? "zh" : "en")}
-          className="text-xs font-medium text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] px-3 py-1.5 border border-[var(--color-border-hairline)] rounded-[var(--radius-xs)]"
+          className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] text-xs font-medium text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] px-3 border border-[var(--color-border-hairline)] rounded-[var(--radius-xs)]"
           style={{ fontFamily: "var(--font-mono)" }}
         >
           {lang === "en" ? "中文" : "EN"}
