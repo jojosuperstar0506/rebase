@@ -30,6 +30,10 @@ from .narrative import (
     _build_brand_user_prompt,
     _build_strategic_user_prompt,
     _build_action_items_user_prompt,
+    interpret_momentum_signal,
+    interpret_threat_signal,
+    interpret_anomaly,
+    _MOMENTUM_SIGNAL_META,
     _safe_json_parse,
     _estimate_tokens,
     _call_claude,
@@ -202,9 +206,10 @@ class TestPromptConstruction(unittest.TestCase):
         self.assertIn("战略分组: A", prompt)
         self.assertIn("动量评分: 82/100", prompt)
         self.assertIn("威胁指数: 65/100", prompt)
-        self.assertIn("评分明细:", prompt)
+        self.assertIn("动量构成", prompt)
+        self.assertIn("威胁构成", prompt)
         self.assertIn("活跃GTM信号:", prompt)
-        self.assertIn("异常指标:", prompt)
+        self.assertIn("异常指标", prompt)
         self.assertIn("请分析此品牌本周表现及对OMI的影响", prompt)
 
     def test_brand_prompt_includes_gtm_signals(self):
@@ -266,6 +271,78 @@ class TestPromptConstruction(unittest.TestCase):
             prompt = _build_brand_user_prompt("Unknown Brand", score, [])
         self.assertIn("品牌: Unknown Brand (Unknown Brand)", prompt)
         self.assertIn("战略分组: ? — ?", prompt)
+
+
+# ─── Test: Metric Interpretation ("so what") ─────────────────────────────────
+
+
+class TestMetricInterpretation(unittest.TestCase):
+    """Every metric type produces a non-empty 'so what' interpretation (#153)."""
+
+    def test_every_momentum_signal_type_is_interpreted(self):
+        """Regression: each momentum signal type yields a labelled interpretation."""
+        for signal_name, (label_zh, _unit) in _MOMENTUM_SIGNAL_META.items():
+            interp = interpret_momentum_signal(signal_name, raw=15.0, normalized=85)
+            with self.subTest(signal=signal_name):
+                self.assertTrue(interp, f"{signal_name} produced no interpretation")
+                self.assertIn(label_zh, interp)
+                # Carries the cohort "so what", not just a number.
+                self.assertIn("同类", interp)
+
+    def test_momentum_cohort_tiers(self):
+        """Normalized score maps to the right cohort read."""
+        leading = interpret_momentum_signal("xhs_follower_growth", 30.0, 90)
+        self.assertIn("领先", leading)
+        lagging = interpret_momentum_signal("xhs_follower_growth", -5.0, 5)
+        self.assertIn("靠后", lagging)
+
+    def test_momentum_count_vs_pct_units(self):
+        """Count signals read as counts; pct signals read as percentages."""
+        pct = interpret_momentum_signal("engagement_trend", 18.0, 70)
+        self.assertIn("%", pct)
+        count = interpret_momentum_signal("new_products", 5.0, 70)
+        self.assertIn("本期+5", count)
+        self.assertNotIn("%", count)
+
+    def test_momentum_no_data_is_empty(self):
+        """No data → empty string (caller skips it, no bare number)."""
+        self.assertEqual(interpret_momentum_signal("xhs_follower_growth", None, None), "")
+
+    def test_threat_signal_tiers(self):
+        """Threat sub-score maps to a tier label, prepended to the detail."""
+        high = interpret_threat_signal("price_overlap", 80, "价格带直接竞争")
+        self.assertIn("高威胁", high)
+        self.assertIn("价格带直接竞争", high)
+        mid = interpret_threat_signal("closing_gap", 50, "追赶中")
+        self.assertIn("中等威胁", mid)
+        low = interpret_threat_signal("kol_investment", 10, "小幅投入")
+        self.assertIn("低威胁", low)
+
+    def test_anomaly_spike_and_drop(self):
+        """Anomalies read direction-aware, with a metric label and the z-score."""
+        spike = interpret_anomaly("xhs_followers", 3.5, "spike")
+        self.assertIn("小红书粉丝", spike)
+        self.assertIn("激增", spike)
+        self.assertIn("z=3.5", spike)
+        drop = interpret_anomaly("douyin_likes", -2.4, "drop")
+        self.assertIn("抖音点赞", drop)
+        self.assertIn("下滑", drop)
+
+    def test_brand_prompt_carries_interpretations(self):
+        """Integration: the assembled brand prompt surfaces the 'so what' text."""
+        with patch.object(narrative_mod, "get_brand_by_name", return_value={
+            "name": "Songmont", "name_en": "Songmont",
+            "group": "A", "group_name": "Direct",
+        }):
+            score = _sample_score_data()
+            prompt = _build_brand_user_prompt("Songmont", score, _sample_anomalies())
+        # Momentum interpretation present (label + cohort read).
+        self.assertIn("小红书粉丝增速", prompt)
+        self.assertIn("同类", prompt)
+        # Threat tier present.
+        self.assertIn("威胁]", prompt)
+        # Anomaly interpretation present.
+        self.assertIn("激增", prompt)
 
 
 # ─── Test: JSON Parsing ─────────────────────────────────────────────────────

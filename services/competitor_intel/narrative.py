@@ -86,6 +86,8 @@ _BRAND_SYSTEM_PROMPT = (
     "要求:\n"
     "- 每个品牌写2-4句话\n"
     "- 必须引用具体数字(分数、百分比、变化量)\n"
+    "- 每提到一个数字,必须紧跟它的含义(对比同类或对OMI的意义),不能只报数字。"
+    "下方各指标已附'解读'提示,请据此展开,用自己的话表达,不要照抄\n"
     "- 必须说明对OMI的具体影响和建议\n"
     "- 语气专业但直接,像给CEO的简报\n"
     "- 如果有GTM信号,优先解读其战略含义\n\n"
@@ -119,6 +121,125 @@ _ACTION_ITEMS_SYSTEM_PROMPT = (
 )
 
 
+# ─── Metric Interpretation ("so what") ───────────────────────────────────────
+# Every metric in the brief is paired with a plain-language "so what" so the
+# narrative never reports a bare number. Interpretations are rule-based and
+# deterministic (testable); the LLM elaborates on top of them, it doesn't have
+# to invent the read. See issue #153 and SIGNALS.md for the canonical signals.
+
+# (label_zh, unit) per momentum sub-signal. unit: "pct" = % change, "count" = absolute.
+_MOMENTUM_SIGNAL_META: Dict[str, Tuple[str, str]] = {
+    "xhs_follower_growth": ("小红书粉丝增速", "pct"),
+    "douyin_follower_growth": ("抖音粉丝增速", "pct"),
+    "content_velocity": ("内容发布量", "count"),
+    "engagement_trend": ("互动量增速", "pct"),
+    "new_products": ("新品上架数", "count"),
+    "livestream_activity": ("抖音/直播活跃度", "pct"),
+}
+
+# Plain-language labels for raw metrics that surface in anomalies.
+_METRIC_LABELS: Dict[str, str] = {
+    "xhs_followers": "小红书粉丝",
+    "douyin_followers": "抖音粉丝",
+    "xhs_likes": "小红书点赞",
+    "douyin_likes": "抖音点赞",
+    "avg_engagement": "平均互动",
+    "xhs_notes": "小红书笔记数",
+    "shop_product_count": "在售商品数",
+    "xhs_kol_collab_count": "KOL合作数",
+    "douyin_mentions_count": "抖音提及数",
+}
+
+
+def _cohort_tier(normalized: float) -> str:
+    """Map a 0-100 cohort-relative momentum sub-score to a 'so what' clause.
+
+    Momentum sub-scores are normalized across the cohort, so the read is about
+    where this brand sits relative to its peers — not an absolute level.
+    """
+    if normalized >= 80:
+        return "在同类中领先,属第一梯队,值得重点关注"
+    if normalized >= 60:
+        return "强于多数同类"
+    if normalized >= 40:
+        return "与同类大体持平"
+    if normalized >= 20:
+        return "弱于多数同类"
+    return "明显靠后,暂不构成压力"
+
+
+def interpret_momentum_signal(
+    signal_name: str, raw: Optional[float], normalized: Optional[float]
+) -> str:
+    """Return a one-line Chinese 'so what' for a momentum sub-signal.
+
+    Empty string when the brand has no data for the signal — callers fall back
+    to skipping the interpretation rather than printing a bare number.
+    """
+    if raw is None or normalized is None:
+        return ""
+    label, unit = _MOMENTUM_SIGNAL_META.get(signal_name, (signal_name, "pct"))
+    if unit == "count":
+        if raw > 0:
+            magnitude = f"本期+{raw:.0f}"
+        elif raw < 0:
+            magnitude = f"本期{raw:.0f}"
+        else:
+            magnitude = "本期无变化"
+    else:  # pct change
+        magnitude = f"{raw:+.0f}%"
+    return f"{label} {magnitude} — {_cohort_tier(normalized)}(动量{normalized:.0f}分)"
+
+
+def _threat_tier(score: float) -> str:
+    """Map a 0-100 absolute threat sub-score to a 'so what' label."""
+    if score >= 70:
+        return "高威胁"
+    if score >= 40:
+        return "中等威胁"
+    if score > 0:
+        return "低威胁"
+    return "无威胁信号"
+
+
+def interpret_threat_signal(
+    signal_name: str, score: Optional[float], detail: str
+) -> str:
+    """Return a one-line Chinese 'so what' for a threat sub-signal.
+
+    Pairs the tier label with the existing factual `detail` so the LLM sees
+    both how strong the factor is and why.
+    """
+    if score is None:
+        return detail or ""
+    tier = _threat_tier(score)
+    if detail:
+        return f"[{tier}] {detail}"
+    return f"[{tier}]"
+
+
+def interpret_anomaly(metric_name: str, z_score: float, direction: str) -> str:
+    """Return a one-line Chinese 'so what' for a statistical anomaly."""
+    label = _METRIC_LABELS.get(metric_name, metric_name)
+    magnitude = abs(z_score)
+    if magnitude >= 3:
+        strength = "极端异常"
+    elif magnitude >= 2:
+        strength = "显著异常"
+    else:
+        strength = "轻微异常"
+    rising = direction == "spike" or (direction not in ("drop",) and z_score > 0)
+    if rising:
+        return (
+            f"{label}异常激增(z={z_score:.1f},{strength})"
+            " — 可能有爆款内容或重大动作,建议核查动因"
+        )
+    return (
+        f"{label}异常下滑(z={z_score:.1f},{strength})"
+        " — 可能流量或运营受挫,关注是否持续"
+    )
+
+
 def _build_brand_user_prompt(
     brand_name: str,
     score_data: dict,
@@ -133,16 +254,32 @@ def _build_brand_user_prompt(
     momentum = score_data.get("momentum_score", 0)
     threat = score_data.get("threat_index", 0)
 
-    # Format score breakdown
+    # Format momentum score breakdown — each metric paired with a "so what"
     breakdown = score_data.get("score_breakdown", {})
     breakdown_lines = []
     for signal, info in breakdown.items():
         if isinstance(info, dict):
-            raw = info.get("raw", "N/A")
+            raw = info.get("raw")
             norm = info.get("normalized", 0)
-            weight = info.get("weight", 0)
-            breakdown_lines.append(f"  {signal}: raw={raw}, normalized={norm}, weight={weight}")
+            interp = interpret_momentum_signal(signal, raw, norm)
+            if interp:
+                breakdown_lines.append(f"  {interp}")
+            else:
+                # No data for this signal — skip rather than print a bare number.
+                continue
     breakdown_str = "\n".join(breakdown_lines) if breakdown_lines else "  数据不足"
+
+    # Format threat breakdown — what actually drives the threat index
+    threat_breakdown = score_data.get("threat_breakdown", {})
+    threat_lines = []
+    for signal, info in threat_breakdown.items():
+        if isinstance(info, dict):
+            interp = interpret_threat_signal(
+                signal, info.get("score"), info.get("detail", "")
+            )
+            if interp:
+                threat_lines.append(f"  {interp}")
+    threat_str = "\n".join(threat_lines) if threat_lines else "  数据不足"
 
     # Format GTM signals
     gtm = score_data.get("gtm_signals", [])
@@ -154,13 +291,12 @@ def _build_brand_user_prompt(
     else:
         gtm_str = "  无"
 
-    # Format anomalies
+    # Format anomalies — each paired with a "so what"
     if brand_anomalies:
         anomaly_lines = []
         for a in brand_anomalies:
             anomaly_lines.append(
-                f"  {a['metric_name']}: z={a['z_score']}, "
-                f"direction={a['direction']}, severity={a['severity']}"
+                f"  {interpret_anomaly(a['metric_name'], a['z_score'], a['direction'])}"
             )
         anomaly_str = "\n".join(anomaly_lines)
     else:
@@ -171,9 +307,10 @@ def _build_brand_user_prompt(
         f"战略分组: {group} — {group_name}\n\n"
         f"动量评分: {momentum}/100\n"
         f"威胁指数: {threat}/100\n\n"
-        f"评分明细:\n{breakdown_str}\n\n"
+        f"动量构成(已附解读):\n{breakdown_str}\n\n"
+        f"威胁构成(已附解读):\n{threat_str}\n\n"
         f"活跃GTM信号:\n{gtm_str}\n\n"
-        f"异常指标:\n{anomaly_str}\n\n"
+        f"异常指标(已附解读):\n{anomaly_str}\n\n"
         f"请分析此品牌本周表现及对OMI的影响。"
     )
 
