@@ -2,15 +2,16 @@
 
 > Single source of truth for product progress. Pull this up every session.
 
-**Last updated:** 2026-05-26
+**Last updated:** 2026-05-31
 
 > **How task tracking works now:** GitHub Issues are the live task list. Milestones (M1/M2/M3) = phases. `area:` labels = layers (data/agent/frontend/backend/infra/gtm/docs/intelligence). Three-level hierarchy: Epics (#83-#94) → Sub-issues → Tasks (one PR each). This file (ROADMAP.md) is strategy — quarter-level what & why, not task-level. See `CLAUDE.md` § "Roadmap & team rituals" for the full convention.
 
 > **In-flight reference docs (read first if you're catching up):**
-> - 📋 **`docs/handoffs-archive/HANDOFF-2026-05-26-from-will-to-joanna.md`** — **Will's most recent handoff: Apify Tier B live on ECS, customer-centric admin UX, own-brand scoring, cascade-delete (~24 PRs #96-#127)**
-> - 🗄 **`docs/SCHEMA.md`** — DB cheat-sheet. 17 tables across 5 layers. **Read before any SQL/migration/ECS work** (now required by CLAUDE.md)
-> - **GitHub Epics #83-#94** — work spine. Each is a 4-6 week deliverable spanning multiple layers
-> - **GitHub milestones M1/M2/M3** — phases. M1 = ship to first paying customer (current focus)
+> - 📋 **`docs/handoffs-archive/HANDOFF-2026-05-31-from-will-to-joanna.md`** — **Most recent handoff: auth migration complete (PRs #158 + #165 closed Epic #85 sub-issues #142 + #143). Bearer-only auth, full IDOR closure, integration test in place.**
+> - 🔐 **`docs/AUTH-MIGRATION-PLAN.md`** — The 4-phase auth migration plan + decisions. Read before touching any auth code.
+> - 🗄 **`docs/SCHEMA.md`** — DB cheat-sheet. 17 tables across 5 layers. **Read before any SQL/migration/ECS work** (required by CLAUDE.md)
+> - **GitHub Epics #83-#94 + #135-#140** — work spine. Each is a 4-6 week deliverable spanning multiple layers
+> - **GitHub milestones M1/M2/M3** — phases. M1 = ship to real beta users (current focus)
 > - 🔒 **`docs/active/SPEC-COMPOSITE-INDICES-V1.md`** — 3-pillar / 12-index spec; §10 answers locked 2026-05-04; implementation deferred pending snapshot table + customer signal
 > - `docs/active/SPEC-COMPARISON-SETS-V2.md` — Comparison sets + auto-segmentation spec (V2 work)
 
@@ -58,7 +59,40 @@ Converts prospects to believers               Proves intelligence layer works on
 
 ---
 
-## Where We Are Now (as of 2026-05-26)
+## Where We Are Now (as of 2026-05-31)
+
+**Phase:** M1 — Ship to real beta users. OMI is the canonical demo brand.
+
+**Tonight's session highlights** (Will, 2026-05-31 — 2 PRs landed, #158 + #165):
+- **Epic #85 auth migration complete** — Sub-issues #142 (JWT + customer_id middleware) and #143 (integration test customer A ≠ customer B) both closed. The IDOR vulnerability that would have blown up on the first beta-user is gone.
+- **Bearer-only auth model** — JWT signature verified on every protected route. Legacy `x-user-id` header transport dropped end-to-end (backend, frontend, Vercel proxies). User identifiers themselves (RB-OMI-A1B2, JWT.sub, workspaces.user_id) unchanged — only the spoofable transport channel is gone.
+- **Workspace ownership enforced on 26 routes** — 16 GET + 10 POST/PATCH/DELETE. Any cross-workspace IDOR attempt returns 403 with audit log line.
+- **3 critical bugs caught by `/code-review --effort high`** before they shipped — IDOR via workspace_id source mismatch (body/query/params disagree → 400), JWT_SECRET fail-closed in production (no more silent dev-fallback), anon-XXX legacy bypass closed.
+- **Operational tightening** — `POST /api/ci/scrape` is now admin-only (was: any logged-in user could trigger Apify spend on any brand). `GET /api/ci/analysis/status` ownership-checks both workspace_id and job_id query modes.
+- **JWT_SECRET rotated on ECS** — old placeholder `change_me_in_dot_env` replaced with 64-char random hex; Vercel env var mirrored. All currently-issued tokens are invalidated → users get logged out once.
+- **36 tests in `tests/`** — 21 auth-middleware + 10 tenant-isolation + 5 verify-code-proxy. All pass.
+
+**Active work against M1:**
+| Epic | Status | Notes |
+|---|---|---|
+| #85 Data security and storage | 🟢 95% done | #142 + #143 closed tonight. #141 HTTPS still open (blocked on domain). #133 backup hardening still open. |
+| #88 Land 1 paying brand | 🟢 Demo-ready | OMI + Apify + own-brand scoring all live. Blocked on pricing decision (#75) + target list |
+| #87 Self-serve onboarding | 🟡 Partial | Signup flow exists; #132 (frontend over-polling 429 bug) is the visible blocker for first demo |
+| #86 Pipeline parameterized by customer | 🟢 80% | Phase 2 brand→XHS auto-resolve deferred (#129) — Apify search actor broken |
+| #91 Unit cost optimization | 🟡 Partial | #131 (drop user_posts 50→20, 60% savings) pending; #146 cost-per-call telemetry pending |
+| #135 Action tab/layer (NEW) | 🔴 Not started | Joanna's epic for "let users act on the intelligence" |
+| #136 Intelligence layer makeover (NEW) | 🔴 Not started | Joanna's epic for "metrics actually useful" |
+| #137 UI/UX more robust (NEW) | 🔴 Not started | Joanna's epic for visible-quality polish |
+
+**Operational posture:**
+- Apify Starter $29/mo + $29 credit covers ~1 customer. Cost optimization (#131) before customer #2.
+- JWT verification end-to-end. Any auth-related env drift on ECS or Vercel = backend logs `[Auth] JWT verify failed`.
+- Weekly Sunday 2am cron on ECS via /root/rebase/.venv/bin/python (not system python3).
+- DB backups need hardening (#133) — caught 22-day gap on 2026-05-26 from path-change cron failure.
+
+---
+
+## Where We Were (as of 2026-05-26)
 
 **Phase:** M1 — Ship to first paying customer. OMI is the canonical demo brand.
 

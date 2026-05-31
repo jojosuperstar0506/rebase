@@ -17,6 +17,32 @@
 
 **If you change a migration, you MUST update `docs/SCHEMA.md` in the same PR.** Drift between code and the schema doc is worse than no doc.
 
+## Before You Add or Modify an `/api/*` Route — pick the right auth middleware
+
+Epic #85 closed 2026-05-31 (PRs #158 + #165) — the backend now has a Bearer-only auth model with workspace ownership enforcement. **Every new route must opt into the right tier.**
+
+The three middleware tiers (defined at the top of `backend/server.js`):
+
+| Middleware | When to use | What it does |
+|---|---|---|
+| **`requireAdmin`** | Routes only Will/Joanna should reach (e.g. `/api/admin/*`, `/api/ci/scrape`) | Checks `x-rebase-secret` shared key; 403 otherwise |
+| **`requireUserAuth`** | Routes a logged-in user should reach when there's no workspace_id (e.g. `/api/ci/workspaces` listing, utility endpoints like `/api/ci/resolve-brand`) | `jwt.verify()` the Bearer token; sets `req.user.accountId`; 401 if missing/invalid |
+| **`requireUserAuth` + `requireWorkspaceOwnership`** | Routes that take a `workspace_id` from query/body/params (the majority of `/api/ci/*`) | After auth, asserts the authenticated user owns that workspace; 403 otherwise. **Also rejects 400 if multiple sources of workspace_id disagree** (closes IDOR vector). |
+
+**Anti-patterns that will fail review:**
+- Reading `req.headers['x-user-id']` directly — gone. Use `req.user.accountId`.
+- `process.env.JWT_SECRET || 'rebase-dev-secret'` — gone. Use `getJwtSecret()` (fails closed in prod).
+- A route that takes `workspace_id` but skips `requireWorkspaceOwnership` — that's an IDOR. The middleware is the single source of truth for "does this user own this workspace."
+- A route with `:id` param where `:id` is NOT a workspace_id (e.g. competitor id) using `requireWorkspaceOwnership` — middleware would mis-interpret `:id` as `workspace_id`. Do an inline ownership check instead (see DELETE `/api/ci/competitors/:id` for the pattern).
+
+**Documented exceptions** (don't replicate):
+- `POST /api/ci/workspace` — stays unauthenticated for anonymous onboarding (user has no JWT yet when creating their first workspace). After approval the row is re-keyed to the invite code.
+- `POST /api/ci/ingest` — service endpoint called by the Python scraper with `x-rebase-secret` only. No user JWT in scope.
+
+**Full design + decision log** lives in `docs/AUTH-MIGRATION-PLAN.md`. Read it before touching `requireUserAuth`, `requireWorkspaceOwnership`, or `requireAdmin`.
+
+**JWT_SECRET must be set on both ECS and Vercel — and must match.** Mismatch = silent JWT verify failures, all users 401. Verify with `grep JWT_SECRET /root/rebase/backend/.env` on ECS + Vercel settings → environment-variables.
+
 ## Collaboration Rules
 
 ### `main` is production
