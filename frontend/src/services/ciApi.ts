@@ -23,16 +23,28 @@ function isValidAccountSub(sub: string): boolean {
   return /^[A-Z0-9_-]{3,}$/.test(sub);
 }
 
-// Helper: get auth headers from JWT token
+// Helper: get auth headers.
+//
+// Sends BOTH headers during Phase 1 of the auth migration (see
+// docs/AUTH-MIGRATION-PLAN.md):
+//   - Authorization: Bearer <jwt>   ← new, server jwt.verify()'s this
+//   - x-user-id: <sub>              ← legacy, kept as fallback so routes that
+//                                     haven't migrated yet still resolve
+//                                     identity. Removed in Phase 4.
+//
+// The Bearer token is preferred when both are present; the server falls
+// through to x-user-id only if the JWT is missing or fails verification.
 function getHeaders(): Record<string, string> {
   const token = localStorage.getItem('rebase_token');
   let userId = '';
+  let bearerToken = '';
   if (token) {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
       const candidate = (payload.sub || payload.id || payload.email || '').toString();
       if (isValidAccountSub(candidate)) {
         userId = candidate;
+        bearerToken = token;   // Only send the JWT once we trust its sub shape.
       } else if (candidate) {
         // Stale token from before the auth refactor — clear it so next login
         // mints a fresh JWT with sub = invite code.
@@ -50,10 +62,14 @@ function getHeaders(): Record<string, string> {
     }
     userId = anonId;
   }
-  return {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'x-user-id': userId,
   };
+  if (bearerToken) {
+    headers['Authorization'] = `Bearer ${bearerToken}`;
+  }
+  return headers;
 }
 
 // Helper: try API call, return null on failure (don't throw)
