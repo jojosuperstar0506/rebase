@@ -51,7 +51,13 @@ function getHeaders(): Record<string, string> {
         console.warn('[CI API] Stale JWT detected (sub format invalid). Clearing token; please log in again.');
         localStorage.removeItem('rebase_token');
       }
-    } catch {}
+    } catch {
+      // Review fix #13: malformed JWT (not three parts, non-base64 payload, etc).
+      // Pre-fix this catch was empty, leaving the bad token in localStorage to
+      // throw on every subsequent getHeaders() call indefinitely.
+      console.warn('[CI API] Malformed JWT in localStorage; clearing it.');
+      localStorage.removeItem('rebase_token');
+    }
   }
   // Fallback: generate a stable anonymous ID so workspace creation works without JWT
   if (!userId) {

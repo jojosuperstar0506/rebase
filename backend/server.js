@@ -52,6 +52,29 @@ function requireSecret(req, res, next) {
   next();
 }
 
+// ── JWT secret helper (Epic #85 review fix #3) ──────────────────────────────
+// Fails closed in production: if JWT_SECRET is unset and NODE_ENV=production,
+// throw on first use so the process exits loudly rather than silently using a
+// publicly-known dev fallback. In dev/test, allow the fallback with a loud
+// one-time warning so local work still boots.
+//
+// Pre-fix bug: every sign/verify site used `process.env.JWT_SECRET ||
+// 'rebase-dev-secret'`. If JWT_SECRET ever became unset in prod (typo,
+// rotation, missed .env push), every token would silently verify against
+// the literal string in this repo — full impersonation of any user.
+function getJwtSecret() {
+  const s = process.env.JWT_SECRET;
+  if (s) return s;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET env var is required in production (server.js getJwtSecret)');
+  }
+  if (!getJwtSecret._warned) {
+    console.warn('[Auth] JWT_SECRET unset; using insecure dev fallback. Set JWT_SECRET in .env.');
+    getJwtSecret._warned = true;
+  }
+  return 'rebase-dev-secret';
+}
+
 // ── Fix 3: Per-user authentication (Epic #85, sub-issue #142) ───────────────
 // Phase 1 of the auth migration — see docs/AUTH-MIGRATION-PLAN.md.
 //
@@ -73,13 +96,16 @@ function requireSecret(req, res, next) {
 // (also defined below) to actually enforce IDOR prevention cluster by cluster.
 function requireUserAuth(req, res, next) {
   // 1) Preferred path: Authorization: Bearer <jwt>
+  // Case-insensitive prefix match (review fix #10): some HTTP clients send
+  // lowercase 'bearer'. Without /i, those tokens silently downgrade to the
+  // legacy path and JWT verify never runs.
   const authHeader = req.headers.authorization || '';
-  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const bearerMatch = /^Bearer\s+(.+)$/i.exec(authHeader);
+  const bearer = bearerMatch ? bearerMatch[1] : null;
 
   if (bearer) {
     try {
-      const secret = process.env.JWT_SECRET || 'rebase-dev-secret';
-      const payload = jwt.verify(bearer, secret);
+      const payload = jwt.verify(bearer, getJwtSecret());
       req.user = {
         accountId: (payload.sub || '').toString(),
         email: payload.email || '',
@@ -100,8 +126,12 @@ function requireUserAuth(req, res, next) {
   }
 
   // 2) Legacy path: x-user-id header (DEPRECATED — to be removed in Phase 4)
+  // Review fix #4: reject 'anon-*' values. The frontend ciApi.ts generates an
+  // 'anon-XXX' id for logged-out browsers; before this guard those calls
+  // sailed through requireUserAuth as "authenticated" via the legacy path,
+  // silently defeating the IDOR fix for the entire anon class.
   const legacyId = req.headers['x-user-id'];
-  if (legacyId) {
+  if (legacyId && !String(legacyId).startsWith('anon-')) {
     // Toggle AUTH_LOG_LEGACY=1 in env when actively auditing which call
     // sites still send x-user-id without a Bearer token. Default off to
     // avoid log spam during normal Phase 1 operation.
@@ -109,7 +139,7 @@ function requireUserAuth(req, res, next) {
       console.warn(`[Auth] LEGACY x-user-id used (no JWT) on ${req.method} ${req.path}`);
     }
     req.user = {
-      accountId: legacyId.toString(),
+      accountId: String(legacyId),
       email: '',
       name: '',
       tokenWorkspaceId: null,
@@ -118,7 +148,7 @@ function requireUserAuth(req, res, next) {
     return next();
   }
 
-  // 3) No auth at all → 401
+  // 3) No auth at all (or anon-only) → 401
   return res.status(401).json({ error: 'Authentication required' });
 }
 
@@ -131,13 +161,59 @@ function requireUserAuth(req, res, next) {
 // Exported via module.exports for tests; not used by any route handler here
 // — that wiring happens cluster-by-cluster in subsequent PRs (see plan doc).
 async function requireWorkspaceOwnership(req, res, next) {
-  const workspaceId =
-    req.query.workspace_id ||
-    (req.body && req.body.workspace_id) ||
-    req.params.workspace_id ||
-    req.params.id;
-  if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
-  if (!isValidUuid(workspaceId)) return res.status(400).json({ error: 'Invalid workspace_id' });
+  // Review fix #1+#2 (CRITICAL IDOR): collect EVERY source the request
+  // offers a workspace_id from. If any pair disagrees, reject — it's almost
+  // certainly an attack trying to authorize one ID while making the handler
+  // operate on another.
+  //
+  // Pre-fix bug: the resolution order (query → body → params.workspace_id →
+  // params.id) let an attacker send:
+  //   PATCH /api/ci/workspace/<victim>     body { workspace_id: '<owned>' }
+  //   POST  /api/ci/competitors?workspace_id=<owned>   body { workspace_id: '<victim>' }
+  // The middleware authorized the source it found first; the handler then
+  // operated on the source IT happened to read. Full cross-workspace IDOR.
+  //
+  // The fix: harvest all sources, require consensus. If any source is
+  // present they must all equal the same UUID.
+  const candidates = [];
+  if (req.query && req.query.workspace_id !== undefined) {
+    candidates.push({ src: 'query.workspace_id', val: req.query.workspace_id });
+  }
+  if (req.body && req.body.workspace_id !== undefined) {
+    candidates.push({ src: 'body.workspace_id', val: req.body.workspace_id });
+  }
+  if (req.params && req.params.workspace_id !== undefined) {
+    candidates.push({ src: 'params.workspace_id', val: req.params.workspace_id });
+  }
+  if (req.params && req.params.id !== undefined) {
+    candidates.push({ src: 'params.id', val: req.params.id });
+  }
+
+  if (candidates.length === 0) {
+    return res.status(400).json({ error: 'Missing workspace_id' });
+  }
+
+  // Coerce to string up-front (review fix #14: Express parses duplicate
+  // query keys as arrays — `?workspace_id=a&workspace_id=b` yields ['a','b']).
+  // String() of an array becomes 'a,b' which isValidUuid rejects → clean 400.
+  const stringified = candidates.map((c) => ({ src: c.src, val: String(c.val) }));
+  const first = stringified[0].val;
+  for (const c of stringified.slice(1)) {
+    if (c.val !== first) {
+      console.warn(
+        `[Auth] workspace_id mismatch across request sources: ` +
+        `${stringified[0].src}=${first}, ${c.src}=${c.val} on ${req.method} ${req.path}`
+      );
+      return res.status(400).json({
+        error: 'workspace_id mismatch — same workspace_id must be sent consistently across URL path, query string, and request body',
+      });
+    }
+  }
+
+  const workspaceId = first;
+  if (!isValidUuid(workspaceId)) {
+    return res.status(400).json({ error: 'Invalid workspace_id' });
+  }
   if (!req.user || !req.user.accountId) {
     return res.status(401).json({ error: 'Authentication required' });
   }
@@ -1100,7 +1176,6 @@ app.post("/api/auth/verify-code", (req, res) => {
   }
 
   const accountId = (user.inviteCode || "").toUpperCase();
-  const secret = process.env.JWT_SECRET || "rebase-dev-secret";
   const payload = {
     sub: accountId,
     // Person-level fields kept alongside the account ID for personalization
@@ -1113,7 +1188,7 @@ app.post("/api/auth/verify-code", (req, res) => {
     competitors: user.competitors || "",
     goal: user.goal || "",
   };
-  const token = jwt.sign(payload, secret, { expiresIn: "30d" });
+  const token = jwt.sign(payload, getJwtSecret(), { expiresIn: "30d" });
   console.log(`[Auth] ${user.name} (${user.company}) logged in → account ${accountId}`);
   res.json({ success: true, token, user: { name: user.name, company: user.company } });
 });
@@ -1424,13 +1499,18 @@ app.post('/api/ci/workspace', async (req, res) => {
 app.patch('/api/ci/workspace/:id', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const id = req.params.id;
-    const userId = req.body.user_id || req.headers['x-user-id'];
-    if (!id) return res.status(400).json({ error: 'Missing workspace id' });
-    if (!userId) return res.status(401).json({ error: 'Missing user ID' });
+    // Review fix #9: trust the middleware-verified identity (req.user.accountId
+    // set by requireUserAuth, then ownership confirmed by requireWorkspaceOwnership).
+    // Pre-fix this read body.user_id || x-user-id, which:
+    //   (a) silently 404'd legitimate JWT-only callers when body.user_id was absent
+    //   (b) would silently trust attacker-controlled body.user_id if the
+    //       middleware were ever removed (defense-in-depth failure).
+    const userId = req.user.accountId;
 
-    // Confirm the workspace belongs to this user before letting them edit.
-    // Pull is_demo + the canonical brand_name in the same query so the
-    // demo guard below can reuse them without a second round-trip.
+    // Confirm the workspace belongs to this user — middleware already did this,
+    // but we re-select here to fetch is_demo + canonical brand_name for the
+    // demo guard below. (Could be folded into the middleware later as a
+    // res.locals.workspace cache.)
     const owned = await pool.query(
       'SELECT id, is_demo, brand_name FROM workspaces WHERE id = $1 AND user_id = $2',
       [id, userId]
@@ -1608,26 +1688,44 @@ app.post('/api/ci/competitors', requireUserAuth, requireWorkspaceOwnership, asyn
 // inline: look up the competitor's workspace_id, verify the caller owns
 // THAT workspace, then proceed with the cascade DELETE.
 app.delete('/api/ci/competitors/:id', requireUserAuth, async (req, res) => {
+  // Review fix #12: validate :id is a UUID BEFORE any SQL. Without this,
+  // Postgres throws "invalid input syntax for type uuid" which the outer
+  // catch returns as a generic 500 with the real error swallowed.
+  if (!isValidUuid(req.params.id)) {
+    return res.status(400).json({ error: 'Invalid competitor id' });
+  }
+
+  // Review fix #6: wrap the entire peek → ownership-check → cascade DELETE
+  // in a single transaction with a row lock. The pre-fix flow ran 5 separate
+  // pool.query calls — if any later call failed (connection drop, deploy
+  // restart) we'd leave orphan analysis_results / composite_indices rows,
+  // exactly the regression PR #115's "cascade-delete" promised to prevent.
+  // SELECT … FOR UPDATE also closes the TOCTOU window where a parallel
+  // workspace reassignment could let a stale owner delete a now-someone-
+  // else's row.
+  const client = await pool.connect();
   try {
-    // Step 1: look up the competitor's workspace BEFORE deleting so we can
-    // ownership-check the caller. We can't merge this with the DELETE
-    // (RETURNING) because the check has to happen first — otherwise the row
-    // is already gone before we know if the caller had permission.
-    const { rows: peek } = await pool.query(
-      'SELECT workspace_id, brand_name FROM workspace_competitors WHERE id = $1',
+    await client.query('BEGIN');
+
+    // Step 1: peek + lock the competitor row. FOR UPDATE blocks any
+    // concurrent UPDATE/DELETE on this row until our COMMIT.
+    const { rows: peek } = await client.query(
+      'SELECT workspace_id, brand_name FROM workspace_competitors WHERE id = $1 FOR UPDATE',
       [req.params.id]
     );
     if (peek.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Competitor not found' });
     }
     const competitorWorkspaceId = peek[0].workspace_id;
 
-    // Step 2: ownership check against the looked-up workspace_id.
-    const { rows: own } = await pool.query(
+    // Step 2: ownership check against the locked workspace_id.
+    const { rows: own } = await client.query(
       'SELECT 1 FROM workspaces WHERE id = $1 AND user_id = $2 LIMIT 1',
       [competitorWorkspaceId, req.user.accountId]
     );
     if (own.length === 0) {
+      await client.query('ROLLBACK');
       console.warn(
         `[Auth] DENIED account ${req.user.accountId} attempted DELETE competitor ` +
         `${req.params.id} (workspace ${competitorWorkspaceId} not owned)`
@@ -1635,27 +1733,30 @@ app.delete('/api/ci/competitors/:id', requireUserAuth, async (req, res) => {
       return res.status(403).json({ error: 'Competitor not in your workspace' });
     }
 
-    // Step 3: perform the cascade delete (original logic). Same DELETE +
-    // RETURNING pattern so the cascade math below works unchanged.
-    const { rows } = await pool.query(
+    // Step 3: cascade delete inside the same transaction. All-or-nothing —
+    // if any of these throws, ROLLBACK undoes the lot.
+    const { rows } = await client.query(
       'DELETE FROM workspace_competitors WHERE id = $1 RETURNING workspace_id, brand_name',
       [req.params.id]
     );
+    // Defensive — the FOR UPDATE lock should make this unreachable, but
+    // belt-and-braces in case the row was deleted under us somehow.
     if (rows.length === 0) {
-      // Race condition: someone else deleted between our peek and our delete.
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Competitor not found' });
     }
     const { workspace_id, brand_name } = rows[0];
 
-    // Cascade — per-workspace + per-brand scored data.
-    const { rowCount: deletedAnalysis } = await pool.query(
+    const { rowCount: deletedAnalysis } = await client.query(
       'DELETE FROM analysis_results WHERE workspace_id = $1 AND competitor_name = $2',
       [workspace_id, brand_name]
     );
-    const { rowCount: deletedIndices } = await pool.query(
+    const { rowCount: deletedIndices } = await client.query(
       'DELETE FROM composite_indices WHERE workspace_id = $1 AND competitor_name = $2',
       [workspace_id, brand_name]
     );
+
+    await client.query('COMMIT');
 
     console.log(`[CI] Deleted competitor ${brand_name} from workspace ${workspace_id} ` +
                 `(analysis_results: ${deletedAnalysis}, composite_indices: ${deletedIndices})`);
@@ -1669,8 +1770,14 @@ app.delete('/api/ci/competitors/:id', requireUserAuth, async (req, res) => {
       },
     });
   } catch (err) {
+    // Best-effort ROLLBACK; if the connection is already broken, this throws
+    // and we just log it — release() below still returns the client to the
+    // pool (which will discard a broken connection automatically).
+    try { await client.query('ROLLBACK'); } catch (_) { /* connection already gone */ }
     console.error('[CI] DELETE competitor error:', err.message);
     res.status(500).json({ error: 'Failed to delete competitor' });
+  } finally {
+    client.release();
   }
 });
 
@@ -4878,7 +4985,6 @@ function verifyPassword(plain, stored) {
 }
 
 function signWorkspaceToken(workspace) {
-  const secret = process.env.JWT_SECRET || 'rebase-dev-secret';
   return jwt.sign(
     {
       sub: workspace.user_id,
@@ -4886,7 +4992,7 @@ function signWorkspaceToken(workspace) {
       email: workspace.user_email,
       brand_name: workspace.brand_name,
     },
-    secret,
+    getJwtSecret(),
     { expiresIn: '30d' }
   );
 }

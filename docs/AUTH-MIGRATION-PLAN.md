@@ -1,8 +1,32 @@
 # Auth migration plan (Epic #85, sub-issue #142)
 
-**Status:** Phase 1 merged (PR #158). Phase 2 cluster A in flight.
+**Status:** Phases 1, 2, 3 queued in PRs #158-#161. Review-fixes queued in PR #162.
 **Last updated:** 2026-05-31
 **Owner:** Will (backend), coordinates with Joanna for frontend swap.
+
+## Review-fix log (PR #162)
+
+A high-effort `/code-review` against the 4-PR stack surfaced 15 findings. PR #162 addresses the 10 most material ones before merge:
+
+| # | Severity | Bug | Fix shipped |
+|---|---|---|---|
+| 1 | 🔴 CRITICAL IDOR | body.workspace_id beat params.id on PATCH /workspace/:id | `requireWorkspaceOwnership` now rejects mismatched workspace_id across query/body/params with 400 |
+| 2 | 🔴 CRITICAL IDOR | query.workspace_id beat body.workspace_id on POST routes | Same fix as #1 — all sources must agree |
+| 3 | 🔴 CRITICAL auth bypass | JWT_SECRET defaulted to 'rebase-dev-secret' if env missing | New `getJwtSecret()` throws in NODE_ENV=production; one shared helper used by all 3 sign/verify sites |
+| 4 | 🟡 anon class bypass | `anon-XXX` x-user-id passed as authenticated | Legacy path rejects `anon-*` prefix |
+| 6 | 🟡 cascade integrity | DELETE competitor was 5 separate queries — orphan rows on network blip | Wrapped in BEGIN/COMMIT with `SELECT … FOR UPDATE`, restoring PR #115's promise |
+| 7 | 🟡 Phase 4 break | `ciIndices.ts` had a parallel `getHeaders` that didn't send Bearer | Updated to mirror `ciApi.ts` (TODO: extract to shared util) |
+| 8 | 🟡 ops break | `SCRAPING-DEPLOY-RUNBOOK.md` curl 401s after Phase 3 | Updated curl with `x-user-id` header + owner-lookup query |
+| 9 | 🟡 silent no-op | PATCH workspace handler still read body.user_id | Now uses `req.user.accountId` |
+| 10 | 🟡 silent downgrade | `Bearer` prefix was case-sensitive | Regex `/^Bearer\s+/i` |
+| 12 | 🟢 minor | DELETE :id non-UUID → generic 500 | `isValidUuid` guard at top |
+| 13 | 🟢 minor | Frontend malformed-token catch was empty | Now clears localStorage like the stale-sub branch |
+| 14 | 🟢 defensive | Duplicate query-key produces array | `String()` coercion makes array a non-UUID string → clean 400 |
+
+Findings 5, 11, 15 were re-checked and judged non-issues or out-of-scope:
+- **5** (alerts/read break): frontend always sends workspace_id; verified clean
+- **11** (invalid-UUID 400 vs []): frontend hardening, separate concern — handled at frontend layer
+- **15** (POST /api/ci/workspace unmigrated): documented Phase 1 exception (anonymous onboarding requirement)
 
 ## Decisions locked (2026-05-31)
 

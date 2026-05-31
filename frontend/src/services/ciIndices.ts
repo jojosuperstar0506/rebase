@@ -75,20 +75,34 @@ function isValidAccountSub(sub: string): boolean {
   return /^[A-Z0-9_-]{3,}$/.test(sub);
 }
 
+// Review fix #7: this file had its own copy of getHeaders() that did NOT
+// forward Authorization: Bearer. Once Phase 4 of the auth migration removes
+// the x-user-id legacy fallback, every Indices panel API call would 401.
+// Fix: send both headers, mirroring ciApi.ts. (TODO: extract into a shared
+// utility module so we stop copy-pasting auth code.)
+//
+// Review fix #13: clear the malformed token when atob/JSON.parse throws —
+// previously the empty `catch {}` swallowed the error AND left the bad token
+// in localStorage, so every subsequent call repeated the throw+catch.
 function getHeaders(): Record<string, string> {
   const token = localStorage.getItem('rebase_token');
   let userId = '';
+  let bearerToken = '';
   if (token) {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
       const candidate = (payload.sub || payload.id || payload.email || '').toString();
       if (isValidAccountSub(candidate)) {
         userId = candidate;
+        bearerToken = token;
       } else if (candidate) {
         console.warn('[CI Indices] Stale JWT detected. Clearing token; please log in again.');
         localStorage.removeItem('rebase_token');
       }
-    } catch {}
+    } catch {
+      console.warn('[CI Indices] Malformed JWT in localStorage; clearing it.');
+      localStorage.removeItem('rebase_token');
+    }
   }
   if (!userId) {
     let anonId = localStorage.getItem('rebase_anon_id');
@@ -98,7 +112,14 @@ function getHeaders(): Record<string, string> {
     }
     userId = anonId;
   }
-  return { 'Content-Type': 'application/json', 'x-user-id': userId };
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'x-user-id': userId,
+  };
+  if (bearerToken) {
+    headers['Authorization'] = `Bearer ${bearerToken}`;
+  }
+  return headers;
 }
 
 export async function getIndices(workspaceId: string, lang: 'zh' | 'en' = 'zh'): Promise<IndicesResponse | null> {
