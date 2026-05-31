@@ -1418,7 +1418,10 @@ app.post('/api/ci/workspace', async (req, res) => {
 // Replaces the implicit-update behavior of the old upserting POST. Caller
 // must supply the workspace UUID; only `user_id`-owned rows can be modified.
 // Body fields are individually optional — only the ones provided are updated.
-app.patch('/api/ci/workspace/:id', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 3)
+// — requireWorkspaceOwnership picks up :id as the workspace UUID per its
+//   fallback order (query → body → params.workspace_id → params.id).
+app.patch('/api/ci/workspace/:id', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const id = req.params.id;
     const userId = req.body.user_id || req.headers['x-user-id'];
@@ -1517,7 +1520,9 @@ app.get('/api/ci/competitors', requireUserAuth, requireWorkspaceOwnership, async
 });
 
 // POST /api/ci/competitors — add a competitor
-app.post('/api/ci/competitors', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 3)
+// — workspace_id is in req.body; middleware picks it up automatically.
+app.post('/api/ci/competitors', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const { workspace_id, brand_name, tier, platform_ids, added_via, xhs_profile_url } = req.body;
 
@@ -1596,15 +1601,48 @@ app.post('/api/ci/competitors', async (req, res) => {
 // Tradeoff: re-adding the same brand later means losing trend history and
 // triggering a re-scrape (~$0.25 cost). Acceptable for current low-volume
 // stage; could add soft-delete + 30-day undo later if customers complain.
-app.delete('/api/ci/competitors/:id', async (req, res) => {
+//
+// Auth: requireUserAuth only — the ownership check can't be done by the
+// shared requireWorkspaceOwnership middleware because :id here is the
+// COMPETITOR id, not a workspace id. Instead we do a SELECT-then-check
+// inline: look up the competitor's workspace_id, verify the caller owns
+// THAT workspace, then proceed with the cascade DELETE.
+app.delete('/api/ci/competitors/:id', requireUserAuth, async (req, res) => {
   try {
-    // Look up the row first so we know which (workspace_id, brand_name)
-    // pair to cascade against. RETURNING * gives us both atomically.
+    // Step 1: look up the competitor's workspace BEFORE deleting so we can
+    // ownership-check the caller. We can't merge this with the DELETE
+    // (RETURNING) because the check has to happen first — otherwise the row
+    // is already gone before we know if the caller had permission.
+    const { rows: peek } = await pool.query(
+      'SELECT workspace_id, brand_name FROM workspace_competitors WHERE id = $1',
+      [req.params.id]
+    );
+    if (peek.length === 0) {
+      return res.status(404).json({ error: 'Competitor not found' });
+    }
+    const competitorWorkspaceId = peek[0].workspace_id;
+
+    // Step 2: ownership check against the looked-up workspace_id.
+    const { rows: own } = await pool.query(
+      'SELECT 1 FROM workspaces WHERE id = $1 AND user_id = $2 LIMIT 1',
+      [competitorWorkspaceId, req.user.accountId]
+    );
+    if (own.length === 0) {
+      console.warn(
+        `[Auth] DENIED account ${req.user.accountId} attempted DELETE competitor ` +
+        `${req.params.id} (workspace ${competitorWorkspaceId} not owned)`
+      );
+      return res.status(403).json({ error: 'Competitor not in your workspace' });
+    }
+
+    // Step 3: perform the cascade delete (original logic). Same DELETE +
+    // RETURNING pattern so the cascade math below works unchanged.
     const { rows } = await pool.query(
       'DELETE FROM workspace_competitors WHERE id = $1 RETURNING workspace_id, brand_name',
       [req.params.id]
     );
     if (rows.length === 0) {
+      // Race condition: someone else deleted between our peek and our delete.
       return res.status(404).json({ error: 'Competitor not found' });
     }
     const { workspace_id, brand_name } = rows[0];
@@ -1647,7 +1685,9 @@ app.delete('/api/ci/competitors/:id', async (req, res) => {
 //
 // Same intentional non-deletes as the competitor DELETE: scraped_* tables
 // are global and other workspaces may rely on them.
-app.post('/api/ci/workspace/:id/reset', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 3)
+// — middleware picks up :id as workspace_id.
+app.post('/api/ci/workspace/:id/reset', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const workspace_id = req.params.id;
     if (!isValidUuid(workspace_id)) {
@@ -2476,7 +2516,8 @@ app.get('/api/ci/brief', requireUserAuth, requireWorkspaceOwnership, async (req,
 // button (CIBrief.tsx). The endpoint accepts any workspace so it can ship
 // to all customers later by removing that one gate, without touching server
 // business logic.
-app.post('/api/ci/brief/draft', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 3)
+app.post('/api/ci/brief/draft', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const workspaceId = req.body.workspace_id;
     const moveIndex = Number.isInteger(req.body.move_index) ? req.body.move_index : 0;
@@ -3321,7 +3362,8 @@ function decryptCookie(stored) {
 }
 
 // POST /api/ci/connections — connect a platform (store encrypted cookies)
-app.post('/api/ci/connections', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 3)
+app.post('/api/ci/connections', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const { workspace_id, platform, cookies } = req.body;
     if (!workspace_id || !platform || !cookies) {
@@ -3349,7 +3391,8 @@ app.post('/api/ci/connections', async (req, res) => {
 });
 
 // POST /api/ci/connections/check — check if cookies are still valid
-app.post('/api/ci/connections/check', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 3)
+app.post('/api/ci/connections/check', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const { workspace_id, platform } = req.body;
     if (!workspace_id || !platform) {
@@ -3423,7 +3466,10 @@ app.get('/api/ci/pipeline/status', async (req, res) => {
 });
 
 // POST /api/ci/run-analysis — start the scoring pipeline with job tracking
-app.post('/api/ci/run-analysis', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 3)
+// Most expensive route in the system — protecting from unauthorized
+// triggers (which would cost Apify+DeepSeek $) was high on the priority list.
+app.post('/api/ci/run-analysis', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   const { workspace_id } = req.body;
   if (!workspace_id) return res.status(400).json({ error: 'Missing workspace_id' });
 
@@ -3530,7 +3576,13 @@ app.get('/api/ci/analysis/status', async (req, res) => {
 //     this endpoint must stay off on ECS so stray calls can't replay banned
 //     cookies from platform_connections. Flip to 'true' in backend/.env after
 //     Phase B0 (burner account) + Phase C (rate-limit enforcement) are done.
-app.post('/api/ci/scrape', async (req, res) => {
+// Auth: requireUserAuth only (Phase 3 exception)
+// — this route takes brand_name + platform (no workspace_id), so we can't
+// do a workspace ownership check. Any authenticated user can trigger a
+// scrape of any brand. The SCRAPER_ENABLED gate below limits blast radius.
+// TODO(#142 Phase 4): tighten to admin-only or add per-user rate limiting
+// to prevent Apify-cost abuse by a logged-in attacker.
+app.post('/api/ci/scrape', requireUserAuth, async (req, res) => {
   if (process.env.SCRAPER_ENABLED !== 'true') {
     console.warn('[CI] /api/ci/scrape called but SCRAPER_ENABLED!=true — refusing');
     return res.status(503).json({
@@ -3771,7 +3823,8 @@ app.get('/api/ci/alerts', requireUserAuth, requireWorkspaceOwnership, async (req
 });
 
 // POST /api/ci/alerts/read — mark alerts as read
-app.post('/api/ci/alerts/read', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 3)
+app.post('/api/ci/alerts/read', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   const { workspace_id, alert_ids } = req.body;
 
   try {
@@ -3931,7 +3984,8 @@ app.get('/api/ci/trends/summary', requireUserAuth, requireWorkspaceOwnership, as
 });
 
 // POST /api/ci/deep-dive — request a full-depth analysis of one competitor
-app.post('/api/ci/deep-dive', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 3)
+app.post('/api/ci/deep-dive', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   const { workspace_id, brand_name, platform } = req.body;
 
   if (!workspace_id || !brand_name) {
@@ -4197,7 +4251,9 @@ async function callLLM(prompt, maxTokens = 1000) {
 }
 
 // POST /api/ci/resolve-brand — auto-detect platform identifiers for a brand name
-app.post('/api/ci/resolve-brand', async (req, res) => {
+// Auth: requireUserAuth only (Phase 3 exception — no workspace_id in body).
+// Hits DeepSeek; auth prevents anonymous cost abuse.
+app.post('/api/ci/resolve-brand', requireUserAuth, async (req, res) => {
   const { brand_name } = req.body;
   if (!brand_name) return res.status(400).json({ error: 'Missing brand_name' });
 
@@ -4411,7 +4467,8 @@ function lookupNameInRegistry(platform, identifier) {
 // best-effort HTML fetch. Each step bails out the moment it has a valid
 // name. The HTML fetch is heavily gated by platform rate limits (XHS
 // especially), so it's the last resort, not the first.
-app.post('/api/ci/parse-link', async (req, res) => {
+// Auth: requireUserAuth only (Phase 3 exception — no workspace_id in body).
+app.post('/api/ci/parse-link', requireUserAuth, async (req, res) => {
   const { url } = req.body;
   if (!url) return res.status(400).json({ error: 'Missing url' });
 
@@ -4532,7 +4589,9 @@ app.post('/api/ci/parse-link', async (req, res) => {
 });
 
 // POST /api/ci/suggest-competitors — AI-powered competitor suggestions
-app.post('/api/ci/suggest-competitors', async (req, res) => {
+// Auth: requireUserAuth only (Phase 3 exception — no workspace_id in body).
+// Hits DeepSeek; auth prevents anonymous cost abuse.
+app.post('/api/ci/suggest-competitors', requireUserAuth, async (req, res) => {
   const { brand_name, brand_category, brand_price_range, brand_platforms } = req.body;
   // Match the UI language. Default zh because the demo + the bulk of users
   // are in zh-CN; English-mode YC reviewers need EN reasons or the AI
