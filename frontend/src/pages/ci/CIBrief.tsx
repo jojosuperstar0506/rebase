@@ -28,6 +28,14 @@ import type { ColorSet } from '../../theme/colors';
 import CISubNav from '../../components/ci/CISubNav';
 import CIWelcomeBanner from '../../components/ci/CIWelcomeBanner';
 import CIAlertFeed from '../../components/ci/CIAlertFeed';
+
+// Module-level stable reference — passing `[]` directly as a prop creates a
+// new array on every render, which used to trigger CIAlertFeed's useEffect
+// every render and over-poll /api/ci/alerts (bug #132). The fix in
+// CIAlertFeed itself made this safe, but using a stable ref here is the
+// belt-and-braces version that also helps any other consumer with the
+// same prop pattern. Do NOT mutate.
+const EMPTY_BRAND_SCORES: never[] = [];
 import IndexScatterPlot from '../../components/ci/IndexScatterPlot';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useCIData } from '../../hooks/useCIData';
@@ -1202,7 +1210,7 @@ export default function CIBrief() {
         <section style={{ marginBottom: 40 }}>
           <CIAlertFeed
             workspaceId={workspaceId}
-            competitors={[]}
+            competitors={EMPTY_BRAND_SCORES}
             source="api"
           />
         </section>
