@@ -188,17 +188,28 @@ psql "$DATABASE_URL" -c "
 
 **Trigger scoring + brief regeneration** so the customer's `/ci` Brief reflects the new data:
 
+> ⚠️ As of Epic #85 / sub-issue #142 (PR #161), `/api/ci/run-analysis` requires per-user auth — `x-rebase-secret` alone is no longer enough. Provide either a valid `Authorization: Bearer <jwt>` OR an `x-user-id: <invite-code>` header matching the workspace owner. The simplest operator path is to use the workspace owner's invite code as the legacy header (still accepted until Phase 4 cleanup).
+>
+> To find a workspace's owner invite code:
+> ```bash
+> psql "$DATABASE_URL" -c "SELECT user_id FROM workspaces WHERE id = '<UUID>';"
+> ```
+
 ```bash
-# Hits the existing run-analysis endpoint to re-score with fresh scrape data
+# Hits the existing run-analysis endpoint to re-score with fresh scrape data.
+# OWNER_CODE = workspace owner's invite code (e.g. RB-OMI-A1B2), looked up
+# from workspaces.user_id by the psql query above.
 curl -X POST "http://localhost:3000/api/ci/run-analysis" \
   -H "Content-Type: application/json" \
   -H "x-rebase-secret: $API_SECRET" \
+  -H "x-user-id: $OWNER_CODE" \
   -d '{"workspace_id":"<UUID>"}'
 # Returns: {"job_id":"...","status":"queued",...}
 
 # Wait 30-60 sec for the pipelines to finish; check status
 curl "http://localhost:3000/api/ci/analysis/status?workspace_id=<UUID>" \
-  -H "x-rebase-secret: $API_SECRET"
+  -H "x-rebase-secret: $API_SECRET" \
+  -H "x-user-id: $OWNER_CODE"
 ```
 
 **Then verify in the browser**: log in as the customer at https://rebase-lac.vercel.app/ci → see the populated Brief.

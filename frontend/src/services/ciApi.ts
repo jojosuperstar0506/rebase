@@ -25,49 +25,44 @@ function isValidAccountSub(sub: string): boolean {
 
 // Helper: get auth headers.
 //
-// Sends BOTH headers during Phase 1 of the auth migration (see
-// docs/AUTH-MIGRATION-PLAN.md):
-//   - Authorization: Bearer <jwt>   ← new, server jwt.verify()'s this
-//   - x-user-id: <sub>              ← legacy, kept as fallback so routes that
-//                                     haven't migrated yet still resolve
-//                                     identity. Removed in Phase 4.
+// PHASE 4 (Epic #85 / #142 final): Bearer-only. We no longer send the
+// legacy x-user-id header — the backend ignores it. If there's no valid
+// JWT in localStorage, calls go out without an Authorization header and
+// the server returns 401 (which tryApi handles by returning null, leaving
+// the UI in its empty state).
 //
-// The Bearer token is preferred when both are present; the server falls
-// through to x-user-id only if the JWT is missing or fails verification.
+// EXCEPTION: POST /api/ci/workspace stays unauthenticated by design (it
+// creates the workspace BEFORE the user has a JWT — anonymous onboarding).
+// That call site reads the anon id from localStorage directly via
+// getAnonId() below and sends it in the request body, NOT a header.
+function getAnonId(): string {
+  let anonId = localStorage.getItem('rebase_anon_id');
+  if (!anonId) {
+    anonId = 'anon-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+    localStorage.setItem('rebase_anon_id', anonId);
+  }
+  return anonId;
+}
+
 function getHeaders(): Record<string, string> {
   const token = localStorage.getItem('rebase_token');
-  let userId = '';
-  let bearerToken = '';
-  if (token) {
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      const candidate = (payload.sub || payload.id || payload.email || '').toString();
-      if (isValidAccountSub(candidate)) {
-        userId = candidate;
-        bearerToken = token;   // Only send the JWT once we trust its sub shape.
-      } else if (candidate) {
-        // Stale token from before the auth refactor — clear it so next login
-        // mints a fresh JWT with sub = invite code.
-        console.warn('[CI API] Stale JWT detected (sub format invalid). Clearing token; please log in again.');
-        localStorage.removeItem('rebase_token');
-      }
-    } catch {}
-  }
-  // Fallback: generate a stable anonymous ID so workspace creation works without JWT
-  if (!userId) {
-    let anonId = localStorage.getItem('rebase_anon_id');
-    if (!anonId) {
-      anonId = 'anon-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-      localStorage.setItem('rebase_anon_id', anonId);
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (!token) return headers;
+
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const candidate = (payload.sub || payload.id || payload.email || '').toString();
+    if (isValidAccountSub(candidate)) {
+      headers['Authorization'] = `Bearer ${token}`;
+    } else if (candidate) {
+      // Stale token from before the auth refactor — clear it so next login
+      // mints a fresh JWT with sub = invite code.
+      console.warn('[CI API] Stale JWT detected (sub format invalid). Clearing token; please log in again.');
+      localStorage.removeItem('rebase_token');
     }
-    userId = anonId;
-  }
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'x-user-id': userId,
-  };
-  if (bearerToken) {
-    headers['Authorization'] = `Bearer ${bearerToken}`;
+  } catch {
+    console.warn('[CI API] Malformed JWT in localStorage; clearing it.');
+    localStorage.removeItem('rebase_token');
   }
   return headers;
 }
@@ -212,11 +207,21 @@ export async function saveWorkspace(workspace: Partial<Workspace>): Promise<Work
   // overwrote an existing workspace whenever the caller passed new data,
   // making multi-workspace impossible.
   const hasId = workspace.id && workspace.id !== 'local';
+
+  // PHASE 4: POST /api/ci/workspace is unauthenticated (anonymous onboarding
+  // creates the workspace BEFORE the user has a JWT). With x-user-id header
+  // gone, we now pass the anon id in the request body so the backend has
+  // something to assign workspaces.user_id to. PATCH path uses JWT-derived
+  // ownership and doesn't need user_id in body.
+  const bodyObj = hasId
+    ? workspace
+    : { ...workspace, user_id: (workspace as any).user_id || getAnonId() };
+
   const apiData = await tryApi<Workspace>(
     hasId ? `/workspace/${encodeURIComponent(workspace.id!)}` : '/workspace',
     {
       method: hasId ? 'PATCH' : 'POST',
-      body: JSON.stringify(workspace),
+      body: JSON.stringify(bodyObj),
     }
   );
   if (apiData) return apiData;

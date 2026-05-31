@@ -52,6 +52,29 @@ function requireSecret(req, res, next) {
   next();
 }
 
+// ── JWT secret helper (Epic #85 review fix #3) ──────────────────────────────
+// Fails closed in production: if JWT_SECRET is unset and NODE_ENV=production,
+// throw on first use so the process exits loudly rather than silently using a
+// publicly-known dev fallback. In dev/test, allow the fallback with a loud
+// one-time warning so local work still boots.
+//
+// Pre-fix bug: every sign/verify site used `process.env.JWT_SECRET ||
+// 'rebase-dev-secret'`. If JWT_SECRET ever became unset in prod (typo,
+// rotation, missed .env push), every token would silently verify against
+// the literal string in this repo — full impersonation of any user.
+function getJwtSecret() {
+  const s = process.env.JWT_SECRET;
+  if (s) return s;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET env var is required in production (server.js getJwtSecret)');
+  }
+  if (!getJwtSecret._warned) {
+    console.warn('[Auth] JWT_SECRET unset; using insecure dev fallback. Set JWT_SECRET in .env.');
+    getJwtSecret._warned = true;
+  }
+  return 'rebase-dev-secret';
+}
+
 // ── Fix 3: Per-user authentication (Epic #85, sub-issue #142) ───────────────
 // Phase 1 of the auth migration — see docs/AUTH-MIGRATION-PLAN.md.
 //
@@ -72,54 +95,74 @@ function requireSecret(req, res, next) {
 // PR adds capability, removes nothing. Phase 2 wires requireWorkspaceOwnership
 // (also defined below) to actually enforce IDOR prevention cluster by cluster.
 function requireUserAuth(req, res, next) {
-  // 1) Preferred path: Authorization: Bearer <jwt>
+  // PHASE 4 (Epic #85 / #142 final): Bearer-only. The legacy x-user-id
+  // fallback path that existed in Phases 1-3 is gone — it was the last
+  // unauthenticated way to populate req.user, and review fix #4 already
+  // proved it was the source of the anon-class bypass. Now: no JWT, no
+  // req.user, no access. Period.
+  //
+  // What this means for callers:
+  //   - Authorization: Bearer <jwt> is REQUIRED on every requireUserAuth route
+  //   - x-user-id header is IGNORED (frontends have been updated to stop sending it)
+  //   - The user identifier itself (RB-OMI-A1B2 etc.) lives on in JWT.sub
+  //     and req.user.accountId — see docs/AUTH-MIGRATION-PLAN.md "drop
+  //     x-user-id ≠ drop user identifiers"
+  //
+  // Case-insensitive prefix match (review fix #10): some HTTP clients send
+  // lowercase 'bearer'. Without /i those tokens get rejected.
   const authHeader = req.headers.authorization || '';
-  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const bearerMatch = /^Bearer\s+(.+)$/i.exec(authHeader);
+  const bearer = bearerMatch ? bearerMatch[1] : null;
 
-  if (bearer) {
-    try {
-      const secret = process.env.JWT_SECRET || 'rebase-dev-secret';
-      const payload = jwt.verify(bearer, secret);
-      req.user = {
-        accountId: (payload.sub || '').toString(),
-        email: payload.email || '',
-        name: payload.name || '',
-        // workspace_id is present on v2 tokens (signWorkspaceToken) but not on
-        // v1 invite-code tokens. Routes that need workspace context should
-        // still call findCallerWorkspace(req) — this is just a hint.
-        tokenWorkspaceId: payload.workspace_id || null,
-        verifiedVia: 'jwt',
-      };
-      return next();
-    } catch (e) {
-      // Fall through to legacy x-user-id path during Phase 1. Phase 4 will
-      // tighten this to "return 401 immediately" once telemetry confirms
-      // all clients send valid Bearer tokens.
-      console.warn(`[Auth] JWT verify failed on ${req.path}: ${e.message}`);
-    }
+  if (!bearer) {
+    return res.status(401).json({ error: 'Authentication required (Bearer token)' });
   }
 
-  // 2) Legacy path: x-user-id header (DEPRECATED — to be removed in Phase 4)
-  const legacyId = req.headers['x-user-id'];
-  if (legacyId) {
-    // Toggle AUTH_LOG_LEGACY=1 in env when actively auditing which call
-    // sites still send x-user-id without a Bearer token. Default off to
-    // avoid log spam during normal Phase 1 operation.
-    if (process.env.AUTH_LOG_LEGACY === '1') {
-      console.warn(`[Auth] LEGACY x-user-id used (no JWT) on ${req.method} ${req.path}`);
-    }
+  try {
+    const payload = jwt.verify(bearer, getJwtSecret());
     req.user = {
-      accountId: legacyId.toString(),
-      email: '',
-      name: '',
-      tokenWorkspaceId: null,
-      verifiedVia: 'legacy_header',
+      accountId: (payload.sub || '').toString(),
+      email: payload.email || '',
+      name: payload.name || '',
+      // workspace_id is present on v2 tokens (signWorkspaceToken) but not on
+      // v1 invite-code tokens. Routes that need workspace context should
+      // still call findCallerWorkspace(req) — this is just a hint.
+      tokenWorkspaceId: payload.workspace_id || null,
+      verifiedVia: 'jwt',
     };
+    if (!req.user.accountId) {
+      // Defensive: JWT signed with empty sub. Shouldn't happen with our
+      // sign sites but a malformed token shouldn't grant access.
+      return res.status(401).json({ error: 'Token missing subject' });
+    }
+    return next();
+  } catch (e) {
+    console.warn(`[Auth] JWT verify failed on ${req.method} ${req.path}: ${e.message}`);
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+}
+
+// requireAdmin — gate for routes that should ONLY be callable by Will/Joanna
+// directly (not by end users, even authenticated ones). Backed by the
+// x-rebase-secret shared key (already required by requireSecret), but with
+// an EXPLICIT marker so that if we ever loosen requireSecret (e.g. allow
+// some routes to skip it), admin routes don't accidentally become public.
+//
+// Used in Phase 4 to lock down /api/ci/scrape, which triggers Apify cost.
+// Pre-Phase-4 any logged-in user could spam it; now only admin tools can.
+function requireAdmin(req, res, next) {
+  const provided = req.headers['x-rebase-secret'];
+  const expected = process.env.API_SECRET;
+  if (!expected) {
+    // Dev mode: requireSecret already short-circuited so we do too. Warn
+    // loudly so this isn't accidentally shipped to prod.
+    console.warn('[Auth] requireAdmin: API_SECRET unset — admin route exposed in dev mode');
     return next();
   }
-
-  // 3) No auth at all → 401
-  return res.status(401).json({ error: 'Authentication required' });
+  if (provided !== expected) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
 }
 
 // requireWorkspaceOwnership — Phase 2 helper, not wired anywhere in this PR.
@@ -131,13 +174,59 @@ function requireUserAuth(req, res, next) {
 // Exported via module.exports for tests; not used by any route handler here
 // — that wiring happens cluster-by-cluster in subsequent PRs (see plan doc).
 async function requireWorkspaceOwnership(req, res, next) {
-  const workspaceId =
-    req.query.workspace_id ||
-    (req.body && req.body.workspace_id) ||
-    req.params.workspace_id ||
-    req.params.id;
-  if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
-  if (!isValidUuid(workspaceId)) return res.status(400).json({ error: 'Invalid workspace_id' });
+  // Review fix #1+#2 (CRITICAL IDOR): collect EVERY source the request
+  // offers a workspace_id from. If any pair disagrees, reject — it's almost
+  // certainly an attack trying to authorize one ID while making the handler
+  // operate on another.
+  //
+  // Pre-fix bug: the resolution order (query → body → params.workspace_id →
+  // params.id) let an attacker send:
+  //   PATCH /api/ci/workspace/<victim>     body { workspace_id: '<owned>' }
+  //   POST  /api/ci/competitors?workspace_id=<owned>   body { workspace_id: '<victim>' }
+  // The middleware authorized the source it found first; the handler then
+  // operated on the source IT happened to read. Full cross-workspace IDOR.
+  //
+  // The fix: harvest all sources, require consensus. If any source is
+  // present they must all equal the same UUID.
+  const candidates = [];
+  if (req.query && req.query.workspace_id !== undefined) {
+    candidates.push({ src: 'query.workspace_id', val: req.query.workspace_id });
+  }
+  if (req.body && req.body.workspace_id !== undefined) {
+    candidates.push({ src: 'body.workspace_id', val: req.body.workspace_id });
+  }
+  if (req.params && req.params.workspace_id !== undefined) {
+    candidates.push({ src: 'params.workspace_id', val: req.params.workspace_id });
+  }
+  if (req.params && req.params.id !== undefined) {
+    candidates.push({ src: 'params.id', val: req.params.id });
+  }
+
+  if (candidates.length === 0) {
+    return res.status(400).json({ error: 'Missing workspace_id' });
+  }
+
+  // Coerce to string up-front (review fix #14: Express parses duplicate
+  // query keys as arrays — `?workspace_id=a&workspace_id=b` yields ['a','b']).
+  // String() of an array becomes 'a,b' which isValidUuid rejects → clean 400.
+  const stringified = candidates.map((c) => ({ src: c.src, val: String(c.val) }));
+  const first = stringified[0].val;
+  for (const c of stringified.slice(1)) {
+    if (c.val !== first) {
+      console.warn(
+        `[Auth] workspace_id mismatch across request sources: ` +
+        `${stringified[0].src}=${first}, ${c.src}=${c.val} on ${req.method} ${req.path}`
+      );
+      return res.status(400).json({
+        error: 'workspace_id mismatch — same workspace_id must be sent consistently across URL path, query string, and request body',
+      });
+    }
+  }
+
+  const workspaceId = first;
+  if (!isValidUuid(workspaceId)) {
+    return res.status(400).json({ error: 'Invalid workspace_id' });
+  }
   if (!req.user || !req.user.accountId) {
     return res.status(401).json({ error: 'Authentication required' });
   }
@@ -1100,7 +1189,6 @@ app.post("/api/auth/verify-code", (req, res) => {
   }
 
   const accountId = (user.inviteCode || "").toUpperCase();
-  const secret = process.env.JWT_SECRET || "rebase-dev-secret";
   const payload = {
     sub: accountId,
     // Person-level fields kept alongside the account ID for personalization
@@ -1113,7 +1201,7 @@ app.post("/api/auth/verify-code", (req, res) => {
     competitors: user.competitors || "",
     goal: user.goal || "",
   };
-  const token = jwt.sign(payload, secret, { expiresIn: "30d" });
+  const token = jwt.sign(payload, getJwtSecret(), { expiresIn: "30d" });
   console.log(`[Auth] ${user.name} (${user.company}) logged in → account ${accountId}`);
   res.json({ success: true, token, user: { name: user.name, company: user.company } });
 });
@@ -1390,9 +1478,19 @@ app.get('/api/ci/workspace/me', requireUserAuth, async (req, res) => {
 //
 // New shape: ALWAYS insert. Use PATCH /api/ci/workspace/:id (below) to
 // update an existing workspace by uuid.
+// PHASE 4 NOTE: this route INTENTIONALLY stays unauthenticated. The
+// anonymous-onboarding flow creates a workspace BEFORE the user has a JWT.
+// After approval (POST /api/admin/approve), the row is re-keyed from the
+// anon user_id to the approved invite code, so the auth model takes over
+// from that point. Pollution risk = "someone could create empty workspaces
+// for invented user_ids"; documented as accepted in
+// docs/AUTH-MIGRATION-PLAN.md "Routes deliberately UNCHANGED."
+// TODO: revisit when onboarding moves to JWT-from-signup-step (v2 flow).
 app.post('/api/ci/workspace', async (req, res) => {
   try {
     const { brand_name, brand_category, brand_price_range, brand_platforms } = req.body;
+    // x-user-id retained here ONLY because this route is unauthenticated by
+    // design (see comment above). req.user does not exist on this code path.
     const user_id = req.body.user_id || req.headers['x-user-id'];
 
     if (!user_id || !brand_name || !brand_category) {
@@ -1418,16 +1516,24 @@ app.post('/api/ci/workspace', async (req, res) => {
 // Replaces the implicit-update behavior of the old upserting POST. Caller
 // must supply the workspace UUID; only `user_id`-owned rows can be modified.
 // Body fields are individually optional — only the ones provided are updated.
-app.patch('/api/ci/workspace/:id', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 3)
+// — requireWorkspaceOwnership picks up :id as the workspace UUID per its
+//   fallback order (query → body → params.workspace_id → params.id).
+app.patch('/api/ci/workspace/:id', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const id = req.params.id;
-    const userId = req.body.user_id || req.headers['x-user-id'];
-    if (!id) return res.status(400).json({ error: 'Missing workspace id' });
-    if (!userId) return res.status(401).json({ error: 'Missing user ID' });
+    // Review fix #9: trust the middleware-verified identity (req.user.accountId
+    // set by requireUserAuth, then ownership confirmed by requireWorkspaceOwnership).
+    // Pre-fix this read body.user_id || x-user-id, which:
+    //   (a) silently 404'd legitimate JWT-only callers when body.user_id was absent
+    //   (b) would silently trust attacker-controlled body.user_id if the
+    //       middleware were ever removed (defense-in-depth failure).
+    const userId = req.user.accountId;
 
-    // Confirm the workspace belongs to this user before letting them edit.
-    // Pull is_demo + the canonical brand_name in the same query so the
-    // demo guard below can reuse them without a second round-trip.
+    // Confirm the workspace belongs to this user — middleware already did this,
+    // but we re-select here to fetch is_demo + canonical brand_name for the
+    // demo guard below. (Could be folded into the middleware later as a
+    // res.locals.workspace cache.)
     const owned = await pool.query(
       'SELECT id, is_demo, brand_name FROM workspaces WHERE id = $1 AND user_id = $2',
       [id, userId]
@@ -1480,11 +1586,12 @@ app.patch('/api/ci/workspace/:id', async (req, res) => {
 });
 
 // GET /api/ci/competitors — list workspace competitors
-app.get('/api/ci/competitors', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster A —
+// docs/AUTH-MIGRATION-PLAN.md). The ownership middleware 403s if the
+// authenticated user doesn't own the workspace_id in the query string.
+app.get('/api/ci/competitors', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
-    if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
-    if (!isValidUuid(workspaceId)) return res.json([]);
 
     // #18: include last_scraped_at + last_scrape_platform per competitor.
     // Surfaces per-brand data freshness on the Brief workspace context
@@ -1516,7 +1623,9 @@ app.get('/api/ci/competitors', async (req, res) => {
 });
 
 // POST /api/ci/competitors — add a competitor
-app.post('/api/ci/competitors', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 3)
+// — workspace_id is in req.body; middleware picks it up automatically.
+app.post('/api/ci/competitors', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const { workspace_id, brand_name, tier, platform_ids, added_via, xhs_profile_url } = req.body;
 
@@ -1595,28 +1704,82 @@ app.post('/api/ci/competitors', async (req, res) => {
 // Tradeoff: re-adding the same brand later means losing trend history and
 // triggering a re-scrape (~$0.25 cost). Acceptable for current low-volume
 // stage; could add soft-delete + 30-day undo later if customers complain.
-app.delete('/api/ci/competitors/:id', async (req, res) => {
+//
+// Auth: requireUserAuth only — the ownership check can't be done by the
+// shared requireWorkspaceOwnership middleware because :id here is the
+// COMPETITOR id, not a workspace id. Instead we do a SELECT-then-check
+// inline: look up the competitor's workspace_id, verify the caller owns
+// THAT workspace, then proceed with the cascade DELETE.
+app.delete('/api/ci/competitors/:id', requireUserAuth, async (req, res) => {
+  // Review fix #12: validate :id is a UUID BEFORE any SQL. Without this,
+  // Postgres throws "invalid input syntax for type uuid" which the outer
+  // catch returns as a generic 500 with the real error swallowed.
+  if (!isValidUuid(req.params.id)) {
+    return res.status(400).json({ error: 'Invalid competitor id' });
+  }
+
+  // Review fix #6: wrap the entire peek → ownership-check → cascade DELETE
+  // in a single transaction with a row lock. The pre-fix flow ran 5 separate
+  // pool.query calls — if any later call failed (connection drop, deploy
+  // restart) we'd leave orphan analysis_results / composite_indices rows,
+  // exactly the regression PR #115's "cascade-delete" promised to prevent.
+  // SELECT … FOR UPDATE also closes the TOCTOU window where a parallel
+  // workspace reassignment could let a stale owner delete a now-someone-
+  // else's row.
+  const client = await pool.connect();
   try {
-    // Look up the row first so we know which (workspace_id, brand_name)
-    // pair to cascade against. RETURNING * gives us both atomically.
-    const { rows } = await pool.query(
+    await client.query('BEGIN');
+
+    // Step 1: peek + lock the competitor row. FOR UPDATE blocks any
+    // concurrent UPDATE/DELETE on this row until our COMMIT.
+    const { rows: peek } = await client.query(
+      'SELECT workspace_id, brand_name FROM workspace_competitors WHERE id = $1 FOR UPDATE',
+      [req.params.id]
+    );
+    if (peek.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Competitor not found' });
+    }
+    const competitorWorkspaceId = peek[0].workspace_id;
+
+    // Step 2: ownership check against the locked workspace_id.
+    const { rows: own } = await client.query(
+      'SELECT 1 FROM workspaces WHERE id = $1 AND user_id = $2 LIMIT 1',
+      [competitorWorkspaceId, req.user.accountId]
+    );
+    if (own.length === 0) {
+      await client.query('ROLLBACK');
+      console.warn(
+        `[Auth] DENIED account ${req.user.accountId} attempted DELETE competitor ` +
+        `${req.params.id} (workspace ${competitorWorkspaceId} not owned)`
+      );
+      return res.status(403).json({ error: 'Competitor not in your workspace' });
+    }
+
+    // Step 3: cascade delete inside the same transaction. All-or-nothing —
+    // if any of these throws, ROLLBACK undoes the lot.
+    const { rows } = await client.query(
       'DELETE FROM workspace_competitors WHERE id = $1 RETURNING workspace_id, brand_name',
       [req.params.id]
     );
+    // Defensive — the FOR UPDATE lock should make this unreachable, but
+    // belt-and-braces in case the row was deleted under us somehow.
     if (rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Competitor not found' });
     }
     const { workspace_id, brand_name } = rows[0];
 
-    // Cascade — per-workspace + per-brand scored data.
-    const { rowCount: deletedAnalysis } = await pool.query(
+    const { rowCount: deletedAnalysis } = await client.query(
       'DELETE FROM analysis_results WHERE workspace_id = $1 AND competitor_name = $2',
       [workspace_id, brand_name]
     );
-    const { rowCount: deletedIndices } = await pool.query(
+    const { rowCount: deletedIndices } = await client.query(
       'DELETE FROM composite_indices WHERE workspace_id = $1 AND competitor_name = $2',
       [workspace_id, brand_name]
     );
+
+    await client.query('COMMIT');
 
     console.log(`[CI] Deleted competitor ${brand_name} from workspace ${workspace_id} ` +
                 `(analysis_results: ${deletedAnalysis}, composite_indices: ${deletedIndices})`);
@@ -1630,8 +1793,14 @@ app.delete('/api/ci/competitors/:id', async (req, res) => {
       },
     });
   } catch (err) {
+    // Best-effort ROLLBACK; if the connection is already broken, this throws
+    // and we just log it — release() below still returns the client to the
+    // pool (which will discard a broken connection automatically).
+    try { await client.query('ROLLBACK'); } catch (_) { /* connection already gone */ }
     console.error('[CI] DELETE competitor error:', err.message);
     res.status(500).json({ error: 'Failed to delete competitor' });
+  } finally {
+    client.release();
   }
 });
 
@@ -1646,7 +1815,9 @@ app.delete('/api/ci/competitors/:id', async (req, res) => {
 //
 // Same intentional non-deletes as the competitor DELETE: scraped_* tables
 // are global and other workspaces may rely on them.
-app.post('/api/ci/workspace/:id/reset', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 3)
+// — middleware picks up :id as workspace_id.
+app.post('/api/ci/workspace/:id/reset', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const workspace_id = req.params.id;
     if (!isValidUuid(workspace_id)) {
@@ -1707,11 +1878,10 @@ app.post('/api/ci/workspace/:id/reset', async (req, res) => {
 });
 
 // GET /api/ci/dashboard — main dashboard data for a workspace
-app.get('/api/ci/dashboard', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster A)
+app.get('/api/ci/dashboard', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
-    if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
-    if (!isValidUuid(workspaceId)) return res.status(404).json({ error: 'Workspace not initialized', workspace_id: workspaceId });
     const lang = req.query.lang === 'en' ? 'en' : 'zh';
 
     // Get competitors
@@ -1861,7 +2031,8 @@ function deriveAggregateStatus(brandStatuses) {
 }
 
 // GET /api/ci/intelligence — all metrics for all competitors, grouped by domain
-app.get('/api/ci/intelligence', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster B)
+app.get('/api/ci/intelligence', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
@@ -2164,7 +2335,8 @@ function isValidUuid(s) {
 //   400  missing workspace_id
 //   404  no brief generated yet (frontend shows empty / "run today" CTA)
 //   500  query error
-app.get('/api/ci/brief', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster C)
+app.get('/api/ci/brief', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
@@ -2474,7 +2646,8 @@ app.get('/api/ci/brief', async (req, res) => {
 // button (CIBrief.tsx). The endpoint accepts any workspace so it can ship
 // to all customers later by removing that one gate, without touching server
 // business logic.
-app.post('/api/ci/brief/draft', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 3)
+app.post('/api/ci/brief/draft', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const workspaceId = req.body.workspace_id;
     const moveIndex = Number.isInteger(req.body.move_index) ? req.body.move_index : 0;
@@ -2729,7 +2902,8 @@ function buildRationale(labelZh, yourScore, bestComp) {
 //   - trends is ALWAYS {}. Same reason — needs weekly snapshots.
 //   - priority_rationale is template-built (no LLM). Deterministic,
 //     never hallucinated; tone upgrades come in V2.
-app.get('/api/ci/analytics', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster D)
+app.get('/api/ci/analytics', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
@@ -2943,7 +3117,8 @@ function resolveHierarchy(brandCategory) {
 //
 // Empty rows for an index_name across all competitors signal "not yet
 // computed" — the frontend renders "Coverage pending" rather than zeros.
-app.get('/api/ci/indices', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster B)
+app.get('/api/ci/indices', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
@@ -3088,7 +3263,8 @@ app.get('/api/ci/indices', async (req, res) => {
 //
 // Joins weekly_briefs with content_recommendations + product_opportunities
 // per-week. Returns at most `limit` (default 12) entries, newest first.
-app.get('/api/ci/library', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster C)
+app.get('/api/ci/library', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
@@ -3213,7 +3389,8 @@ app.get('/api/ci/library', async (req, res) => {
 // "See all metrics" collapsible on the Brief.
 //
 // Returns DomainScores shape: { consumer/product/marketing: { own, competitors } }.
-app.get('/api/ci/domain-scores', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster B)
+app.get('/api/ci/domain-scores', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
@@ -3275,7 +3452,8 @@ app.get('/api/ci/domain-scores', async (req, res) => {
 });
 
 // GET /api/ci/connections — list platform connections for a workspace
-app.get('/api/ci/connections', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster A)
+app.get('/api/ci/connections', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     const { rows } = await pool.query(
@@ -3314,7 +3492,8 @@ function decryptCookie(stored) {
 }
 
 // POST /api/ci/connections — connect a platform (store encrypted cookies)
-app.post('/api/ci/connections', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 3)
+app.post('/api/ci/connections', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const { workspace_id, platform, cookies } = req.body;
     if (!workspace_id || !platform || !cookies) {
@@ -3342,7 +3521,8 @@ app.post('/api/ci/connections', async (req, res) => {
 });
 
 // POST /api/ci/connections/check — check if cookies are still valid
-app.post('/api/ci/connections/check', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 3)
+app.post('/api/ci/connections/check', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const { workspace_id, platform } = req.body;
     if (!workspace_id || !platform) {
@@ -3416,7 +3596,10 @@ app.get('/api/ci/pipeline/status', async (req, res) => {
 });
 
 // POST /api/ci/run-analysis — start the scoring pipeline with job tracking
-app.post('/api/ci/run-analysis', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 3)
+// Most expensive route in the system — protecting from unauthorized
+// triggers (which would cost Apify+DeepSeek $) was high on the priority list.
+app.post('/api/ci/run-analysis', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   const { workspace_id } = req.body;
   if (!workspace_id) return res.status(400).json({ error: 'Missing workspace_id' });
 
@@ -3477,27 +3660,76 @@ app.post('/api/ci/run-analysis', async (req, res) => {
 });
 
 // GET /api/ci/analysis/status — check analysis job progress
-app.get('/api/ci/analysis/status', async (req, res) => {
+//
+// PHASE 4: accepts workspace_id OR job_id. Both paths now do ownership
+// verification via req.user.accountId so the caller can't poll someone
+// else's job status by guessing UUIDs.
+//
+// requireWorkspaceOwnership can't be used as a generic middleware here
+// because the workspace_id branch is just one of two. Inline check below
+// covers both:
+//   workspace_id branch: assert ownership directly
+//   job_id branch:       look up the job's workspace_id, assert ownership of that
+app.get('/api/ci/analysis/status', requireUserAuth, async (req, res) => {
   const { workspace_id, job_id } = req.query;
-
-  let query, params;
-  if (job_id) {
-    query = 'SELECT * FROM ci_analysis_jobs WHERE id = $1';
-    params = [job_id];
-  } else if (workspace_id) {
-    query = 'SELECT * FROM ci_analysis_jobs WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT 1';
-    params = [workspace_id];
-  } else {
+  if (!workspace_id && !job_id) {
     return res.status(400).json({ error: 'Missing workspace_id or job_id' });
   }
 
   try {
-    const { rows } = await pool.query(query, params);
-    if (rows.length === 0) {
-      return res.json({ status: 'none', message: 'No analysis has been run yet' });
+    let job;
+    if (job_id) {
+      if (!isValidUuid(String(job_id))) {
+        return res.status(400).json({ error: 'Invalid job_id' });
+      }
+      const { rows } = await pool.query(
+        'SELECT * FROM ci_analysis_jobs WHERE id = $1',
+        [String(job_id)]
+      );
+      if (rows.length === 0) {
+        return res.json({ status: 'none', message: 'No analysis has been run yet' });
+      }
+      job = rows[0];
+      // Ownership: verify the JOB's workspace is owned by the caller.
+      // Pre-fix: anyone with a JWT could poll any job's status by UUID
+      // (progress, current_brand, error_message → info disclosure).
+      const owned = await pool.query(
+        'SELECT 1 FROM workspaces WHERE id = $1 AND user_id = $2 LIMIT 1',
+        [job.workspace_id, req.user.accountId]
+      );
+      if (owned.rows.length === 0) {
+        console.warn(
+          `[Auth] DENIED account ${req.user.accountId} attempted GET /analysis/status ` +
+          `for job ${job_id} (workspace ${job.workspace_id} not owned)`
+        );
+        return res.status(403).json({ error: 'Job not in your workspace' });
+      }
+    } else {
+      // workspace_id branch
+      if (!isValidUuid(String(workspace_id))) {
+        return res.status(400).json({ error: 'Invalid workspace_id' });
+      }
+      const owned = await pool.query(
+        'SELECT 1 FROM workspaces WHERE id = $1 AND user_id = $2 LIMIT 1',
+        [String(workspace_id), req.user.accountId]
+      );
+      if (owned.rows.length === 0) {
+        console.warn(
+          `[Auth] DENIED account ${req.user.accountId} attempted GET /analysis/status ` +
+          `on workspace ${workspace_id} (not owned)`
+        );
+        return res.status(403).json({ error: 'Workspace not owned by this account' });
+      }
+      const { rows } = await pool.query(
+        'SELECT * FROM ci_analysis_jobs WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT 1',
+        [String(workspace_id)]
+      );
+      if (rows.length === 0) {
+        return res.json({ status: 'none', message: 'No analysis has been run yet' });
+      }
+      job = rows[0];
     }
 
-    const job = rows[0];
     res.json({
       job_id: job.id,
       status: job.status,
@@ -3523,7 +3755,14 @@ app.get('/api/ci/analysis/status', async (req, res) => {
 //     this endpoint must stay off on ECS so stray calls can't replay banned
 //     cookies from platform_connections. Flip to 'true' in backend/.env after
 //     Phase B0 (burner account) + Phase C (rate-limit enforcement) are done.
-app.post('/api/ci/scrape', async (req, res) => {
+// Auth: requireAdmin (Phase 4 hardening) — was requireUserAuth in Phase 3,
+// which let any logged-in user trigger Apify scrape of any brand for
+// $0.50-1 each. With M1 onboarding 30+ beta users imminent, that's a
+// real cost-abuse vector. Now restricted to callers carrying the shared
+// API_SECRET (Will/Joanna ops tools + the cron scheduler). End-user
+// scrape triggers happen via /api/admin/customers/:workspace_id/scrape
+// which Joanna's admin UI already calls.
+app.post('/api/ci/scrape', requireAdmin, async (req, res) => {
   if (process.env.SCRAPER_ENABLED !== 'true') {
     console.warn('[CI] /api/ci/scrape called but SCRAPER_ENABLED!=true — refusing');
     return res.status(503).json({
@@ -3726,7 +3965,8 @@ app.get('/api/ci/scrape-targets', async (req, res) => {
 });
 
 // GET /api/ci/alerts — get alerts for a workspace
-app.get('/api/ci/alerts', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster D)
+app.get('/api/ci/alerts', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   const { workspace_id, unread_only, limit } = req.query;
   if (!workspace_id) return res.status(400).json({ error: 'Missing workspace_id' });
 
@@ -3763,7 +4003,8 @@ app.get('/api/ci/alerts', async (req, res) => {
 });
 
 // POST /api/ci/alerts/read — mark alerts as read
-app.post('/api/ci/alerts/read', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 3)
+app.post('/api/ci/alerts/read', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   const { workspace_id, alert_ids } = req.body;
 
   try {
@@ -3789,7 +4030,8 @@ app.post('/api/ci/alerts/read', async (req, res) => {
 });
 
 // GET /api/ci/alerts/count — just the unread count (lightweight, for nav badge)
-app.get('/api/ci/alerts/count', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster D)
+app.get('/api/ci/alerts/count', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   const { workspace_id } = req.query;
   if (!workspace_id) return res.status(400).json({ error: 'Missing workspace_id' });
 
@@ -3808,7 +4050,8 @@ app.get('/api/ci/alerts/count', async (req, res) => {
 
 // GET /api/ci/trends — historical score data for trend charts
 // Query params: workspace_id, competitor, metric (momentum|threat|wtp), days (default 30)
-app.get('/api/ci/trends', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster D)
+app.get('/api/ci/trends', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   const { workspace_id, competitor, metric, days } = req.query;
 
   if (!workspace_id || !competitor) {
@@ -3860,7 +4103,8 @@ app.get('/api/ci/trends', async (req, res) => {
 
 // GET /api/ci/trends/summary — score changes for all competitors in a workspace
 // Returns: { competitors: [{ brand_name, momentum_current, momentum_7d_ago, momentum_direction, ... }] }
-app.get('/api/ci/trends/summary', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster D)
+app.get('/api/ci/trends/summary', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   const { workspace_id } = req.query;
   if (!workspace_id) return res.status(400).json({ error: 'Missing workspace_id' });
 
@@ -3920,7 +4164,8 @@ app.get('/api/ci/trends/summary', async (req, res) => {
 });
 
 // POST /api/ci/deep-dive — request a full-depth analysis of one competitor
-app.post('/api/ci/deep-dive', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 3)
+app.post('/api/ci/deep-dive', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   const { workspace_id, brand_name, platform } = req.body;
 
   if (!workspace_id || !brand_name) {
@@ -3969,7 +4214,8 @@ app.post('/api/ci/deep-dive', async (req, res) => {
 });
 
 // GET /api/ci/deep-dive/status — check deep dive job status
-app.get('/api/ci/deep-dive/status', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster E)
+app.get('/api/ci/deep-dive/status', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   const { job_id, workspace_id, brand_name } = req.query;
 
   let query, params;
@@ -4008,7 +4254,8 @@ app.get('/api/ci/deep-dive/status', async (req, res) => {
 });
 
 // GET /api/ci/deep-dive/result — get the full deep dive data for a brand
-app.get('/api/ci/deep-dive/result', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster E)
+app.get('/api/ci/deep-dive/result', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   const { workspace_id, brand_name } = req.query;
   if (!workspace_id || !brand_name) {
     return res.status(400).json({ error: 'Missing workspace_id or brand_name' });
@@ -4073,7 +4320,8 @@ app.get('/api/ci/deep-dive/result', async (req, res) => {
 });
 
 // GET /api/ci/brand-insights — per-brand AI insights for a workspace
-app.get('/api/ci/brand-insights', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster E)
+app.get('/api/ci/brand-insights', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   const { workspace_id } = req.query;
   if (!workspace_id) return res.status(400).json({ error: 'Missing workspace_id' });
   const lang = req.query.lang === 'en' ? 'en' : 'zh';
@@ -4183,7 +4431,9 @@ async function callLLM(prompt, maxTokens = 1000) {
 }
 
 // POST /api/ci/resolve-brand — auto-detect platform identifiers for a brand name
-app.post('/api/ci/resolve-brand', async (req, res) => {
+// Auth: requireUserAuth only (Phase 3 exception — no workspace_id in body).
+// Hits DeepSeek; auth prevents anonymous cost abuse.
+app.post('/api/ci/resolve-brand', requireUserAuth, async (req, res) => {
   const { brand_name } = req.body;
   if (!brand_name) return res.status(400).json({ error: 'Missing brand_name' });
 
@@ -4397,7 +4647,8 @@ function lookupNameInRegistry(platform, identifier) {
 // best-effort HTML fetch. Each step bails out the moment it has a valid
 // name. The HTML fetch is heavily gated by platform rate limits (XHS
 // especially), so it's the last resort, not the first.
-app.post('/api/ci/parse-link', async (req, res) => {
+// Auth: requireUserAuth only (Phase 3 exception — no workspace_id in body).
+app.post('/api/ci/parse-link', requireUserAuth, async (req, res) => {
   const { url } = req.body;
   if (!url) return res.status(400).json({ error: 'Missing url' });
 
@@ -4518,7 +4769,9 @@ app.post('/api/ci/parse-link', async (req, res) => {
 });
 
 // POST /api/ci/suggest-competitors — AI-powered competitor suggestions
-app.post('/api/ci/suggest-competitors', async (req, res) => {
+// Auth: requireUserAuth only (Phase 3 exception — no workspace_id in body).
+// Hits DeepSeek; auth prevents anonymous cost abuse.
+app.post('/api/ci/suggest-competitors', requireUserAuth, async (req, res) => {
   const { brand_name, brand_category, brand_price_range, brand_platforms } = req.body;
   // Match the UI language. Default zh because the demo + the bulk of users
   // are in zh-CN; English-mode YC reviewers need EN reasons or the AI
@@ -4805,7 +5058,6 @@ function verifyPassword(plain, stored) {
 }
 
 function signWorkspaceToken(workspace) {
-  const secret = process.env.JWT_SECRET || 'rebase-dev-secret';
   return jwt.sign(
     {
       sub: workspace.user_id,
@@ -4813,23 +5065,18 @@ function signWorkspaceToken(workspace) {
       email: workspace.user_email,
       brand_name: workspace.brand_name,
     },
-    secret,
+    getJwtSecret(),
     { expiresIn: '30d' }
   );
 }
 
 // Look up the caller's current workspace.
 //
-// Resolution order (Phase 1 of the auth migration — docs/AUTH-MIGRATION-PLAN.md):
-//   1. req.user.accountId  — set by requireUserAuth middleware after JWT verify
-//   2. req.headers['x-user-id']  — legacy header path, kept during transition
-//
-// Returns null if both are missing/unknown — callers should 401 in that case.
-//
-// Once Phase 4 cleanup lands, the x-user-id fallback gets removed; routes will
-// be required to mount requireUserAuth (or 401 here).
+// PHASE 4: Bearer-only. req.user must be populated by requireUserAuth
+// middleware before this is called; we no longer read x-user-id from headers.
+// Returns null if req.user.accountId is missing/unknown — callers should 401.
 async function findCallerWorkspace(req) {
-  const userId = (req.user && req.user.accountId) || req.headers['x-user-id'];
+  const userId = req.user && req.user.accountId;
   if (!userId) return null;
   const { rows } = await pool.query(
     'SELECT * FROM workspaces WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',

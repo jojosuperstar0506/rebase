@@ -75,30 +75,29 @@ function isValidAccountSub(sub: string): boolean {
   return /^[A-Z0-9_-]{3,}$/.test(sub);
 }
 
+// PHASE 4: Bearer-only. x-user-id header is gone — the backend ignores it.
+// Mirror of ciApi.ts getHeaders(). (TODO: extract to shared util to stop
+// duplicating this — being deferred to a follow-up so this PR stays focused
+// on the auth contract change.)
 function getHeaders(): Record<string, string> {
   const token = localStorage.getItem('rebase_token');
-  let userId = '';
-  if (token) {
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      const candidate = (payload.sub || payload.id || payload.email || '').toString();
-      if (isValidAccountSub(candidate)) {
-        userId = candidate;
-      } else if (candidate) {
-        console.warn('[CI Indices] Stale JWT detected. Clearing token; please log in again.');
-        localStorage.removeItem('rebase_token');
-      }
-    } catch {}
-  }
-  if (!userId) {
-    let anonId = localStorage.getItem('rebase_anon_id');
-    if (!anonId) {
-      anonId = 'anon-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-      localStorage.setItem('rebase_anon_id', anonId);
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (!token) return headers;
+
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const candidate = (payload.sub || payload.id || payload.email || '').toString();
+    if (isValidAccountSub(candidate)) {
+      headers['Authorization'] = `Bearer ${token}`;
+    } else if (candidate) {
+      console.warn('[CI Indices] Stale JWT detected. Clearing token; please log in again.');
+      localStorage.removeItem('rebase_token');
     }
-    userId = anonId;
+  } catch {
+    console.warn('[CI Indices] Malformed JWT in localStorage; clearing it.');
+    localStorage.removeItem('rebase_token');
   }
-  return { 'Content-Type': 'application/json', 'x-user-id': userId };
+  return headers;
 }
 
 export async function getIndices(workspaceId: string, lang: 'zh' | 'en' = 'zh'): Promise<IndicesResponse | null> {

@@ -1,8 +1,53 @@
 # Auth migration plan (Epic #85, sub-issue #142)
 
-**Status:** Phase 1 in flight (this PR).
-**Last updated:** 2026-05-26
+**Status:** ✅ All 4 phases + review fixes complete. PRs #158-#163 queued for merge.
+**Last updated:** 2026-05-31
 **Owner:** Will (backend), coordinates with Joanna for frontend swap.
+
+## ✅ Migration complete
+
+| Phase | PR | Status |
+|---|---|---|
+| 1 — JWT verify middleware + 8 routes opted in | #158 | ✅ Ready to merge |
+| 2A — Workspace ownership enforced (3 routes) | #159 | ✅ Ready to merge |
+| 2B-E — Workspace ownership enforced (13 routes) | #160 | ✅ Ready to merge |
+| 3 — POST/PATCH/DELETE write routes | #161 | ✅ Ready to merge |
+| Review fixes (3 critical IDOR + 9 minor) | #162 | ✅ Ready to merge |
+| 4 — Drop legacy x-user-id, admin-tighten /scrape, integration test #143 | #163 | ✅ Ready to merge |
+
+Sub-issues this closes:
+- **#142** — JWT + customer_id middleware on every protected endpoint ✅
+- **#143** — Integration test: customer A cannot read customer B's data ✅
+
+## Review-fix log (PR #162)
+
+A high-effort `/code-review` against the 4-PR stack surfaced 15 findings. PR #162 addresses the 10 most material ones before merge:
+
+| # | Severity | Bug | Fix shipped |
+|---|---|---|---|
+| 1 | 🔴 CRITICAL IDOR | body.workspace_id beat params.id on PATCH /workspace/:id | `requireWorkspaceOwnership` now rejects mismatched workspace_id across query/body/params with 400 |
+| 2 | 🔴 CRITICAL IDOR | query.workspace_id beat body.workspace_id on POST routes | Same fix as #1 — all sources must agree |
+| 3 | 🔴 CRITICAL auth bypass | JWT_SECRET defaulted to 'rebase-dev-secret' if env missing | New `getJwtSecret()` throws in NODE_ENV=production; one shared helper used by all 3 sign/verify sites |
+| 4 | 🟡 anon class bypass | `anon-XXX` x-user-id passed as authenticated | Legacy path rejects `anon-*` prefix |
+| 6 | 🟡 cascade integrity | DELETE competitor was 5 separate queries — orphan rows on network blip | Wrapped in BEGIN/COMMIT with `SELECT … FOR UPDATE`, restoring PR #115's promise |
+| 7 | 🟡 Phase 4 break | `ciIndices.ts` had a parallel `getHeaders` that didn't send Bearer | Updated to mirror `ciApi.ts` (TODO: extract to shared util) |
+| 8 | 🟡 ops break | `SCRAPING-DEPLOY-RUNBOOK.md` curl 401s after Phase 3 | Updated curl with `x-user-id` header + owner-lookup query |
+| 9 | 🟡 silent no-op | PATCH workspace handler still read body.user_id | Now uses `req.user.accountId` |
+| 10 | 🟡 silent downgrade | `Bearer` prefix was case-sensitive | Regex `/^Bearer\s+/i` |
+| 12 | 🟢 minor | DELETE :id non-UUID → generic 500 | `isValidUuid` guard at top |
+| 13 | 🟢 minor | Frontend malformed-token catch was empty | Now clears localStorage like the stale-sub branch |
+| 14 | 🟢 defensive | Duplicate query-key produces array | `String()` coercion makes array a non-UUID string → clean 400 |
+
+Findings 5, 11, 15 were re-checked and judged non-issues or out-of-scope:
+- **5** (alerts/read break): frontend always sends workspace_id; verified clean
+- **11** (invalid-UUID 400 vs []): frontend hardening, separate concern — handled at frontend layer
+- **15** (POST /api/ci/workspace unmigrated): documented Phase 1 exception (anonymous onboarding requirement)
+
+## Decisions locked (2026-05-31)
+
+1. **Enforce-immediately, no dry-run period.** At 1-customer scale (OMI), the cost of a missed-route false-403 is "Will pings me, I fix in 5 min." Dry-run overhead doesn't pay back yet. Revisit when real beta users join (M1 exit).
+2. **Drop `x-user-id` fallback at Phase 4** (the safer default). Keep both auth paths working through Phases 2-3 so any missed call site still resolves. Final integration test in Phase 4 verifies every route is JWT-verified before we remove the legacy path.
+3. **Routes without a `workspace_id` param** (e.g. `/api/ci/scrape-targets`, internal service endpoints) stay on `requireSecret`-only — no `requireWorkspaceOwnership` since there's nothing to check. They're documented as exceptions in the cluster list below.
 
 ---
 
@@ -14,6 +59,31 @@ Today, **any logged-in user can read any other user's data** by manipulating `?w
 2. Workspace UUIDs are not easily enumerable from outside.
 
 Both of those go away the moment we onboard beta users (the M1 goal). This doc captures the migration plan so we don't ship M1 with this hole open.
+
+---
+
+## Important: "drop x-user-id" ≠ "drop user identifiers"
+
+This is the most-confused part of the plan, so calling it out up-front. Two things easily blur together:
+
+| The user identifier (KEEP forever) | The `x-user-id` HTTP header (DROP in Phase 4) |
+|---|---|
+| `RB-OMI-A1B2` (invite code, or v2 UUID) | The HTTP header `x-user-id: RB-OMI-A1B2` |
+| Stored in `workspaces.user_id`, in JWT's `sub` claim, in every log line, in every DB query | One of two transport mechanisms the frontend uses to tell the backend "I am this user" |
+| Identifies the customer; appears everywhere | Just plumbing |
+
+**The same user ID travels through two channels today:**
+
+- **Channel A — Authorization header (cryptographically signed):**
+  `Authorization: Bearer eyJ...` → decoded payload: `{ sub: "RB-OMI-A1B2", ... }`. Signature proves the user really logged in.
+- **Channel B — x-user-id header (plain string):**
+  `x-user-id: RB-OMI-A1B2` → just a string. Anyone with `API_SECRET` can write any value here. No tamper protection.
+
+**Phase 4 = stop accepting Channel B, only accept Channel A.** `req.user.accountId` is still populated on every authenticated request. Logs still say `account RB-OMI-A1B2 attempted X`. DB queries still scope on `user_id = 'RB-OMI-A1B2'`. **Nothing about identification changes** — we just remove the trusted-text-input bypass.
+
+Analogy: it's like switching from "show me your name on a Post-it" to "show me your government ID." You still have a name in both cases. We just stop accepting Post-its.
+
+---
 
 ---
 

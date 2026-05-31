@@ -48,36 +48,81 @@ function verifyJwt(token, secret) {
 }
 
 // ── Middleware (mirror of backend/server.js requireUserAuth) ────────────────
+// PHASE 4: Bearer-only. The legacy x-user-id fallback is gone — no JWT,
+// no req.user, 401. Kept in sync with backend/server.js. Edit one, edit both.
 function requireUserAuth(req, res, next) {
   const authHeader = req.headers.authorization || '';
-  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  if (bearer) {
-    try {
-      const payload = verifyJwt(bearer, TEST_SECRET);
-      req.user = {
-        accountId: (payload.sub || '').toString(),
-        email: payload.email || '',
-        name: payload.name || '',
-        tokenWorkspaceId: payload.workspace_id || null,
-        verifiedVia: 'jwt',
-      };
-      return next();
-    } catch {
-      // fall through to legacy path
+  // Case-insensitive Bearer prefix (review fix #10).
+  const bearerMatch = /^Bearer\s+(.+)$/i.exec(authHeader);
+  const bearer = bearerMatch ? bearerMatch[1] : null;
+  if (!bearer) {
+    return res.status(401).json({ error: 'Authentication required (Bearer token)' });
+  }
+  try {
+    const payload = verifyJwt(bearer, TEST_SECRET);
+    req.user = {
+      accountId: (payload.sub || '').toString(),
+      email: payload.email || '',
+      name: payload.name || '',
+      tokenWorkspaceId: payload.workspace_id || null,
+      verifiedVia: 'jwt',
+    };
+    if (!req.user.accountId) {
+      return res.status(401).json({ error: 'Token missing subject' });
+    }
+    return next();
+  } catch {
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+}
+
+// ── Middleware (mirror of backend/server.js requireWorkspaceOwnership) ──────
+// This is the new "all sources must agree" middleware from review fix #1+2.
+// In production it does a DB query — for tests we stub the ownership lookup
+// to a known good account/workspace pair.
+const TEST_OWNED_WORKSPACE_ID = 'aaaaaaaa-1111-2222-3333-444444444444';
+const TEST_OWNED_ACCOUNT_ID = 'RB-TEST-USER';
+function ownershipCheckStub(workspaceId, accountId) {
+  return workspaceId === TEST_OWNED_WORKSPACE_ID && accountId === TEST_OWNED_ACCOUNT_ID;
+}
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isValidUuid(s) { return typeof s === 'string' && UUID_PATTERN.test(s); }
+
+async function requireWorkspaceOwnership(req, res, next) {
+  const candidates = [];
+  if (req.query && req.query.workspace_id !== undefined) {
+    candidates.push({ src: 'query.workspace_id', val: req.query.workspace_id });
+  }
+  if (req.body && req.body.workspace_id !== undefined) {
+    candidates.push({ src: 'body.workspace_id', val: req.body.workspace_id });
+  }
+  if (req.params && req.params.workspace_id !== undefined) {
+    candidates.push({ src: 'params.workspace_id', val: req.params.workspace_id });
+  }
+  if (req.params && req.params.id !== undefined) {
+    candidates.push({ src: 'params.id', val: req.params.id });
+  }
+  if (candidates.length === 0) {
+    return res.status(400).json({ error: 'Missing workspace_id' });
+  }
+  const stringified = candidates.map((c) => ({ src: c.src, val: String(c.val) }));
+  const first = stringified[0].val;
+  for (const c of stringified.slice(1)) {
+    if (c.val !== first) {
+      return res.status(400).json({ error: 'workspace_id mismatch' });
     }
   }
-  const legacyId = req.headers['x-user-id'];
-  if (legacyId) {
-    req.user = {
-      accountId: legacyId.toString(),
-      email: '',
-      name: '',
-      tokenWorkspaceId: null,
-      verifiedVia: 'legacy_header',
-    };
-    return next();
+  const workspaceId = first;
+  if (!isValidUuid(workspaceId)) {
+    return res.status(400).json({ error: 'Invalid workspace_id' });
   }
-  return res.status(401).json({ error: 'Authentication required' });
+  if (!req.user || !req.user.accountId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  if (!ownershipCheckStub(workspaceId, req.user.accountId)) {
+    return res.status(403).json({ error: 'Workspace not owned by this account' });
+  }
+  next();
 }
 
 // ── Mock req/res helpers ────────────────────────────────────────────────────
@@ -118,7 +163,7 @@ test('rejects request with no auth (401)', async () => {
   const { res, nextCalled } = await runMiddleware({});
   assert.strictEqual(nextCalled, false);
   assert.strictEqual(res.statusCode, 401);
-  assert.strictEqual(res.body.error, 'Authentication required');
+  assert.match(res.body.error, /Bearer/);
 });
 
 test('accepts valid Bearer JWT and populates req.user from payload', async () => {
@@ -133,37 +178,34 @@ test('accepts valid Bearer JWT and populates req.user from payload', async () =>
   assert.strictEqual(req.user.verifiedVia, 'jwt');
 });
 
-test('falls back to x-user-id when no Bearer present (legacy path)', async () => {
-  const { req, nextCalled } = await runMiddleware({ 'x-user-id': 'RB-LEGACY-CAFE' });
-  assert.strictEqual(nextCalled, true);
-  assert.strictEqual(req.user.accountId, 'RB-LEGACY-CAFE');
-  assert.strictEqual(req.user.verifiedVia, 'legacy_header');
+test('PHASE 4: x-user-id alone is no longer accepted (was Phase 1-3 legacy path)', async () => {
+  const { res, nextCalled } = await runMiddleware({ 'x-user-id': 'RB-LEGACY-CAFE' });
+  assert.strictEqual(nextCalled, false);
+  assert.strictEqual(res.statusCode, 401);
 });
 
-test('falls back to x-user-id when Bearer is tampered/invalid (Phase 1 leniency)', async () => {
+test('PHASE 4: tampered Bearer 401s — no x-user-id fallback', async () => {
   const tampered = signJwt({ sub: 'spoof' }, 'wrong-secret');
-  const { req, nextCalled } = await runMiddleware({
+  const { res, nextCalled } = await runMiddleware({
     Authorization: `Bearer ${tampered}`,
-    'x-user-id': 'RB-REAL-USER',
+    'x-user-id': 'RB-REAL-USER',   // ignored — no fallback
   });
-  assert.strictEqual(nextCalled, true);
-  // Should land on the legacy path since JWT verify failed
-  assert.strictEqual(req.user.accountId, 'RB-REAL-USER');
-  assert.strictEqual(req.user.verifiedVia, 'legacy_header');
+  assert.strictEqual(nextCalled, false);
+  assert.strictEqual(res.statusCode, 401);
 });
 
-test('rejects when Bearer fails and no x-user-id fallback present', async () => {
+test('rejects when Bearer fails (no fallback)', async () => {
   const bad = signJwt({ sub: 'spoof' }, 'wrong-secret');
   const { res, nextCalled } = await runMiddleware({ Authorization: `Bearer ${bad}` });
   assert.strictEqual(nextCalled, false);
   assert.strictEqual(res.statusCode, 401);
 });
 
-test('prefers Bearer over x-user-id when both present (Bearer wins)', async () => {
+test('Bearer wins regardless of any other headers', async () => {
   const token = signJwt({ sub: 'RB-JWT-USER' }, TEST_SECRET);
   const { req, nextCalled } = await runMiddleware({
     Authorization: `Bearer ${token}`,
-    'x-user-id': 'RB-DIFFERENT-USER',   // should be ignored
+    'x-user-id': 'RB-DIFFERENT-USER',   // ignored
   });
   assert.strictEqual(nextCalled, true);
   assert.strictEqual(req.user.accountId, 'RB-JWT-USER');
@@ -181,18 +223,170 @@ test('extracts workspace_id from v2 token payload', async () => {
   assert.strictEqual(req.user.tokenWorkspaceId, 'ws-uuid-123');
 });
 
-test('malformed Bearer (not three parts) falls through to legacy path', async () => {
-  const { req, nextCalled } = await runMiddleware({
+test('PHASE 4: malformed Bearer 401s — no fallback', async () => {
+  const { res, nextCalled } = await runMiddleware({
     Authorization: 'Bearer not.a.valid.token',
-    'x-user-id': 'RB-FALLBACK',
+    'x-user-id': 'RB-WOULD-HAVE-WORKED-IN-PHASE-3',
   });
-  assert.strictEqual(nextCalled, true);
-  assert.strictEqual(req.user.verifiedVia, 'legacy_header');
-  assert.strictEqual(req.user.accountId, 'RB-FALLBACK');
+  assert.strictEqual(nextCalled, false);
+  assert.strictEqual(res.statusCode, 401);
 });
 
 test('empty Bearer token treated as missing (no crash)', async () => {
   const { res, nextCalled } = await runMiddleware({ Authorization: 'Bearer ' });
   assert.strictEqual(nextCalled, false);
+  assert.strictEqual(res.statusCode, 401);
+});
+
+test('PHASE 4: token with empty sub claim 401s ("token missing subject")', async () => {
+  const token = signJwt({ sub: '', email: 'a@b.cn' }, TEST_SECRET);
+  const { res, nextCalled } = await runMiddleware({ Authorization: `Bearer ${token}` });
+  assert.strictEqual(nextCalled, false);
+  assert.strictEqual(res.statusCode, 401);
+});
+
+// ── Review-fix regression tests (still relevant in Phase 4) ─────────────────
+
+test('REVIEW FIX #10: accepts lowercase bearer prefix (case-insensitive)', async () => {
+  const token = signJwt({ sub: 'RB-LOWERCASE-USER' }, TEST_SECRET);
+  const { req, nextCalled } = await runMiddleware({
+    Authorization: `bearer ${token}`,
+  });
+  assert.strictEqual(nextCalled, true);
+  assert.strictEqual(req.user.accountId, 'RB-LOWERCASE-USER');
+  assert.strictEqual(req.user.verifiedVia, 'jwt');
+});
+
+test('REVIEW FIX #10: accepts ALL-CAPS BEARER prefix', async () => {
+  const token = signJwt({ sub: 'RB-UPPER-USER' }, TEST_SECRET);
+  const { req, nextCalled } = await runMiddleware({
+    Authorization: `BEARER ${token}`,
+  });
+  assert.strictEqual(nextCalled, true);
+  assert.strictEqual(req.user.verifiedVia, 'jwt');
+});
+
+// ── Ownership middleware tests (review fix #1+#2) ──────────────────────────
+
+// Helper to run requireWorkspaceOwnership with a pre-populated req.user.
+function runOwnership(req) {
+  return new Promise((resolve) => {
+    const res = mockRes();
+    let nextCalled = false;
+    requireWorkspaceOwnership(req, res, () => {
+      nextCalled = true;
+      resolve({ req, res, nextCalled });
+    });
+    setImmediate(() => { if (!nextCalled) resolve({ req, res, nextCalled }); });
+  });
+}
+
+const OWNED_REQ_USER = { accountId: TEST_OWNED_ACCOUNT_ID, verifiedVia: 'jwt' };
+
+test('REVIEW FIX #1: ownership passes when single source (query) matches owned workspace', async () => {
+  const { res, nextCalled } = await runOwnership({
+    user: OWNED_REQ_USER,
+    query: { workspace_id: TEST_OWNED_WORKSPACE_ID },
+    body: {},
+    params: {},
+  });
+  assert.strictEqual(nextCalled, true, res.body && res.body.error);
+});
+
+test('REVIEW FIX #1: ownership passes when all sources agree', async () => {
+  const { nextCalled } = await runOwnership({
+    user: OWNED_REQ_USER,
+    query: { workspace_id: TEST_OWNED_WORKSPACE_ID },
+    body: { workspace_id: TEST_OWNED_WORKSPACE_ID },
+    params: { id: TEST_OWNED_WORKSPACE_ID },
+  });
+  assert.strictEqual(nextCalled, true);
+});
+
+test('REVIEW FIX #1 (CRITICAL): rejects body.workspace_id vs params.id mismatch with 400', async () => {
+  // The IDOR vector: PATCH /api/ci/workspace/<victim> with body { workspace_id: <owned> }.
+  // Pre-fix: middleware authorized body (owned), handler operated on params.id (victim).
+  // Post-fix: 400 'workspace_id mismatch'.
+  const { res, nextCalled } = await runOwnership({
+    user: OWNED_REQ_USER,
+    query: {},
+    body: { workspace_id: TEST_OWNED_WORKSPACE_ID },
+    params: { id: 'bbbbbbbb-1111-2222-3333-444444444444' },  // victim
+  });
+  assert.strictEqual(nextCalled, false);
+  assert.strictEqual(res.statusCode, 400);
+  assert.match(res.body.error, /mismatch/);
+});
+
+test('REVIEW FIX #2 (CRITICAL): rejects query.workspace_id vs body.workspace_id mismatch with 400', async () => {
+  // The IDOR vector: POST /api/ci/run-analysis?workspace_id=<owned> with body { workspace_id: <victim> }.
+  // Pre-fix: middleware authorized query (owned), handler operated on body (victim).
+  // Post-fix: 400 'workspace_id mismatch'.
+  const { res, nextCalled } = await runOwnership({
+    user: OWNED_REQ_USER,
+    query: { workspace_id: TEST_OWNED_WORKSPACE_ID },
+    body: { workspace_id: 'bbbbbbbb-1111-2222-3333-444444444444' },  // victim
+    params: {},
+  });
+  assert.strictEqual(nextCalled, false);
+  assert.strictEqual(res.statusCode, 400);
+  assert.match(res.body.error, /mismatch/);
+});
+
+test('REVIEW FIX #14: array workspace_id (duplicate query keys) safely rejected as invalid UUID', async () => {
+  // Express parses `?workspace_id=a&workspace_id=b` as the array ['a','b'].
+  // After String() coercion the candidate becomes 'a,b' — not a UUID — so we
+  // get a clean 400 instead of an array reaching pg.
+  const { res, nextCalled } = await runOwnership({
+    user: OWNED_REQ_USER,
+    query: { workspace_id: [TEST_OWNED_WORKSPACE_ID, 'bbbbbbbb-1111-2222-3333-444444444444'] },
+    body: {},
+    params: {},
+  });
+  assert.strictEqual(nextCalled, false);
+  assert.strictEqual(res.statusCode, 400);
+});
+
+test('ownership rejects when user does not own workspace (403)', async () => {
+  const { res, nextCalled } = await runOwnership({
+    user: { accountId: 'RB-OTHER-USER', verifiedVia: 'jwt' },
+    query: { workspace_id: TEST_OWNED_WORKSPACE_ID },
+    body: {},
+    params: {},
+  });
+  assert.strictEqual(nextCalled, false);
+  assert.strictEqual(res.statusCode, 403);
+});
+
+test('ownership 400 when no workspace_id source present', async () => {
+  const { res } = await runOwnership({
+    user: OWNED_REQ_USER,
+    query: {},
+    body: {},
+    params: {},
+  });
+  assert.strictEqual(res.statusCode, 400);
+  assert.match(res.body.error, /Missing/);
+});
+
+test('ownership 400 on non-UUID workspace_id', async () => {
+  const { res } = await runOwnership({
+    user: OWNED_REQ_USER,
+    query: { workspace_id: 'not-a-uuid' },
+    body: {},
+    params: {},
+  });
+  assert.strictEqual(res.statusCode, 400);
+});
+
+test('ownership 401 when middleware ordered wrong (no req.user)', async () => {
+  // Defense-in-depth: even if someone forgets requireUserAuth, ownership
+  // middleware refuses to authorize against an unset req.user.
+  const { res } = await runOwnership({
+    user: undefined,
+    query: { workspace_id: TEST_OWNED_WORKSPACE_ID },
+    body: {},
+    params: {},
+  });
   assert.strictEqual(res.statusCode, 401);
 });
