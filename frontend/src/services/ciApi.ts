@@ -86,6 +86,114 @@ async function tryApi<T>(path: string, options?: RequestInit): Promise<T | null>
   }
 }
 
+// ─── Request dedupe + min-interval cache (Fixes #132) ─────────────
+// Several read endpoints (/dashboard, /connections, /alerts) are called
+// by multiple components on the same page AND re-fire on every parent
+// re-render because consumers pass array props in useEffect deps. The
+// result is dozens of parallel hits → backend 429s → "Could not start
+// analysis" errors in the UI.
+//
+// `cachedGet` solves this at the API layer:
+//   1. **Dedupe** — concurrent calls for the same path share one promise.
+//   2. **Cache** — within `minIntervalMs` of the last successful fetch,
+//      return the cached value instead of hitting the server.
+//   3. **429 backoff** — on rate-limit, return cached and apply a quiet
+//      window before re-fetching (no retry storm).
+//
+// Mutations call `invalidateCiCache(prefix)` to drop stale entries.
+
+type CacheEntry<T> = {
+  data: T | null;
+  fetchedAt: number;
+  inFlight: Promise<T | null> | null;
+};
+
+const responseCache = new Map<string, CacheEntry<unknown>>();
+
+async function cachedGet<T>(path: string, minIntervalMs: number): Promise<T | null> {
+  const now = Date.now();
+  const entry = responseCache.get(path) as CacheEntry<T> | undefined;
+
+  // 1. Dedupe: a fetch is already in flight for this path
+  if (entry?.inFlight) return entry.inFlight;
+
+  // 2. Cache hit: recent successful response, return it
+  if (entry && entry.data !== null && now - entry.fetchedAt < minIntervalMs) {
+    return entry.data;
+  }
+
+  // 3. Fire a fresh request
+  const promise: Promise<T | null> = (async () => {
+    try {
+      const res = await fetch(`${API_BASE}${path}`, { headers: getHeaders() });
+
+      // 429: don't retry, hold the cache, log loudly
+      if (res.status === 429) {
+        console.warn(`[CI API] GET ${path} → 429 (rate limited; using cached for ${minIntervalMs}ms)`);
+        responseCache.set(path, {
+          data: entry?.data ?? null,
+          fetchedAt: now,            // bumps the cache window forward → no immediate retry
+          inFlight: null,
+        });
+        return entry?.data ?? null;
+      }
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => '');
+        console.warn(`[CI API] GET ${path} → ${res.status}`, errorText.slice(0, 200));
+        // Don't cache failures; just clear in-flight
+        const cur = responseCache.get(path);
+        if (cur) cur.inFlight = null;
+        return null;
+      }
+
+      const data = (await res.json()) as T;
+      responseCache.set(path, { data, fetchedAt: now, inFlight: null });
+      return data;
+    } catch (err) {
+      console.warn(`[CI API] GET ${path} → network error`, (err as Error).message);
+      const cur = responseCache.get(path);
+      if (cur) cur.inFlight = null;
+      return entry?.data ?? null;     // degrade to last-known-good, not null
+    }
+  })();
+
+  responseCache.set(path, {
+    data: entry?.data ?? null,
+    fetchedAt: entry?.fetchedAt ?? 0,
+    inFlight: promise,
+  });
+
+  return promise;
+}
+
+/**
+ * Drop cached entries whose path starts with `prefix` (or all if omitted).
+ * Call after mutations that invalidate cached state so the next read goes
+ * to the server. Example: `invalidateCiCache('/competitors')` after adding
+ * or removing a competitor.
+ */
+export function invalidateCiCache(prefix?: string): void {
+  if (!prefix) {
+    responseCache.clear();
+    return;
+  }
+  for (const k of Array.from(responseCache.keys())) {
+    if (k.startsWith(prefix)) responseCache.delete(k);
+  }
+}
+
+// Min-interval windows per endpoint family. Picked to match the issue's
+// acceptance criteria: /alerts ≥30s, /connections ≥60s. Dashboard is
+// heavier and changes slowly → 30s. These are dedupe windows, not polling
+// schedules — actual polling cadence stays whatever each consumer set
+// (e.g. useCIAlertCount still polls every 5 min, just gets dedupe for free).
+const CACHE_MS = {
+  dashboard: 30_000,
+  connections: 60_000,
+  alerts: 30_000,
+} as const;
+
 // Verbose variant — same fetch logic, but returns status + body so the UI
 // can distinguish "auth failed" / "backend down" / "valid response, empty
 // payload" / "LLM upstream error" instead of conflating them all into
@@ -321,7 +429,12 @@ export async function addCompetitor(competitor: Partial<Competitor> & { workspac
       method: 'POST',
       body: JSON.stringify(competitor),
     });
-    if (apiData) return apiData;
+    if (apiData) {
+      // Adding a competitor changes the dashboard + competitor list
+      invalidateCiCache('/competitors');
+      invalidateCiCache('/dashboard');
+      return apiData;
+    }
   }
   // Fall back: save locally
   const local = getCICompetitors();
@@ -341,7 +454,11 @@ export async function addCompetitor(competitor: Partial<Competitor> & { workspac
 export async function removeCompetitor(id: string, workspaceId?: string): Promise<boolean> {
   if (workspaceId && workspaceId !== 'local') {
     const res = await tryApi(`/competitors/${id}`, { method: 'DELETE' });
-    if (res !== null) return true;
+    if (res !== null) {
+      invalidateCiCache('/competitors');
+      invalidateCiCache('/dashboard');
+      return true;
+    }
   }
   // Fall back: remove locally
   const local = getCICompetitors();
@@ -380,9 +497,9 @@ export function stableScore(name: string, offset: number, min: number, range: nu
 }
 
 export async function getDashboard(workspaceId?: string): Promise<{ data: DashboardData; source: 'api' | 'local' | 'demo' }> {
-  // Try API
+  // Try API (cached + deduped — Fixes #132)
   if (workspaceId && workspaceId !== 'local') {
-    const apiData = await tryApi<DashboardData>(`/dashboard?workspace_id=${workspaceId}`);
+    const apiData = await cachedGet<DashboardData>(`/dashboard?workspace_id=${workspaceId}`, CACHE_MS.dashboard);
     if (apiData && apiData.brands) {
       return { data: apiData, source: 'api' };
     }
@@ -447,7 +564,9 @@ export interface PlatformConnection {
 
 export async function getConnections(workspaceId?: string): Promise<{ data: PlatformConnection[]; source: 'api' | 'local' }> {
   if (workspaceId && workspaceId !== 'local') {
-    const apiData = await tryApi<PlatformConnection[]>(`/connections?workspace_id=${workspaceId}`);
+    // Cached + deduped (Fixes #132) — multiple components reading this
+    // share one in-flight request and the result is cached for 60s.
+    const apiData = await cachedGet<PlatformConnection[]>(`/connections?workspace_id=${workspaceId}`, CACHE_MS.connections);
     if (apiData && Array.isArray(apiData)) {
       return { data: apiData, source: 'api' };
     }
@@ -465,10 +584,12 @@ export async function getConnections(workspaceId?: string): Promise<{ data: Plat
 
 export async function saveConnection(workspaceId: string, platform: string, cookies: string): Promise<PlatformConnection | null> {
   if (workspaceId && workspaceId !== 'local') {
-    return await tryApi<PlatformConnection>('/connections', {
+    const result = await tryApi<PlatformConnection>('/connections', {
       method: 'POST',
       body: JSON.stringify({ workspace_id: workspaceId, platform, cookies }),
     });
+    if (result) invalidateCiCache('/connections');
+    return result;
   }
   return null;
 }
@@ -829,7 +950,11 @@ export async function getAlerts(
   unreadOnly: boolean = false
 ): Promise<{ alerts: CIAlert[]; unread_count: number }> {
   const params = `workspace_id=${encodeURIComponent(workspaceId)}${unreadOnly ? '&unread_only=true' : ''}`;
-  const data = await tryApi<{ alerts: CIAlert[]; unread_count: number }>(`/alerts?${params}`);
+  // Cached + deduped (Fixes #132). CIAlertFeed previously fetched on every
+  // parent render because `competitors` was in the useEffect deps as an
+  // array — that's fixed there too, but the cache makes the bug impossible
+  // to reintroduce.
+  const data = await cachedGet<{ alerts: CIAlert[]; unread_count: number }>(`/alerts?${params}`, CACHE_MS.alerts);
   return data || { alerts: [], unread_count: 0 };
 }
 
@@ -845,6 +970,8 @@ export async function markAlertsRead(workspaceId: string, alertIds?: string[]): 
     method: 'POST',
     body: JSON.stringify({ workspace_id: workspaceId, alert_ids: alertIds }),
   });
+  // Read status changed → drop cached alerts/count so the next read reflects it
+  invalidateCiCache('/alerts');
 }
 
 // ─── Demo Data (last resort fallback) ─────────────────────────────

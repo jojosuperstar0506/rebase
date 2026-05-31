@@ -192,7 +192,15 @@ export default function CIAlertFeed({ workspaceId, competitors, source }: CIAler
 
   const unreadCount = alerts.filter(a => !a.is_read).length;
 
-  // Load alerts — try API, fall back to mock
+  // Load alerts — try API, fall back to mock.
+  //
+  // Fixes #132: `competitors` was previously in this deps array as a raw
+  // object reference. Parent re-renders construct a new array on every
+  // render, so this useEffect re-fired (and re-called /alerts) on every
+  // render — driving the backend 429s. Reduce to a stable string signature
+  // so we only re-fire when the actual competitor set changes.
+  const competitorsKey = competitors.map(c => c.brand_name).sort().join('|');
+
   useEffect(() => {
     let cancelled = false;
 
@@ -215,7 +223,8 @@ export default function CIAlertFeed({ workspaceId, competitors, source }: CIAler
 
     load();
     return () => { cancelled = true; };
-  }, [workspaceId, competitors, lang]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId, competitorsKey, lang]);
 
   // Mark a single alert as read (local state + API best-effort)
   function markOneRead(alertId: string) {
