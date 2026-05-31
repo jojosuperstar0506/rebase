@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { Bell, BellOff } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -192,7 +192,23 @@ export default function CIAlertFeed({ workspaceId, competitors, source }: CIAler
 
   const unreadCount = alerts.filter(a => !a.is_read).length;
 
-  // Load alerts — try API, fall back to mock
+  // Load alerts — try API, fall back to mock.
+  //
+  // Fix for #132: pre-fix this useEffect had `competitors` and `lang` in its
+  // dep array. Callers like CIBrief.tsx pass `competitors={[]}` as a fresh
+  // array literal on every render → useEffect ran on every parent render →
+  // /api/ci/alerts was hammered until the global rate limiter (20/min/IP)
+  // returned 429, which the user saw as "Could not start analysis".
+  //
+  // Fix: only re-fetch when workspaceId changes (the only thing that genuinely
+  // changes which alerts to load). competitors + lang are accessed via refs
+  // inside the effect so the mock-fallback path uses the latest values
+  // without re-firing the effect.
+  const competitorsRef = useRef(competitors);
+  const langRef = useRef(lang);
+  useEffect(() => { competitorsRef.current = competitors; }, [competitors]);
+  useEffect(() => { langRef.current = lang; }, [lang]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -208,14 +224,14 @@ export default function CIAlertFeed({ workspaceId, competitors, source }: CIAler
       }
       // API not available or no alerts — use mock data
       if (!cancelled) {
-        setAlerts(generateMockAlerts(competitors, lang as 'zh' | 'en'));
+        setAlerts(generateMockAlerts(competitorsRef.current, langRef.current as 'zh' | 'en'));
         setLoading(false);
       }
     }
 
     load();
     return () => { cancelled = true; };
-  }, [workspaceId, competitors, lang]);
+  }, [workspaceId]);
 
   // Mark a single alert as read (local state + API best-effort)
   function markOneRead(alertId: string) {
