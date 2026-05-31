@@ -52,6 +52,116 @@ function requireSecret(req, res, next) {
   next();
 }
 
+// ── Fix 3: Per-user authentication (Epic #85, sub-issue #142) ───────────────
+// Phase 1 of the auth migration — see docs/AUTH-MIGRATION-PLAN.md.
+//
+// Today's auth model is "shared secret pretending to be auth": every
+// /api/* call passes requireSecret (which checks x-rebase-secret, a
+// Vercel→ECS shared key), and the per-user identity comes from an
+// x-user-id header that the backend trusts blindly. Anyone who learns the
+// shared secret can spoof any user by setting x-user-id to any value.
+//
+// requireUserAuth fixes this for the routes that opt in to it (this
+// phase: /api/ci/workspaces, /api/ci/workspace, /api/v2/onboarding/*).
+// It prefers a signed Authorization: Bearer <JWT> over the legacy
+// x-user-id header. During Phase 1 both paths populate req.user so
+// existing frontend code keeps working — the legacy path logs a
+// deprecation warning we use to find untouched call sites for Phase 2.
+//
+// IMPORTANT: routes that don't apply this middleware are unchanged. This
+// PR adds capability, removes nothing. Phase 2 wires requireWorkspaceOwnership
+// (also defined below) to actually enforce IDOR prevention cluster by cluster.
+function requireUserAuth(req, res, next) {
+  // 1) Preferred path: Authorization: Bearer <jwt>
+  const authHeader = req.headers.authorization || '';
+  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+  if (bearer) {
+    try {
+      const secret = process.env.JWT_SECRET || 'rebase-dev-secret';
+      const payload = jwt.verify(bearer, secret);
+      req.user = {
+        accountId: (payload.sub || '').toString(),
+        email: payload.email || '',
+        name: payload.name || '',
+        // workspace_id is present on v2 tokens (signWorkspaceToken) but not on
+        // v1 invite-code tokens. Routes that need workspace context should
+        // still call findCallerWorkspace(req) — this is just a hint.
+        tokenWorkspaceId: payload.workspace_id || null,
+        verifiedVia: 'jwt',
+      };
+      return next();
+    } catch (e) {
+      // Fall through to legacy x-user-id path during Phase 1. Phase 4 will
+      // tighten this to "return 401 immediately" once telemetry confirms
+      // all clients send valid Bearer tokens.
+      console.warn(`[Auth] JWT verify failed on ${req.path}: ${e.message}`);
+    }
+  }
+
+  // 2) Legacy path: x-user-id header (DEPRECATED — to be removed in Phase 4)
+  const legacyId = req.headers['x-user-id'];
+  if (legacyId) {
+    // Toggle AUTH_LOG_LEGACY=1 in env when actively auditing which call
+    // sites still send x-user-id without a Bearer token. Default off to
+    // avoid log spam during normal Phase 1 operation.
+    if (process.env.AUTH_LOG_LEGACY === '1') {
+      console.warn(`[Auth] LEGACY x-user-id used (no JWT) on ${req.method} ${req.path}`);
+    }
+    req.user = {
+      accountId: legacyId.toString(),
+      email: '',
+      name: '',
+      tokenWorkspaceId: null,
+      verifiedVia: 'legacy_header',
+    };
+    return next();
+  }
+
+  // 3) No auth at all → 401
+  return res.status(401).json({ error: 'Authentication required' });
+}
+
+// requireWorkspaceOwnership — Phase 2 helper, not wired anywhere in this PR.
+// Mount it AFTER requireUserAuth on routes that take workspace_id, like:
+//   app.get('/api/ci/dashboard', requireUserAuth, requireWorkspaceOwnership, handler)
+// It pulls workspace_id from query / body / params and returns 403 if the
+// authenticated user (req.user.accountId) doesn't own that workspace.
+//
+// Exported via module.exports for tests; not used by any route handler here
+// — that wiring happens cluster-by-cluster in subsequent PRs (see plan doc).
+async function requireWorkspaceOwnership(req, res, next) {
+  const workspaceId =
+    req.query.workspace_id ||
+    (req.body && req.body.workspace_id) ||
+    req.params.workspace_id ||
+    req.params.id;
+  if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
+  if (!isValidUuid(workspaceId)) return res.status(400).json({ error: 'Invalid workspace_id' });
+  if (!req.user || !req.user.accountId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      'SELECT 1 FROM workspaces WHERE id = $1 AND user_id = $2 LIMIT 1',
+      [workspaceId, req.user.accountId]
+    );
+    if (rows.length === 0) {
+      // Logged with both IDs so audits can spot probing attempts.
+      console.warn(
+        `[Auth] DENIED account ${req.user.accountId} attempted ${req.method} ${req.path} ` +
+        `on workspace ${workspaceId} (not owned)`
+      );
+      return res.status(403).json({ error: 'Workspace not owned by this account' });
+    }
+    next();
+  } catch (e) {
+    console.error('[Auth] Workspace ownership check failed:', e.message);
+    return res.status(500).json({ error: 'Auth check failed' });
+  }
+}
+
 // ── Middleware ──────────────────────────────────────────────────────────────
 app.use(cors({
   origin: process.env.FRONTEND_URL || '*',
@@ -1200,14 +1310,16 @@ const DOMAIN_LABELS = {
 };
 
 // GET /api/ci/workspaces — list every workspace owned by the current user (W6).
-// Powers PR #29's WorkspaceSwitcher dropdown. Filtered by `user_id` from
-// the x-user-id header (set by the frontend's Vercel proxy from JWT.sub).
+// Powers PR #29's WorkspaceSwitcher dropdown.
+//
+// Auth: requireUserAuth populates req.user.accountId from a verified JWT
+// (preferred) or the legacy x-user-id header (Phase 1 transition). The
+// returned list is filtered to workspaces owned by that account.
 // Returns lightweight rows ordered newest-first; the switcher just needs
 // id + brand_name + brand_category to render.
-app.get('/api/ci/workspaces', async (req, res) => {
+app.get('/api/ci/workspaces', requireUserAuth, async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'];
-    if (!userId) return res.status(401).json({ error: 'Missing user ID' });
+    const userId = req.user.accountId;
 
     const { rows } = await pool.query(
       `SELECT id, brand_name, brand_category, brand_price_range,
@@ -1225,11 +1337,11 @@ app.get('/api/ci/workspaces', async (req, res) => {
   }
 });
 
-// GET /api/ci/workspace — get current user's workspace
-app.get('/api/ci/workspace', async (req, res) => {
+// GET /api/ci/workspace — get current user's workspace.
+// Auth: requireUserAuth (Phase 1 — see docs/AUTH-MIGRATION-PLAN.md)
+app.get('/api/ci/workspace', requireUserAuth, async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'];
-    if (!userId) return res.status(401).json({ error: 'Missing user ID' });
+    const userId = req.user.accountId;
 
     const { rows } = await pool.query(
       'SELECT * FROM workspaces WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
@@ -1244,11 +1356,11 @@ app.get('/api/ci/workspace', async (req, res) => {
   }
 });
 
-// GET /api/ci/workspace/me — find workspace by auth token info, with competitor counts
-app.get('/api/ci/workspace/me', async (req, res) => {
+// GET /api/ci/workspace/me — find workspace by auth token info, with competitor counts.
+// Auth: requireUserAuth (Phase 1 — see docs/AUTH-MIGRATION-PLAN.md)
+app.get('/api/ci/workspace/me', requireUserAuth, async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'];
-    if (!userId) return res.status(401).json({ error: 'Missing user ID' });
+    const userId = req.user.accountId;
 
     const { rows } = await pool.query(
       `SELECT w.*,
@@ -4706,10 +4818,18 @@ function signWorkspaceToken(workspace) {
   );
 }
 
-// Look up the caller's current workspace via x-user-id header. Returns null
-// if missing/unknown — callers should 401 in that case.
+// Look up the caller's current workspace.
+//
+// Resolution order (Phase 1 of the auth migration — docs/AUTH-MIGRATION-PLAN.md):
+//   1. req.user.accountId  — set by requireUserAuth middleware after JWT verify
+//   2. req.headers['x-user-id']  — legacy header path, kept during transition
+//
+// Returns null if both are missing/unknown — callers should 401 in that case.
+//
+// Once Phase 4 cleanup lands, the x-user-id fallback gets removed; routes will
+// be required to mount requireUserAuth (or 401 here).
 async function findCallerWorkspace(req) {
-  const userId = req.headers['x-user-id'];
+  const userId = (req.user && req.user.accountId) || req.headers['x-user-id'];
   if (!userId) return null;
   const { rows } = await pool.query(
     'SELECT * FROM workspaces WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
@@ -4806,7 +4926,8 @@ app.post('/api/v2/auth/login', async (req, res) => {
 });
 
 // GET /api/v2/onboarding/state — where is the caller in the wizard?
-app.get('/api/v2/onboarding/state', async (req, res) => {
+// Auth: requireUserAuth (Phase 1 — docs/AUTH-MIGRATION-PLAN.md)
+app.get('/api/v2/onboarding/state', requireUserAuth, async (req, res) => {
   try {
     const workspace = await findCallerWorkspace(req);
     if (!workspace) return res.status(401).json({ error: 'Not authenticated' });
@@ -4841,7 +4962,8 @@ app.get('/api/v2/onboarding/state', async (req, res) => {
 // level-2 category strings; the legacy single-string brand_category column
 // is kept in sync (= first sub-category) so the bag-tuned pipeline keeps
 // working. See TODO.md F10 for the multi-vertical pipeline plan.
-app.patch('/api/v2/onboarding/brand', async (req, res) => {
+// Auth: requireUserAuth (Phase 1)
+app.patch('/api/v2/onboarding/brand', requireUserAuth, async (req, res) => {
   try {
     const workspace = await findCallerWorkspace(req);
     if (!workspace) return res.status(401).json({ error: 'Not authenticated' });
@@ -4897,7 +5019,8 @@ app.patch('/api/v2/onboarding/brand', async (req, res) => {
 // POST /api/v2/onboarding/competitors — { competitors: [{ brand_name, tier?, platform_ids? }, ...] }
 // Bulk insert. Replaces any existing onboarding-added competitors so the user
 // can re-submit the step without duplicating rows.
-app.post('/api/v2/onboarding/competitors', async (req, res) => {
+// Auth: requireUserAuth (Phase 1)
+app.post('/api/v2/onboarding/competitors', requireUserAuth, async (req, res) => {
   const client = await pool.connect();
   try {
     const workspace = await findCallerWorkspace(req);
@@ -4960,7 +5083,8 @@ app.post('/api/v2/onboarding/competitors', async (req, res) => {
 
 // POST /api/v2/onboarding/goals — { goals: { tracking: [...], cadence, email_notifications } }
 // Final step. Flips is_onboarded=true and onboarding_step='done'.
-app.post('/api/v2/onboarding/goals', async (req, res) => {
+// Auth: requireUserAuth (Phase 1)
+app.post('/api/v2/onboarding/goals', requireUserAuth, async (req, res) => {
   try {
     const workspace = await findCallerWorkspace(req);
     if (!workspace) return res.status(401).json({ error: 'Not authenticated' });
@@ -4995,7 +5119,8 @@ app.post('/api/v2/onboarding/goals', async (req, res) => {
 // old registry filter (bags-only), this uses the LLM so it works for any
 // vertical — footwear, apparel, beauty — where no pre-built list exists.
 // Brand name + category + price range are read from the caller's workspace.
-app.post('/api/v2/onboarding/suggest-competitors', async (req, res) => {
+// Auth: requireUserAuth (Phase 1)
+app.post('/api/v2/onboarding/suggest-competitors', requireUserAuth, async (req, res) => {
   try {
     const workspace = await findCallerWorkspace(req);
     if (!workspace) return res.status(401).json({ error: 'Not authenticated' });

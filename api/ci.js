@@ -25,6 +25,9 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json',
         'x-rebase-secret': process.env.API_SECRET || '',
         'x-user-id': req.headers['x-user-id'] || '',
+        // Forward the Bearer token so ECS can jwt.verify() it
+        // (Phase 1 of auth migration — docs/AUTH-MIGRATION-PLAN.md)
+        ...(req.headers.authorization ? { 'Authorization': req.headers.authorization } : {}),
       },
     };
 
