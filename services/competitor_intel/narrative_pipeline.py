@@ -16,10 +16,25 @@ import argparse
 import json
 import os
 import sys
+import time
 
 import httpx
 
 from .db_bridge import get_conn, VALID_PROFILE_FILTER
+from .cost_estimator import log_ai_call
+
+# Workspace context for cost logging — set per pipeline run via
+# set_active_workspace(). Module-level (not thread-local) is fine because
+# the pipelines run single-threaded per workspace; the orchestrator calls
+# set_active_workspace(workspace_id) before any LLM call.
+_ACTIVE_WORKSPACE_ID: str | None = None
+
+
+def set_active_workspace(workspace_id: str | None) -> None:
+    """Set the workspace_id stamped into every ai_call_log row from this
+    point on. Call before each pipeline run (or pass None for ad-hoc work)."""
+    global _ACTIVE_WORKSPACE_ID
+    _ACTIVE_WORKSPACE_ID = workspace_id
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +140,32 @@ def _call_llm(prompt: str, model: str, max_tokens: int = 1000) -> str:
     to grep in the cron log instead.
     """
 
-    if LLM_CONFIG["provider"] == "anthropic":
+    # Cost telemetry (#146): time the call + capture token usage from
+    # the response + write one ai_call_log row. Wrapping happens here
+    # (single point) so all four provider paths get the same treatment
+    # without each branch needing its own try/except.
+    provider = LLM_CONFIG["provider"]
+    caller = "narrative_pipeline._call_llm"
+    started = time.time()
+
+    def _log_success(input_tokens, output_tokens):
+        log_ai_call(
+            workspace_id=_ACTIVE_WORKSPACE_ID,
+            caller=caller, provider=provider, model=model,
+            input_tokens=input_tokens, output_tokens=output_tokens,
+            duration_ms=int((time.time() - started) * 1000),
+            success=True,
+        )
+
+    def _log_failure(exc):
+        log_ai_call(
+            workspace_id=_ACTIVE_WORKSPACE_ID,
+            caller=caller, provider=provider, model=model,
+            duration_ms=int((time.time() - started) * 1000),
+            success=False, error_message=str(exc),
+        )
+
+    if provider == "anthropic":
         try:
             from anthropic import Anthropic
 
@@ -138,14 +178,20 @@ def _call_llm(prompt: str, model: str, max_tokens: int = 1000) -> str:
             # Find the first text block; future tool_use blocks shouldn't crash us.
             for block in response.content or []:
                 if getattr(block, "type", None) == "text" and getattr(block, "text", None):
+                    # Anthropic SDK exposes .usage.input_tokens / .output_tokens
+                    usage = getattr(response, "usage", None)
+                    _log_success(
+                        getattr(usage, "input_tokens", None) if usage else None,
+                        getattr(usage, "output_tokens", None) if usage else None,
+                    )
                     return block.text.strip()
-            raise LlmCallError(
-                "Anthropic response missing text block",
-                model=model,
-            )
+            err = LlmCallError("Anthropic response missing text block", model=model)
+            _log_failure(err)
+            raise err
         except LlmCallError:
             raise
         except Exception as exc:
+            _log_failure(exc)
             raise LlmCallError(
                 f"Anthropic call failed: {exc}",
                 model=model,
@@ -167,39 +213,48 @@ def _call_llm(prompt: str, model: str, max_tokens: int = 1000) -> str:
     try:
         resp = httpx.post(url, headers=headers, json=payload, timeout=LLM_TIMEOUT_SEC)
     except httpx.TimeoutException as exc:
-        raise LlmCallError(
+        err = LlmCallError(
             f"LLM timed out after {LLM_TIMEOUT_SEC}s",
-            status_code=0,
-            model=model,
-            timed_out=True,
-        ) from exc
+            status_code=0, model=model, timed_out=True,
+        )
+        _log_failure(err)
+        raise err from exc
     except httpx.HTTPError as exc:
-        raise LlmCallError(
+        err = LlmCallError(
             f"LLM transport error: {exc}",
-            status_code=0,
-            model=model,
-        ) from exc
+            status_code=0, model=model,
+        )
+        _log_failure(err)
+        raise err from exc
 
     if resp.status_code >= 400:
         snippet = (resp.text or "")[:200]
-        raise LlmCallError(
+        err = LlmCallError(
             f"LLM HTTP {resp.status_code}: {snippet}",
-            status_code=resp.status_code,
-            snippet=snippet,
-            model=model,
+            status_code=resp.status_code, snippet=snippet, model=model,
         )
+        _log_failure(err)
+        raise err
 
     try:
         data = resp.json()
-        return data["choices"][0]["message"]["content"].strip()
+        text = data["choices"][0]["message"]["content"].strip()
+        # OpenAI-compatible providers return usage in data["usage"].
+        # DeepSeek, Qwen, GLM all follow this convention.
+        usage = data.get("usage") or {}
+        _log_success(
+            usage.get("prompt_tokens"),
+            usage.get("completion_tokens"),
+        )
+        return text
     except (ValueError, KeyError, IndexError, TypeError) as exc:
         snippet = (resp.text or "")[:200]
-        raise LlmCallError(
+        err = LlmCallError(
             f"LLM response shape mismatch: {exc}",
-            status_code=resp.status_code,
-            snippet=snippet,
-            model=model,
-        ) from exc
+            status_code=resp.status_code, snippet=snippet, model=model,
+        )
+        _log_failure(err)
+        raise err from exc
 
 
 # ---------------------------------------------------------------------------
@@ -382,6 +437,9 @@ def run_narrative_for_workspace(workspace_id: str, brands_only: bool = False):
     consumed by /ci/analytics' AI brand insights panel. Saves one LLM
     call per workspace per cron run.
     """
+    # Stamp the workspace into every ai_call_log row emitted by _call_llm
+    # during this pipeline run (#146 cost telemetry).
+    set_active_workspace(workspace_id)
     conn = get_conn()
     try:
         with conn.cursor() as cur:

@@ -66,6 +66,7 @@ The lookup table you actually want when debugging.
 | What competitors a workspace tracks | `workspace_competitors` | filter `workspace_id` |
 | Whether the user has connected XHS | `platform_connections` | row exists with `platform='xhs_analytics'`, `status='active'` |
 | Apify cost this month | `apify_run_log` | `SUM(cost_estimate_usd)` WHERE `invoked_at > now() - interval '30 days'` |
+| LLM cost per workspace this month | `ai_call_log` | `SUM(cost_estimate_usd)` WHERE `workspace_id = $1 AND called_at > now() - interval '30 days'` |
 | Is an analysis job still running | `ci_analysis_jobs` | latest row by `workspace_id`, check `status` |
 | Is the XHS profile URL set for a competitor | `workspace_competitors` | `xhs_profile_url` (column added in migration 013) |
 | Active alerts for a workspace | `ci_alerts` | filter `workspace_id`, `is_read=false` |
@@ -140,6 +141,7 @@ The "infrastructure" layer. Jobs you can poll, costs you can audit, alerts to su
 | `ci_deep_dive_jobs` | One row per deep-dive request. Same pattern, separate lifecycle |
 | `apify_run_log` | One row per Apify actor call. `actor_id`, `mode`, `items_returned`, `cost_estimate_usd`. Aggregated weekly for COGS tracking |
 | `ci_alerts` | One row per threshold breach. `severity` (critical/warning/info), `is_read` flag |
+| `ai_call_log` | One row per LLM call (Claude / DeepSeek / Qwen / GLM). `workspace_id`, `caller`, `provider`, `model`, `input_tokens`, `output_tokens`, `cost_estimate_usd`, `duration_ms`, `success`. **Added migration 017 (sub-issue #146).** Aggregator queries filter `WHERE workspace_id IS NOT NULL`. |
 
 ---
 

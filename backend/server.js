@@ -275,14 +275,73 @@ app.use('/api/ci/', ciRateLimit);
 // ── Anthropic client ────────────────────────────────────────────────────────
 const anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-async function callAI(prompt, systemPrompt) {
-  const msg = await anthropicClient.messages.create({
-    model: process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001',
-    max_tokens: 2048,
-    system: systemPrompt || 'You are a helpful AI assistant for Rebase, a company that helps Chinese SMBs adopt AI into their operations.',
-    messages: [{ role: 'user', content: prompt }],
+// ── Cost telemetry (#146) ──────────────────────────────────────────────────
+// Static rate table — USD per million tokens. Update when Anthropic changes
+// pricing. Old ai_call_log rows keep their then-current estimate (NUMERIC
+// column, not recomputed at read time).
+const AI_RATES_USD_PER_M = {
+  'claude-haiku-4-5-20251001':   { input: 1.00,  output: 5.00 },
+  'claude-haiku-4-5':            { input: 1.00,  output: 5.00 },
+  'claude-sonnet-4-5-20250929':  { input: 3.00,  output: 15.00 },
+  'claude-sonnet-4-5':           { input: 3.00,  output: 15.00 },
+  'claude-opus-4-5':             { input: 15.00, output: 75.00 },
+};
+const AI_DEFAULT_RATE = { input: 1.00, output: 5.00 };
+
+function estimateAiCostUsd(model, inputTokens, outputTokens) {
+  if (inputTokens == null && outputTokens == null) return null;
+  const rate = AI_RATES_USD_PER_M[model] || AI_DEFAULT_RATE;
+  let cost = 0;
+  if (inputTokens != null) cost += (inputTokens / 1_000_000) * rate.input;
+  if (outputTokens != null) cost += (outputTokens / 1_000_000) * rate.output;
+  return Math.round(cost * 1_000_000) / 1_000_000;
+}
+
+// Fire-and-forget cost logger. Never throws — a telemetry failure must not
+// block the real LLM call. workspace_id is nullable (some callAI() callers
+// don't have a workspace context, e.g. /api/ai admin tool).
+function logAiCall({ workspaceId, caller, provider, model, inputTokens, outputTokens, durationMs, success, errorMessage }) {
+  const cost = estimateAiCostUsd(model, inputTokens, outputTokens);
+  const truncatedError = errorMessage ? String(errorMessage).slice(0, 500) : null;
+  pool.query(
+    `INSERT INTO ai_call_log
+       (workspace_id, caller, provider, model,
+        input_tokens, output_tokens, cost_estimate_usd,
+        duration_ms, success, error_message)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+    [workspaceId || null, caller, provider, model,
+     inputTokens, outputTokens, cost,
+     durationMs, success, truncatedError]
+  ).catch((err) => {
+    console.warn(`[cost] failed to log ai_call (caller=${caller}, model=${model}): ${err.message}`);
   });
-  return msg.content[0].text;
+}
+
+async function callAI(prompt, systemPrompt, { workspaceId = null, caller = 'server.callAI' } = {}) {
+  const model = process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001';
+  const started = Date.now();
+  try {
+    const msg = await anthropicClient.messages.create({
+      model,
+      max_tokens: 2048,
+      system: systemPrompt || 'You are a helpful AI assistant for Rebase, a company that helps Chinese SMBs adopt AI into their operations.',
+      messages: [{ role: 'user', content: prompt }],
+    });
+    logAiCall({
+      workspaceId, caller, provider: 'anthropic', model,
+      inputTokens: msg.usage && msg.usage.input_tokens,
+      outputTokens: msg.usage && msg.usage.output_tokens,
+      durationMs: Date.now() - started, success: true,
+    });
+    return msg.content[0].text;
+  } catch (err) {
+    logAiCall({
+      workspaceId, caller, provider: 'anthropic', model,
+      durationMs: Date.now() - started, success: false,
+      errorMessage: err.message || String(err),
+    });
+    throw err;
+  }
 }
 
 // ── Routes ──────────────────────────────────────────────────────────────────
