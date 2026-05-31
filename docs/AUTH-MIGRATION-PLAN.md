@@ -1,8 +1,23 @@
 # Auth migration plan (Epic #85, sub-issue #142)
 
-**Status:** Phases 1, 2, 3 queued in PRs #158-#161. Review-fixes queued in PR #162.
+**Status:** ✅ All 4 phases + review fixes complete. PRs #158-#163 queued for merge.
 **Last updated:** 2026-05-31
 **Owner:** Will (backend), coordinates with Joanna for frontend swap.
+
+## ✅ Migration complete
+
+| Phase | PR | Status |
+|---|---|---|
+| 1 — JWT verify middleware + 8 routes opted in | #158 | ✅ Ready to merge |
+| 2A — Workspace ownership enforced (3 routes) | #159 | ✅ Ready to merge |
+| 2B-E — Workspace ownership enforced (13 routes) | #160 | ✅ Ready to merge |
+| 3 — POST/PATCH/DELETE write routes | #161 | ✅ Ready to merge |
+| Review fixes (3 critical IDOR + 9 minor) | #162 | ✅ Ready to merge |
+| 4 — Drop legacy x-user-id, admin-tighten /scrape, integration test #143 | #163 | ✅ Ready to merge |
+
+Sub-issues this closes:
+- **#142** — JWT + customer_id middleware on every protected endpoint ✅
+- **#143** — Integration test: customer A cannot read customer B's data ✅
 
 ## Review-fix log (PR #162)
 

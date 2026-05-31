@@ -48,42 +48,32 @@ function verifyJwt(token, secret) {
 }
 
 // ── Middleware (mirror of backend/server.js requireUserAuth) ────────────────
-// Kept in sync with backend/server.js. Edit one, edit both.
+// PHASE 4: Bearer-only. The legacy x-user-id fallback is gone — no JWT,
+// no req.user, 401. Kept in sync with backend/server.js. Edit one, edit both.
 function requireUserAuth(req, res, next) {
   const authHeader = req.headers.authorization || '';
-  // Review fix #10: case-insensitive Bearer prefix (some clients send 'bearer').
+  // Case-insensitive Bearer prefix (review fix #10).
   const bearerMatch = /^Bearer\s+(.+)$/i.exec(authHeader);
   const bearer = bearerMatch ? bearerMatch[1] : null;
-  if (bearer) {
-    try {
-      const payload = verifyJwt(bearer, TEST_SECRET);
-      req.user = {
-        accountId: (payload.sub || '').toString(),
-        email: payload.email || '',
-        name: payload.name || '',
-        tokenWorkspaceId: payload.workspace_id || null,
-        verifiedVia: 'jwt',
-      };
-      return next();
-    } catch {
-      // fall through to legacy path
-    }
+  if (!bearer) {
+    return res.status(401).json({ error: 'Authentication required (Bearer token)' });
   }
-  // Review fix #4: reject anon-* IDs in the legacy path. Pre-fix, anonymous
-  // browsers sailed through with 'anon-XXX' x-user-id and were treated as
-  // "authenticated," defeating the IDOR fix for the anon class.
-  const legacyId = req.headers['x-user-id'];
-  if (legacyId && !String(legacyId).startsWith('anon-')) {
+  try {
+    const payload = verifyJwt(bearer, TEST_SECRET);
     req.user = {
-      accountId: String(legacyId),
-      email: '',
-      name: '',
-      tokenWorkspaceId: null,
-      verifiedVia: 'legacy_header',
+      accountId: (payload.sub || '').toString(),
+      email: payload.email || '',
+      name: payload.name || '',
+      tokenWorkspaceId: payload.workspace_id || null,
+      verifiedVia: 'jwt',
     };
+    if (!req.user.accountId) {
+      return res.status(401).json({ error: 'Token missing subject' });
+    }
     return next();
+  } catch {
+    return res.status(401).json({ error: 'Invalid or expired token' });
   }
-  return res.status(401).json({ error: 'Authentication required' });
 }
 
 // ── Middleware (mirror of backend/server.js requireWorkspaceOwnership) ──────
@@ -173,7 +163,7 @@ test('rejects request with no auth (401)', async () => {
   const { res, nextCalled } = await runMiddleware({});
   assert.strictEqual(nextCalled, false);
   assert.strictEqual(res.statusCode, 401);
-  assert.strictEqual(res.body.error, 'Authentication required');
+  assert.match(res.body.error, /Bearer/);
 });
 
 test('accepts valid Bearer JWT and populates req.user from payload', async () => {
@@ -188,37 +178,34 @@ test('accepts valid Bearer JWT and populates req.user from payload', async () =>
   assert.strictEqual(req.user.verifiedVia, 'jwt');
 });
 
-test('falls back to x-user-id when no Bearer present (legacy path)', async () => {
-  const { req, nextCalled } = await runMiddleware({ 'x-user-id': 'RB-LEGACY-CAFE' });
-  assert.strictEqual(nextCalled, true);
-  assert.strictEqual(req.user.accountId, 'RB-LEGACY-CAFE');
-  assert.strictEqual(req.user.verifiedVia, 'legacy_header');
+test('PHASE 4: x-user-id alone is no longer accepted (was Phase 1-3 legacy path)', async () => {
+  const { res, nextCalled } = await runMiddleware({ 'x-user-id': 'RB-LEGACY-CAFE' });
+  assert.strictEqual(nextCalled, false);
+  assert.strictEqual(res.statusCode, 401);
 });
 
-test('falls back to x-user-id when Bearer is tampered/invalid (Phase 1 leniency)', async () => {
+test('PHASE 4: tampered Bearer 401s — no x-user-id fallback', async () => {
   const tampered = signJwt({ sub: 'spoof' }, 'wrong-secret');
-  const { req, nextCalled } = await runMiddleware({
+  const { res, nextCalled } = await runMiddleware({
     Authorization: `Bearer ${tampered}`,
-    'x-user-id': 'RB-REAL-USER',
+    'x-user-id': 'RB-REAL-USER',   // ignored — no fallback
   });
-  assert.strictEqual(nextCalled, true);
-  // Should land on the legacy path since JWT verify failed
-  assert.strictEqual(req.user.accountId, 'RB-REAL-USER');
-  assert.strictEqual(req.user.verifiedVia, 'legacy_header');
+  assert.strictEqual(nextCalled, false);
+  assert.strictEqual(res.statusCode, 401);
 });
 
-test('rejects when Bearer fails and no x-user-id fallback present', async () => {
+test('rejects when Bearer fails (no fallback)', async () => {
   const bad = signJwt({ sub: 'spoof' }, 'wrong-secret');
   const { res, nextCalled } = await runMiddleware({ Authorization: `Bearer ${bad}` });
   assert.strictEqual(nextCalled, false);
   assert.strictEqual(res.statusCode, 401);
 });
 
-test('prefers Bearer over x-user-id when both present (Bearer wins)', async () => {
+test('Bearer wins regardless of any other headers', async () => {
   const token = signJwt({ sub: 'RB-JWT-USER' }, TEST_SECRET);
   const { req, nextCalled } = await runMiddleware({
     Authorization: `Bearer ${token}`,
-    'x-user-id': 'RB-DIFFERENT-USER',   // should be ignored
+    'x-user-id': 'RB-DIFFERENT-USER',   // ignored
   });
   assert.strictEqual(nextCalled, true);
   assert.strictEqual(req.user.accountId, 'RB-JWT-USER');
@@ -236,14 +223,13 @@ test('extracts workspace_id from v2 token payload', async () => {
   assert.strictEqual(req.user.tokenWorkspaceId, 'ws-uuid-123');
 });
 
-test('malformed Bearer (not three parts) falls through to legacy path', async () => {
-  const { req, nextCalled } = await runMiddleware({
+test('PHASE 4: malformed Bearer 401s — no fallback', async () => {
+  const { res, nextCalled } = await runMiddleware({
     Authorization: 'Bearer not.a.valid.token',
-    'x-user-id': 'RB-FALLBACK',
+    'x-user-id': 'RB-WOULD-HAVE-WORKED-IN-PHASE-3',
   });
-  assert.strictEqual(nextCalled, true);
-  assert.strictEqual(req.user.verifiedVia, 'legacy_header');
-  assert.strictEqual(req.user.accountId, 'RB-FALLBACK');
+  assert.strictEqual(nextCalled, false);
+  assert.strictEqual(res.statusCode, 401);
 });
 
 test('empty Bearer token treated as missing (no crash)', async () => {
@@ -252,15 +238,14 @@ test('empty Bearer token treated as missing (no crash)', async () => {
   assert.strictEqual(res.statusCode, 401);
 });
 
-// ── Review-fix regression tests ─────────────────────────────────────────────
-
-test('REVIEW FIX #4: rejects anon-* x-user-id in legacy path (401)', async () => {
-  const { res, nextCalled } = await runMiddleware({
-    'x-user-id': 'anon-abc123xyz',
-  });
+test('PHASE 4: token with empty sub claim 401s ("token missing subject")', async () => {
+  const token = signJwt({ sub: '', email: 'a@b.cn' }, TEST_SECRET);
+  const { res, nextCalled } = await runMiddleware({ Authorization: `Bearer ${token}` });
   assert.strictEqual(nextCalled, false);
   assert.strictEqual(res.statusCode, 401);
 });
+
+// ── Review-fix regression tests (still relevant in Phase 4) ─────────────────
 
 test('REVIEW FIX #10: accepts lowercase bearer prefix (case-insensitive)', async () => {
   const token = signJwt({ sub: 'RB-LOWERCASE-USER' }, TEST_SECRET);
