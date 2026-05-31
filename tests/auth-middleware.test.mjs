@@ -48,9 +48,12 @@ function verifyJwt(token, secret) {
 }
 
 // ── Middleware (mirror of backend/server.js requireUserAuth) ────────────────
+// Kept in sync with backend/server.js. Edit one, edit both.
 function requireUserAuth(req, res, next) {
   const authHeader = req.headers.authorization || '';
-  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  // Review fix #10: case-insensitive Bearer prefix (some clients send 'bearer').
+  const bearerMatch = /^Bearer\s+(.+)$/i.exec(authHeader);
+  const bearer = bearerMatch ? bearerMatch[1] : null;
   if (bearer) {
     try {
       const payload = verifyJwt(bearer, TEST_SECRET);
@@ -66,10 +69,13 @@ function requireUserAuth(req, res, next) {
       // fall through to legacy path
     }
   }
+  // Review fix #4: reject anon-* IDs in the legacy path. Pre-fix, anonymous
+  // browsers sailed through with 'anon-XXX' x-user-id and were treated as
+  // "authenticated," defeating the IDOR fix for the anon class.
   const legacyId = req.headers['x-user-id'];
-  if (legacyId) {
+  if (legacyId && !String(legacyId).startsWith('anon-')) {
     req.user = {
-      accountId: legacyId.toString(),
+      accountId: String(legacyId),
       email: '',
       name: '',
       tokenWorkspaceId: null,
@@ -78,6 +84,55 @@ function requireUserAuth(req, res, next) {
     return next();
   }
   return res.status(401).json({ error: 'Authentication required' });
+}
+
+// ── Middleware (mirror of backend/server.js requireWorkspaceOwnership) ──────
+// This is the new "all sources must agree" middleware from review fix #1+2.
+// In production it does a DB query — for tests we stub the ownership lookup
+// to a known good account/workspace pair.
+const TEST_OWNED_WORKSPACE_ID = 'aaaaaaaa-1111-2222-3333-444444444444';
+const TEST_OWNED_ACCOUNT_ID = 'RB-TEST-USER';
+function ownershipCheckStub(workspaceId, accountId) {
+  return workspaceId === TEST_OWNED_WORKSPACE_ID && accountId === TEST_OWNED_ACCOUNT_ID;
+}
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isValidUuid(s) { return typeof s === 'string' && UUID_PATTERN.test(s); }
+
+async function requireWorkspaceOwnership(req, res, next) {
+  const candidates = [];
+  if (req.query && req.query.workspace_id !== undefined) {
+    candidates.push({ src: 'query.workspace_id', val: req.query.workspace_id });
+  }
+  if (req.body && req.body.workspace_id !== undefined) {
+    candidates.push({ src: 'body.workspace_id', val: req.body.workspace_id });
+  }
+  if (req.params && req.params.workspace_id !== undefined) {
+    candidates.push({ src: 'params.workspace_id', val: req.params.workspace_id });
+  }
+  if (req.params && req.params.id !== undefined) {
+    candidates.push({ src: 'params.id', val: req.params.id });
+  }
+  if (candidates.length === 0) {
+    return res.status(400).json({ error: 'Missing workspace_id' });
+  }
+  const stringified = candidates.map((c) => ({ src: c.src, val: String(c.val) }));
+  const first = stringified[0].val;
+  for (const c of stringified.slice(1)) {
+    if (c.val !== first) {
+      return res.status(400).json({ error: 'workspace_id mismatch' });
+    }
+  }
+  const workspaceId = first;
+  if (!isValidUuid(workspaceId)) {
+    return res.status(400).json({ error: 'Invalid workspace_id' });
+  }
+  if (!req.user || !req.user.accountId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  if (!ownershipCheckStub(workspaceId, req.user.accountId)) {
+    return res.status(403).json({ error: 'Workspace not owned by this account' });
+  }
+  next();
 }
 
 // ── Mock req/res helpers ────────────────────────────────────────────────────
@@ -194,5 +249,159 @@ test('malformed Bearer (not three parts) falls through to legacy path', async ()
 test('empty Bearer token treated as missing (no crash)', async () => {
   const { res, nextCalled } = await runMiddleware({ Authorization: 'Bearer ' });
   assert.strictEqual(nextCalled, false);
+  assert.strictEqual(res.statusCode, 401);
+});
+
+// ── Review-fix regression tests ─────────────────────────────────────────────
+
+test('REVIEW FIX #4: rejects anon-* x-user-id in legacy path (401)', async () => {
+  const { res, nextCalled } = await runMiddleware({
+    'x-user-id': 'anon-abc123xyz',
+  });
+  assert.strictEqual(nextCalled, false);
+  assert.strictEqual(res.statusCode, 401);
+});
+
+test('REVIEW FIX #10: accepts lowercase bearer prefix (case-insensitive)', async () => {
+  const token = signJwt({ sub: 'RB-LOWERCASE-USER' }, TEST_SECRET);
+  const { req, nextCalled } = await runMiddleware({
+    Authorization: `bearer ${token}`,
+  });
+  assert.strictEqual(nextCalled, true);
+  assert.strictEqual(req.user.accountId, 'RB-LOWERCASE-USER');
+  assert.strictEqual(req.user.verifiedVia, 'jwt');
+});
+
+test('REVIEW FIX #10: accepts ALL-CAPS BEARER prefix', async () => {
+  const token = signJwt({ sub: 'RB-UPPER-USER' }, TEST_SECRET);
+  const { req, nextCalled } = await runMiddleware({
+    Authorization: `BEARER ${token}`,
+  });
+  assert.strictEqual(nextCalled, true);
+  assert.strictEqual(req.user.verifiedVia, 'jwt');
+});
+
+// ── Ownership middleware tests (review fix #1+#2) ──────────────────────────
+
+// Helper to run requireWorkspaceOwnership with a pre-populated req.user.
+function runOwnership(req) {
+  return new Promise((resolve) => {
+    const res = mockRes();
+    let nextCalled = false;
+    requireWorkspaceOwnership(req, res, () => {
+      nextCalled = true;
+      resolve({ req, res, nextCalled });
+    });
+    setImmediate(() => { if (!nextCalled) resolve({ req, res, nextCalled }); });
+  });
+}
+
+const OWNED_REQ_USER = { accountId: TEST_OWNED_ACCOUNT_ID, verifiedVia: 'jwt' };
+
+test('REVIEW FIX #1: ownership passes when single source (query) matches owned workspace', async () => {
+  const { res, nextCalled } = await runOwnership({
+    user: OWNED_REQ_USER,
+    query: { workspace_id: TEST_OWNED_WORKSPACE_ID },
+    body: {},
+    params: {},
+  });
+  assert.strictEqual(nextCalled, true, res.body && res.body.error);
+});
+
+test('REVIEW FIX #1: ownership passes when all sources agree', async () => {
+  const { nextCalled } = await runOwnership({
+    user: OWNED_REQ_USER,
+    query: { workspace_id: TEST_OWNED_WORKSPACE_ID },
+    body: { workspace_id: TEST_OWNED_WORKSPACE_ID },
+    params: { id: TEST_OWNED_WORKSPACE_ID },
+  });
+  assert.strictEqual(nextCalled, true);
+});
+
+test('REVIEW FIX #1 (CRITICAL): rejects body.workspace_id vs params.id mismatch with 400', async () => {
+  // The IDOR vector: PATCH /api/ci/workspace/<victim> with body { workspace_id: <owned> }.
+  // Pre-fix: middleware authorized body (owned), handler operated on params.id (victim).
+  // Post-fix: 400 'workspace_id mismatch'.
+  const { res, nextCalled } = await runOwnership({
+    user: OWNED_REQ_USER,
+    query: {},
+    body: { workspace_id: TEST_OWNED_WORKSPACE_ID },
+    params: { id: 'bbbbbbbb-1111-2222-3333-444444444444' },  // victim
+  });
+  assert.strictEqual(nextCalled, false);
+  assert.strictEqual(res.statusCode, 400);
+  assert.match(res.body.error, /mismatch/);
+});
+
+test('REVIEW FIX #2 (CRITICAL): rejects query.workspace_id vs body.workspace_id mismatch with 400', async () => {
+  // The IDOR vector: POST /api/ci/run-analysis?workspace_id=<owned> with body { workspace_id: <victim> }.
+  // Pre-fix: middleware authorized query (owned), handler operated on body (victim).
+  // Post-fix: 400 'workspace_id mismatch'.
+  const { res, nextCalled } = await runOwnership({
+    user: OWNED_REQ_USER,
+    query: { workspace_id: TEST_OWNED_WORKSPACE_ID },
+    body: { workspace_id: 'bbbbbbbb-1111-2222-3333-444444444444' },  // victim
+    params: {},
+  });
+  assert.strictEqual(nextCalled, false);
+  assert.strictEqual(res.statusCode, 400);
+  assert.match(res.body.error, /mismatch/);
+});
+
+test('REVIEW FIX #14: array workspace_id (duplicate query keys) safely rejected as invalid UUID', async () => {
+  // Express parses `?workspace_id=a&workspace_id=b` as the array ['a','b'].
+  // After String() coercion the candidate becomes 'a,b' — not a UUID — so we
+  // get a clean 400 instead of an array reaching pg.
+  const { res, nextCalled } = await runOwnership({
+    user: OWNED_REQ_USER,
+    query: { workspace_id: [TEST_OWNED_WORKSPACE_ID, 'bbbbbbbb-1111-2222-3333-444444444444'] },
+    body: {},
+    params: {},
+  });
+  assert.strictEqual(nextCalled, false);
+  assert.strictEqual(res.statusCode, 400);
+});
+
+test('ownership rejects when user does not own workspace (403)', async () => {
+  const { res, nextCalled } = await runOwnership({
+    user: { accountId: 'RB-OTHER-USER', verifiedVia: 'jwt' },
+    query: { workspace_id: TEST_OWNED_WORKSPACE_ID },
+    body: {},
+    params: {},
+  });
+  assert.strictEqual(nextCalled, false);
+  assert.strictEqual(res.statusCode, 403);
+});
+
+test('ownership 400 when no workspace_id source present', async () => {
+  const { res } = await runOwnership({
+    user: OWNED_REQ_USER,
+    query: {},
+    body: {},
+    params: {},
+  });
+  assert.strictEqual(res.statusCode, 400);
+  assert.match(res.body.error, /Missing/);
+});
+
+test('ownership 400 on non-UUID workspace_id', async () => {
+  const { res } = await runOwnership({
+    user: OWNED_REQ_USER,
+    query: { workspace_id: 'not-a-uuid' },
+    body: {},
+    params: {},
+  });
+  assert.strictEqual(res.statusCode, 400);
+});
+
+test('ownership 401 when middleware ordered wrong (no req.user)', async () => {
+  // Defense-in-depth: even if someone forgets requireUserAuth, ownership
+  // middleware refuses to authorize against an unset req.user.
+  const { res } = await runOwnership({
+    user: undefined,
+    query: { workspace_id: TEST_OWNED_WORKSPACE_ID },
+    body: {},
+    params: {},
+  });
   assert.strictEqual(res.statusCode, 401);
 });
