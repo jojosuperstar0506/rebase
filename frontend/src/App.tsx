@@ -1,12 +1,13 @@
 import { useState, useEffect, lazy, Suspense } from "react";
 import type { CSSProperties } from "react";
 import { Routes, Route, Link, useNavigate, useLocation } from "react-router-dom";
-import { Sun, Moon } from "lucide-react";
+import { Sun, Moon, Menu, X } from "lucide-react";
 
 import { AppProvider, useApp } from "./context/AppContext";
 import { BrandChip } from "@/components/ui/BrandChip";
 import { getWorkspace } from "./services/ciApi";
 import { useCIAlertCount } from "./hooks/useCIAlertCount";
+import { useIsMobile } from "./hooks/useBreakpoint";
 import { T, t } from "./i18n";
 
 import Home from "./pages/Home";
@@ -80,6 +81,10 @@ function Nav() {
   const [isLoggedIn, setIsLoggedIn] = useState(checkAuth);
   const [isAdmin, setIsAdmin] = useState(checkIsAdmin);
   const nav = T.nav;
+  const isMobile = useIsMobile();
+  // On mobile the nav collapses into a hamburger menu (the full control row
+  // doesn't fit at ≤640px and was clipping the logout/admin buttons — #156).
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // CI workspace ID — fetched lazily for alert badge
   const [ciWorkspaceId, setCiWorkspaceId] = useState<string | null>(null);
@@ -137,6 +142,9 @@ function Nav() {
     return () => window.removeEventListener("rebase_auth_change", onAuthChange);
   }, []);
 
+  // Close the mobile menu on navigation.
+  useEffect(() => { setMenuOpen(false); }, [location.pathname]);
+
   if (HIDE_NAV_ON.includes(location.pathname)) return null;
 
   function handleLogout() {
@@ -154,6 +162,124 @@ function Nav() {
     color: "var(--color-text-muted)", fontSize: 12, fontWeight: 500,
     fontFamily: "var(--font-mono)",
   };
+
+  // ── Mobile (≤640px): collapse the control row into a hamburger menu so
+  //    nothing clips off-screen and every control stays reachable (#156). ──
+  if (isMobile) {
+    const rowStyle: CSSProperties = {
+      display: "flex", alignItems: "center", gap: 8,
+      minHeight: 44, padding: "0 4px", width: "100%",
+      fontSize: 14, fontFamily: "var(--font-mono)",
+      color: "var(--color-text-muted)", textDecoration: "none",
+      background: "transparent", border: "none", cursor: "pointer",
+      textAlign: "left" as CSSProperties["textAlign"],
+    };
+    return (
+      <nav style={{ position: "sticky", top: 0, zIndex: 100 }}>
+        <style>{`@keyframes rebase-spin { to { transform: rotate(360deg); } }`}</style>
+        <div style={{
+          display: "flex", alignItems: "center", padding: "0 16px", height: 56,
+          background: "var(--color-canvas)",
+          borderBottom: "1px solid var(--color-border-hairline)",
+          fontFamily: "var(--font-mono)",
+        }}>
+          <Link to="/" style={{
+            textDecoration: "none", fontSize: 16, fontWeight: 700,
+            color: "var(--color-text-primary)", fontFamily: "var(--font-mono)",
+          }}>
+            rebase
+          </Link>
+          <button
+            onClick={() => setMenuOpen(o => !o)}
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
+            style={{
+              ...btnStyle, marginLeft: "auto", padding: 0, width: 44, height: 44,
+              display: "inline-flex", alignItems: "center", justifyContent: "center",
+              position: "relative",
+            }}
+          >
+            {menuOpen ? <X size={20} /> : <Menu size={20} />}
+            {!menuOpen && isLoggedIn && alertCount > 0 && (
+              <span style={{
+                position: "absolute", top: 6, right: 6, width: 8, height: 8,
+                borderRadius: "50%", background: C.danger,
+              }} />
+            )}
+          </button>
+        </div>
+        {menuOpen && (
+          <div style={{
+            background: "var(--color-canvas)",
+            borderBottom: "1px solid var(--color-border-hairline)",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+            display: "flex", flexDirection: "column", padding: "8px 16px 12px",
+          }}>
+            {!isLoggedIn && (
+              <Link to="/signup" style={{ ...rowStyle, color: "var(--color-text-primary)", fontWeight: 600 }}>
+                {t(nav.requestAccess, lang).toLowerCase()}
+              </Link>
+            )}
+            {isLoggedIn && (
+              <Link to="/ci" style={rowStyle}>
+                <span>{t(nav.ciVfinal, lang).toLowerCase()}</span>
+                {alertCount > 0 && (
+                  <span style={{
+                    background: C.danger, color: "#fff", fontSize: 10, fontWeight: 700,
+                    padding: "1px 5px", borderRadius: 8, minWidth: 16,
+                    textAlign: "center" as CSSProperties["textAlign"],
+                  }}>
+                    {alertCount > 9 ? "9+" : alertCount}
+                  </span>
+                )}
+              </Link>
+            )}
+            <Link to="/contact" style={rowStyle}>{t(nav.contact, lang).toLowerCase()}</Link>
+            {isLoggedIn && brand && (
+              <Link to="/ci/settings" style={rowStyle} onClick={() => setMenuOpen(false)}>
+                <BrandChip name={brand.name} category={brand.category || undefined} />
+              </Link>
+            )}
+            <div style={{ height: 1, background: "var(--color-border-hairline)", margin: "6px 0" }} />
+            <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} style={rowStyle}>
+              {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+              <span>{theme === "dark" ? t(nav.lightMode, lang) : t(nav.darkMode, lang)}</span>
+            </button>
+            <button
+              onClick={() => setLang(lang === "en" ? "zh" : "en")}
+              disabled={langSwitching}
+              style={{ ...rowStyle, opacity: langSwitching ? 0.6 : 1 }}
+            >
+              {langSwitching && (
+                <span aria-hidden style={{
+                  width: 12, height: 12, borderRadius: "50%",
+                  border: `2px solid ${C.t2}`, borderTopColor: "transparent",
+                  display: "inline-block", animation: "rebase-spin 0.7s linear infinite",
+                }} />
+              )}
+              <span>{lang === "en" ? "中文" : "EN"}</span>
+            </button>
+            {(!isLoggedIn || isAdmin) && (
+              <Link to="/admin" style={rowStyle}>{t(nav.admin, lang).toLowerCase()}</Link>
+            )}
+            {isLoggedIn ? (
+              <button onClick={handleLogout} style={rowStyle}>
+                {t(nav.logout, lang).toLowerCase()}
+              </button>
+            ) : (
+              <Link to="/login" style={{
+                ...rowStyle, justifyContent: "center", marginTop: 6,
+                background: "var(--color-accent)", color: "var(--color-neutral-900)",
+                fontWeight: 600, borderRadius: 2,
+              }}>
+                {t(nav.login, lang).toLowerCase()}
+              </Link>
+            )}
+          </div>
+        )}
+      </nav>
+    );
+  }
 
   return (
     <nav style={{
