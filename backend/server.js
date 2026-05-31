@@ -1480,11 +1480,12 @@ app.patch('/api/ci/workspace/:id', async (req, res) => {
 });
 
 // GET /api/ci/competitors — list workspace competitors
-app.get('/api/ci/competitors', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster A —
+// docs/AUTH-MIGRATION-PLAN.md). The ownership middleware 403s if the
+// authenticated user doesn't own the workspace_id in the query string.
+app.get('/api/ci/competitors', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
-    if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
-    if (!isValidUuid(workspaceId)) return res.json([]);
 
     // #18: include last_scraped_at + last_scrape_platform per competitor.
     // Surfaces per-brand data freshness on the Brief workspace context
@@ -1707,11 +1708,10 @@ app.post('/api/ci/workspace/:id/reset', async (req, res) => {
 });
 
 // GET /api/ci/dashboard — main dashboard data for a workspace
-app.get('/api/ci/dashboard', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster A)
+app.get('/api/ci/dashboard', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
-    if (!workspaceId) return res.status(400).json({ error: 'Missing workspace_id' });
-    if (!isValidUuid(workspaceId)) return res.status(404).json({ error: 'Workspace not initialized', workspace_id: workspaceId });
     const lang = req.query.lang === 'en' ? 'en' : 'zh';
 
     // Get competitors
@@ -3275,7 +3275,8 @@ app.get('/api/ci/domain-scores', async (req, res) => {
 });
 
 // GET /api/ci/connections — list platform connections for a workspace
-app.get('/api/ci/connections', async (req, res) => {
+// Auth: requireUserAuth + requireWorkspaceOwnership (Phase 2 cluster A)
+app.get('/api/ci/connections', requireUserAuth, requireWorkspaceOwnership, async (req, res) => {
   try {
     const workspaceId = req.query.workspace_id;
     const { rows } = await pool.query(

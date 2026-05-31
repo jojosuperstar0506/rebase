@@ -1,8 +1,14 @@
 # Auth migration plan (Epic #85, sub-issue #142)
 
-**Status:** Phase 1 in flight (this PR).
-**Last updated:** 2026-05-26
+**Status:** Phase 1 merged (PR #158). Phase 2 cluster A in flight.
+**Last updated:** 2026-05-31
 **Owner:** Will (backend), coordinates with Joanna for frontend swap.
+
+## Decisions locked (2026-05-31)
+
+1. **Enforce-immediately, no dry-run period.** At 1-customer scale (OMI), the cost of a missed-route false-403 is "Will pings me, I fix in 5 min." Dry-run overhead doesn't pay back yet. Revisit when real beta users join (M1 exit).
+2. **Drop `x-user-id` fallback at Phase 4** (the safer default). Keep both auth paths working through Phases 2-3 so any missed call site still resolves. Final integration test in Phase 4 verifies every route is JWT-verified before we remove the legacy path.
+3. **Routes without a `workspace_id` param** (e.g. `/api/ci/scrape-targets`, internal service endpoints) stay on `requireSecret`-only — no `requireWorkspaceOwnership` since there's nothing to check. They're documented as exceptions in the cluster list below.
 
 ---
 
