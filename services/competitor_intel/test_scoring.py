@@ -243,6 +243,18 @@ class TestMomentumScore:
             assert "normalized" in info
             assert "weight" in info
 
+    def test_canonical_momentum_signal_set(self, tmp_db):
+        """Momentum breakdown contains exactly the canonical signal set (see SIGNALS.md)."""
+        path, conn = tmp_db
+        _insert_brand(conn, "CanonBrand")
+
+        result = compute_momentum_score("CanonBrand", all_brand_raws={}, db_path=path)
+
+        expected_signals = {"xhs_follower_growth", "douyin_follower_growth",
+                            "content_velocity", "engagement_trend",
+                            "new_products", "livestream_activity"}
+        assert set(result["score_breakdown"].keys()) == expected_signals
+
 
 # ─── Threat Index ────────────────────────────────────────────────────────────
 
@@ -303,7 +315,7 @@ class TestThreatIndex:
         result = compute_threat_index("BDStruct", db_path=path)
 
         expected_signals = {"price_overlap", "closing_gap", "channel_expansion",
-                           "kol_investment", "sentiment_momentum"}
+                           "kol_investment", "engagement_momentum"}
         assert set(result["threat_breakdown"].keys()) == expected_signals
         for signal, info in result["threat_breakdown"].items():
             assert "score" in info

@@ -68,7 +68,7 @@ _THREAT_WEIGHTS: Dict[str, float] = {
     "closing_gap": 0.25,
     "channel_expansion": 0.20,
     "kol_investment": 0.15,
-    "sentiment_momentum": 0.15,
+    "engagement_momentum": 0.15,
 }
 
 
@@ -388,9 +388,13 @@ def compute_threat_index(
         kol_investment_score = min(100, max(0, kol_growth_pct * 2))
         kol_detail = f"KOL collabs {'up' if kol_growth_pct > 0 else 'down'} {abs(kol_growth_pct):.0f}%"
 
-    # ─── Signal 5: Sentiment momentum ───
-    sentiment_score = 0.0
-    sentiment_detail = "No engagement trend data"
+    # ─── Signal 5: Engagement momentum ───
+    # NOTE: this measures growth in engagement (avg_engagement / xhs_likes),
+    # NOT NLP sentiment. There is no sentiment analysis in this pipeline — the
+    # signal was renamed from "sentiment_momentum" to stop the brief from
+    # implying a sentiment read we don't actually produce. See SIGNALS.md.
+    engagement_score = 0.0
+    engagement_detail = "No engagement trend data"
 
     engagement_delta = brand_deltas.get("avg_engagement")
     likes_delta = brand_deltas.get("xhs_likes")
@@ -402,9 +406,9 @@ def compute_threat_index(
         engagement_growth = likes_delta["pct_change"]
 
     if engagement_growth is not None:
-        sentiment_score = min(100, max(0, 50 + engagement_growth * 2))
-        direction = "positive" if engagement_growth > 0 else "negative"
-        sentiment_detail = f"Engagement trend {direction} ({engagement_growth:+.1f}%)"
+        engagement_score = min(100, max(0, 50 + engagement_growth * 2))
+        direction = "rising" if engagement_growth > 0 else "falling"
+        engagement_detail = f"Engagement {direction} ({engagement_growth:+.1f}%)"
 
     conn.close()
 
@@ -414,7 +418,7 @@ def compute_threat_index(
         "closing_gap": {"score": round(closing_gap_score, 1), "detail": closing_gap_detail},
         "channel_expansion": {"score": round(channel_expansion_score, 1), "detail": channel_detail},
         "kol_investment": {"score": round(kol_investment_score, 1), "detail": kol_detail},
-        "sentiment_momentum": {"score": round(sentiment_score, 1), "detail": sentiment_detail},
+        "engagement_momentum": {"score": round(engagement_score, 1), "detail": engagement_detail},
     }
 
     threat_index = sum(
