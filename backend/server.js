@@ -95,61 +95,74 @@ function getJwtSecret() {
 // PR adds capability, removes nothing. Phase 2 wires requireWorkspaceOwnership
 // (also defined below) to actually enforce IDOR prevention cluster by cluster.
 function requireUserAuth(req, res, next) {
-  // 1) Preferred path: Authorization: Bearer <jwt>
+  // PHASE 4 (Epic #85 / #142 final): Bearer-only. The legacy x-user-id
+  // fallback path that existed in Phases 1-3 is gone — it was the last
+  // unauthenticated way to populate req.user, and review fix #4 already
+  // proved it was the source of the anon-class bypass. Now: no JWT, no
+  // req.user, no access. Period.
+  //
+  // What this means for callers:
+  //   - Authorization: Bearer <jwt> is REQUIRED on every requireUserAuth route
+  //   - x-user-id header is IGNORED (frontends have been updated to stop sending it)
+  //   - The user identifier itself (RB-OMI-A1B2 etc.) lives on in JWT.sub
+  //     and req.user.accountId — see docs/AUTH-MIGRATION-PLAN.md "drop
+  //     x-user-id ≠ drop user identifiers"
+  //
   // Case-insensitive prefix match (review fix #10): some HTTP clients send
-  // lowercase 'bearer'. Without /i, those tokens silently downgrade to the
-  // legacy path and JWT verify never runs.
+  // lowercase 'bearer'. Without /i those tokens get rejected.
   const authHeader = req.headers.authorization || '';
   const bearerMatch = /^Bearer\s+(.+)$/i.exec(authHeader);
   const bearer = bearerMatch ? bearerMatch[1] : null;
 
-  if (bearer) {
-    try {
-      const payload = jwt.verify(bearer, getJwtSecret());
-      req.user = {
-        accountId: (payload.sub || '').toString(),
-        email: payload.email || '',
-        name: payload.name || '',
-        // workspace_id is present on v2 tokens (signWorkspaceToken) but not on
-        // v1 invite-code tokens. Routes that need workspace context should
-        // still call findCallerWorkspace(req) — this is just a hint.
-        tokenWorkspaceId: payload.workspace_id || null,
-        verifiedVia: 'jwt',
-      };
-      return next();
-    } catch (e) {
-      // Fall through to legacy x-user-id path during Phase 1. Phase 4 will
-      // tighten this to "return 401 immediately" once telemetry confirms
-      // all clients send valid Bearer tokens.
-      console.warn(`[Auth] JWT verify failed on ${req.path}: ${e.message}`);
-    }
+  if (!bearer) {
+    return res.status(401).json({ error: 'Authentication required (Bearer token)' });
   }
 
-  // 2) Legacy path: x-user-id header (DEPRECATED — to be removed in Phase 4)
-  // Review fix #4: reject 'anon-*' values. The frontend ciApi.ts generates an
-  // 'anon-XXX' id for logged-out browsers; before this guard those calls
-  // sailed through requireUserAuth as "authenticated" via the legacy path,
-  // silently defeating the IDOR fix for the entire anon class.
-  const legacyId = req.headers['x-user-id'];
-  if (legacyId && !String(legacyId).startsWith('anon-')) {
-    // Toggle AUTH_LOG_LEGACY=1 in env when actively auditing which call
-    // sites still send x-user-id without a Bearer token. Default off to
-    // avoid log spam during normal Phase 1 operation.
-    if (process.env.AUTH_LOG_LEGACY === '1') {
-      console.warn(`[Auth] LEGACY x-user-id used (no JWT) on ${req.method} ${req.path}`);
-    }
+  try {
+    const payload = jwt.verify(bearer, getJwtSecret());
     req.user = {
-      accountId: String(legacyId),
-      email: '',
-      name: '',
-      tokenWorkspaceId: null,
-      verifiedVia: 'legacy_header',
+      accountId: (payload.sub || '').toString(),
+      email: payload.email || '',
+      name: payload.name || '',
+      // workspace_id is present on v2 tokens (signWorkspaceToken) but not on
+      // v1 invite-code tokens. Routes that need workspace context should
+      // still call findCallerWorkspace(req) — this is just a hint.
+      tokenWorkspaceId: payload.workspace_id || null,
+      verifiedVia: 'jwt',
     };
+    if (!req.user.accountId) {
+      // Defensive: JWT signed with empty sub. Shouldn't happen with our
+      // sign sites but a malformed token shouldn't grant access.
+      return res.status(401).json({ error: 'Token missing subject' });
+    }
+    return next();
+  } catch (e) {
+    console.warn(`[Auth] JWT verify failed on ${req.method} ${req.path}: ${e.message}`);
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+}
+
+// requireAdmin — gate for routes that should ONLY be callable by Will/Joanna
+// directly (not by end users, even authenticated ones). Backed by the
+// x-rebase-secret shared key (already required by requireSecret), but with
+// an EXPLICIT marker so that if we ever loosen requireSecret (e.g. allow
+// some routes to skip it), admin routes don't accidentally become public.
+//
+// Used in Phase 4 to lock down /api/ci/scrape, which triggers Apify cost.
+// Pre-Phase-4 any logged-in user could spam it; now only admin tools can.
+function requireAdmin(req, res, next) {
+  const provided = req.headers['x-rebase-secret'];
+  const expected = process.env.API_SECRET;
+  if (!expected) {
+    // Dev mode: requireSecret already short-circuited so we do too. Warn
+    // loudly so this isn't accidentally shipped to prod.
+    console.warn('[Auth] requireAdmin: API_SECRET unset — admin route exposed in dev mode');
     return next();
   }
-
-  // 3) No auth at all (or anon-only) → 401
-  return res.status(401).json({ error: 'Authentication required' });
+  if (provided !== expected) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
 }
 
 // requireWorkspaceOwnership — Phase 2 helper, not wired anywhere in this PR.
@@ -1465,9 +1478,19 @@ app.get('/api/ci/workspace/me', requireUserAuth, async (req, res) => {
 //
 // New shape: ALWAYS insert. Use PATCH /api/ci/workspace/:id (below) to
 // update an existing workspace by uuid.
+// PHASE 4 NOTE: this route INTENTIONALLY stays unauthenticated. The
+// anonymous-onboarding flow creates a workspace BEFORE the user has a JWT.
+// After approval (POST /api/admin/approve), the row is re-keyed from the
+// anon user_id to the approved invite code, so the auth model takes over
+// from that point. Pollution risk = "someone could create empty workspaces
+// for invented user_ids"; documented as accepted in
+// docs/AUTH-MIGRATION-PLAN.md "Routes deliberately UNCHANGED."
+// TODO: revisit when onboarding moves to JWT-from-signup-step (v2 flow).
 app.post('/api/ci/workspace', async (req, res) => {
   try {
     const { brand_name, brand_category, brand_price_range, brand_platforms } = req.body;
+    // x-user-id retained here ONLY because this route is unauthenticated by
+    // design (see comment above). req.user does not exist on this code path.
     const user_id = req.body.user_id || req.headers['x-user-id'];
 
     if (!user_id || !brand_name || !brand_category) {
@@ -3637,27 +3660,76 @@ app.post('/api/ci/run-analysis', requireUserAuth, requireWorkspaceOwnership, asy
 });
 
 // GET /api/ci/analysis/status — check analysis job progress
-app.get('/api/ci/analysis/status', async (req, res) => {
+//
+// PHASE 4: accepts workspace_id OR job_id. Both paths now do ownership
+// verification via req.user.accountId so the caller can't poll someone
+// else's job status by guessing UUIDs.
+//
+// requireWorkspaceOwnership can't be used as a generic middleware here
+// because the workspace_id branch is just one of two. Inline check below
+// covers both:
+//   workspace_id branch: assert ownership directly
+//   job_id branch:       look up the job's workspace_id, assert ownership of that
+app.get('/api/ci/analysis/status', requireUserAuth, async (req, res) => {
   const { workspace_id, job_id } = req.query;
-
-  let query, params;
-  if (job_id) {
-    query = 'SELECT * FROM ci_analysis_jobs WHERE id = $1';
-    params = [job_id];
-  } else if (workspace_id) {
-    query = 'SELECT * FROM ci_analysis_jobs WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT 1';
-    params = [workspace_id];
-  } else {
+  if (!workspace_id && !job_id) {
     return res.status(400).json({ error: 'Missing workspace_id or job_id' });
   }
 
   try {
-    const { rows } = await pool.query(query, params);
-    if (rows.length === 0) {
-      return res.json({ status: 'none', message: 'No analysis has been run yet' });
+    let job;
+    if (job_id) {
+      if (!isValidUuid(String(job_id))) {
+        return res.status(400).json({ error: 'Invalid job_id' });
+      }
+      const { rows } = await pool.query(
+        'SELECT * FROM ci_analysis_jobs WHERE id = $1',
+        [String(job_id)]
+      );
+      if (rows.length === 0) {
+        return res.json({ status: 'none', message: 'No analysis has been run yet' });
+      }
+      job = rows[0];
+      // Ownership: verify the JOB's workspace is owned by the caller.
+      // Pre-fix: anyone with a JWT could poll any job's status by UUID
+      // (progress, current_brand, error_message → info disclosure).
+      const owned = await pool.query(
+        'SELECT 1 FROM workspaces WHERE id = $1 AND user_id = $2 LIMIT 1',
+        [job.workspace_id, req.user.accountId]
+      );
+      if (owned.rows.length === 0) {
+        console.warn(
+          `[Auth] DENIED account ${req.user.accountId} attempted GET /analysis/status ` +
+          `for job ${job_id} (workspace ${job.workspace_id} not owned)`
+        );
+        return res.status(403).json({ error: 'Job not in your workspace' });
+      }
+    } else {
+      // workspace_id branch
+      if (!isValidUuid(String(workspace_id))) {
+        return res.status(400).json({ error: 'Invalid workspace_id' });
+      }
+      const owned = await pool.query(
+        'SELECT 1 FROM workspaces WHERE id = $1 AND user_id = $2 LIMIT 1',
+        [String(workspace_id), req.user.accountId]
+      );
+      if (owned.rows.length === 0) {
+        console.warn(
+          `[Auth] DENIED account ${req.user.accountId} attempted GET /analysis/status ` +
+          `on workspace ${workspace_id} (not owned)`
+        );
+        return res.status(403).json({ error: 'Workspace not owned by this account' });
+      }
+      const { rows } = await pool.query(
+        'SELECT * FROM ci_analysis_jobs WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT 1',
+        [String(workspace_id)]
+      );
+      if (rows.length === 0) {
+        return res.json({ status: 'none', message: 'No analysis has been run yet' });
+      }
+      job = rows[0];
     }
 
-    const job = rows[0];
     res.json({
       job_id: job.id,
       status: job.status,
@@ -3683,13 +3755,14 @@ app.get('/api/ci/analysis/status', async (req, res) => {
 //     this endpoint must stay off on ECS so stray calls can't replay banned
 //     cookies from platform_connections. Flip to 'true' in backend/.env after
 //     Phase B0 (burner account) + Phase C (rate-limit enforcement) are done.
-// Auth: requireUserAuth only (Phase 3 exception)
-// — this route takes brand_name + platform (no workspace_id), so we can't
-// do a workspace ownership check. Any authenticated user can trigger a
-// scrape of any brand. The SCRAPER_ENABLED gate below limits blast radius.
-// TODO(#142 Phase 4): tighten to admin-only or add per-user rate limiting
-// to prevent Apify-cost abuse by a logged-in attacker.
-app.post('/api/ci/scrape', requireUserAuth, async (req, res) => {
+// Auth: requireAdmin (Phase 4 hardening) — was requireUserAuth in Phase 3,
+// which let any logged-in user trigger Apify scrape of any brand for
+// $0.50-1 each. With M1 onboarding 30+ beta users imminent, that's a
+// real cost-abuse vector. Now restricted to callers carrying the shared
+// API_SECRET (Will/Joanna ops tools + the cron scheduler). End-user
+// scrape triggers happen via /api/admin/customers/:workspace_id/scrape
+// which Joanna's admin UI already calls.
+app.post('/api/ci/scrape', requireAdmin, async (req, res) => {
   if (process.env.SCRAPER_ENABLED !== 'true') {
     console.warn('[CI] /api/ci/scrape called but SCRAPER_ENABLED!=true — refusing');
     return res.status(503).json({
@@ -4999,16 +5072,11 @@ function signWorkspaceToken(workspace) {
 
 // Look up the caller's current workspace.
 //
-// Resolution order (Phase 1 of the auth migration — docs/AUTH-MIGRATION-PLAN.md):
-//   1. req.user.accountId  — set by requireUserAuth middleware after JWT verify
-//   2. req.headers['x-user-id']  — legacy header path, kept during transition
-//
-// Returns null if both are missing/unknown — callers should 401 in that case.
-//
-// Once Phase 4 cleanup lands, the x-user-id fallback gets removed; routes will
-// be required to mount requireUserAuth (or 401 here).
+// PHASE 4: Bearer-only. req.user must be populated by requireUserAuth
+// middleware before this is called; we no longer read x-user-id from headers.
+// Returns null if req.user.accountId is missing/unknown — callers should 401.
 async function findCallerWorkspace(req) {
-  const userId = (req.user && req.user.accountId) || req.headers['x-user-id'];
+  const userId = req.user && req.user.accountId;
   if (!userId) return null;
   const { rows } = await pool.query(
     'SELECT * FROM workspaces WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
