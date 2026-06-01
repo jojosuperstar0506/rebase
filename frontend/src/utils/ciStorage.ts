@@ -34,9 +34,26 @@ export interface CIConnection {
   connected_at: string | null;
 }
 
+/**
+ * Parse a JSON string, returning `fallback` if it's absent or corrupt.
+ *
+ * Several of these getters run during render (e.g. useCIData computes needsSync
+ * synchronously). A raw JSON.parse on a corrupted localStorage value would
+ * throw there and take down the whole CI module via the error boundary, with
+ * "Refresh Page" looping forever on the same bad data. Degrading to the default
+ * instead means corrupt local data just reads as empty. (#137 error states)
+ */
+function safeParse<T>(raw: string | null, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 export function getCIWorkspace(): CIWorkspace | null {
-  const raw = localStorage.getItem('rebase_ci_workspace');
-  return raw ? JSON.parse(raw) : null;
+  return safeParse<CIWorkspace | null>(localStorage.getItem('rebase_ci_workspace'), null);
 }
 
 export function saveCIWorkspace(data: CIWorkspace) {
@@ -45,8 +62,7 @@ export function saveCIWorkspace(data: CIWorkspace) {
 }
 
 export function getCICompetitors(): CICompetitor[] {
-  const raw = localStorage.getItem('rebase_ci_competitors');
-  return raw ? JSON.parse(raw) : [];
+  return safeParse<CICompetitor[]>(localStorage.getItem('rebase_ci_competitors'), []);
 }
 
 export function saveCICompetitors(competitors: CICompetitor[]) {
@@ -55,8 +71,7 @@ export function saveCICompetitors(competitors: CICompetitor[]) {
 }
 
 export function getCIConnections(): CIConnection[] {
-  const raw = localStorage.getItem('rebase_ci_connections');
-  return raw ? JSON.parse(raw) : [];
+  return safeParse<CIConnection[]>(localStorage.getItem('rebase_ci_connections'), []);
 }
 
 export function saveCIConnections(connections: CIConnection[]) {
@@ -79,8 +94,7 @@ export interface KnownWorkspace {
 }
 
 export function getKnownWorkspaces(): KnownWorkspace[] {
-  const raw = localStorage.getItem('rebase_ci_known_workspaces');
-  return raw ? JSON.parse(raw) : [];
+  return safeParse<KnownWorkspace[]>(localStorage.getItem('rebase_ci_known_workspaces'), []);
 }
 
 export function addKnownWorkspace(ws: Omit<KnownWorkspace, 'cached_at'>) {

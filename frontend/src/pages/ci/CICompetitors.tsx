@@ -13,6 +13,7 @@ import { useCIData } from '../../hooks/useCIData';
 // come purely from stableScore (seeded random) until real scrape pricing is
 // wired in (requires XHS or Tmall scraper, not Douyin).
 import { CICompetitorsSkeleton } from '../../components/ci/CISkeleton';
+import CIErrorState from '../../components/ci/CIErrorState';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { exportCompetitorsCSV, exportDashboardPDF, showExportToast } from '../../utils/ciExport';
 
@@ -502,7 +503,7 @@ export default function CICompetitors() {
   const { colors: C, lang } = useApp();
   const bp = useBreakpoint();
   const isMobile = bp === 'mobile';
-  const { competitors: rawCompetitors, workspace, loading } = useCIData();
+  const { competitors: rawCompetitors, workspace, loading, error, refresh } = useCIData();
 
   // ── ALL HOOKS MUST BE ABOVE ANY EARLY RETURN (React Rules of Hooks) ────────
   const [viewMode, setViewMode] = useState<'cards' | 'compare'>('cards');
@@ -628,6 +629,17 @@ export default function CICompetitors() {
 
   // ── Early return AFTER all hooks (React Rules of Hooks) ─────────────────────
   if (loading) return <CICompetitorsSkeleton />;
+
+  if (error) {
+    return (
+      <div style={{ background: C.bg, color: C.tx, minHeight: '100vh', padding: isMobile ? '16px 12px' : '32px 24px', fontFamily: 'var(--font-sans)' }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+          <CISubNav />
+          <CIErrorState onRetry={refresh} detail={error} />
+        </div>
+      </div>
+    );
+  }
 
   const selectedProfiles = filtered.filter(p => selected.has(p.id)).slice(0, 3);
 
