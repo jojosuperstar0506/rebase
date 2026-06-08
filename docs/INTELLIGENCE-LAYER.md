@@ -249,11 +249,105 @@ Every engagement-derived metric (`consumer_mindshare`, `voice_volume`, `content_
 
 ## Section D — Open items needing founder decision
 
-### From Joanna's `SIGNALS.md` audit (PR #171)
+### Where these issues come from — and why this audit matters
 
-1. **`livestream_activity` is misnamed** — the signal is mostly Douyin-likes growth with a small bonus when live-streaming flips on. **Decision needed:** rename to `douyin_momentum`, OR split the live-status nudge into its own GTM flag?
-2. **Engagement growth is double-counted** — `engagement_momentum` (Threat Index) and `engagement_trend` (Momentum Score) both derive from engagement % change. **Decision needed:** intentional double-weight or unintended redundancy?
-3. **`price_overlap` weak fallback** — when SYCM ranking data is missing, signal estimates overlap from follower count (bigger brand → probably overlaps). **Decision needed:** keep low-confidence fallback or suppress when ranking data is absent?
+The 10 items below didn't appear because someone wrote bad code. Each was a reasonable call at the time it was made — usually months apart, by different sessions (Will + Joanna + their respective Claudes), reacting to a specific customer need. What accumulates is **drift between what we promise (metric names, UX labels, prompt phrasing) and what we actually measure (the code).** A metric named `sentiment_momentum` that does no NLP sentiment analysis is the canonical example — Joanna already caught and renamed that one in PR #171.
+
+**Why this audit matters specifically right now:**
+- **Investor conversations:** a claim you can't defend is worse than no claim. Saying "we measure willingness to pay" when the implementation is actually price-percentile is the kind of thing a sharp investor will catch in 5 minutes of due diligence.
+- **First customers:** Chinese D2C founders are skeptical. The first time a customer asks "how do you compute X?" and the answer is "well it's not really X, it's…" — trust is gone.
+- **The team itself:** without periodic audits, names lie, lies compound, and within 6 months no one (including the people who wrote it) can predict what a metric will do for a new data shape. New contributors can't onboard against a system whose labels disagree with its implementation.
+
+The act of writing this section IS the audit. Each item below is a 5–15 min founder judgment call → 1–4 hr code change → permanent honesty gain.
+
+### From Joanna's `SIGNALS.md` audit (PR #171) — now with deeper analysis + recommendations
+
+#### 🟡 Caveat 1 — `livestream_activity` is misnamed
+
+**The state today (deeper than Joanna documented):**
+- The signal's input is `douyin_likes` % change PLUS a flat `+20` boost when `live_status` flips to `"live_now"`.
+- `live_status` is ONLY populated by `services/competitor_intel/scrapers/douyin_scraper.py` (the legacy Playwright path) — line 251 sets it when Chinese text "直播中" is detected on the page.
+- **The Playwright Douyin scraper is NOT running in production today.** The Apify Tier B path we actually use (per `docs/SCRAPING-STRATEGY.md`) doesn't pull `live_status`. There's no working Apify Douyin actor yet.
+- **Net:** in production, `live_status` is always default-empty, so the `+20` boost effectively never fires. The signal is 100% Douyin-likes growth, dressed up in livestream clothing.
+
+**Your challenge:** "is that a datapoint actually feasible to get at this stage?"
+**Honest answer: NO, not today.** Three paths to fix:
+
+| Path | Cost | Reliability | Timeline |
+|---|---|---|---|
+| Re-activate Playwright Douyin scraper | Free in $, high in rate-limit/auth risk | Medium (Joanna's account banned 2026-04-22 trying this) | Days to re-do, weeks to harden |
+| Wait for working Apify Douyin actor | $0.50-1/scrape when available | High (matches XHS path) | Unknown — none today |
+| Polling Douyin Live Center directly | Highest $, dedicated scraper | Highest accuracy | Weeks of build |
+
+**Your challenge:** "if not, is there any angle we should look at to replace this index?"
+**Yes — `douyin_engagement` is a legitimate proxy.** Livestreams drive engagement spikes regardless of whether we tag them as livestreams. A brand that's livestreaming hard shows up as elevated Douyin engagement growth — same signal, honest label.
+
+**🔧 Recommended resolution:**
+1. **Rename `livestream_activity` → `douyin_engagement_momentum`** in `scoring.py` (matches the input data, drops the misleading promise)
+2. **Drop the `+20` live_status boost entirely.** It never fires in production. Code path becomes deterministic.
+3. **Park "real livestream tracking" as an M2 sub-issue** under Epic #138 (proactive notifications) or wherever the Douyin actor work lands. When we have working Douyin scraping, we can add genuine livestream metrics as a SEPARATE GTM flag (e.g. `LIVESTREAM_DEBUT` = first livestream observed). Don't conflate it back into the momentum signal.
+
+#### 🟡 Caveat 2 — `engagement_momentum` (Threat) vs `engagement_trend` (Momentum) — same input, different stories?
+
+**Your challenge:** "are these two indices even different and telling different stories?"
+
+I went and read both code paths to find out. They ARE different stories. The calculation shape differs:
+
+| Signal | Input | Normalization | What it answers |
+|---|---|---|---|
+| `engagement_trend` (Momentum, weight 0.20) | `xhs_likes` % change | **Cohort min-max** (hottest brand → ~100, laggard → ~0) | "**Who's winning the engagement race** among the competitors I track?" |
+| `engagement_momentum` (Threat, weight 0.15) | `avg_engagement` (fallback `xhs_likes`) % change | **Absolute around midpoint 50** (no comparison; `50 + growth × 2`, clamped 0-100) | "**Is THIS competitor growing on engagement at all**, regardless of others?" |
+
+Concrete example showing they really are different:
+- Brand A grows engagement +5%, in a cohort where the fastest grows +50%. Momentum's engagement_trend → ~10 (laggard). Threat's engagement_momentum → 60 (positive direction). Different stories, both true.
+- Brand B grows engagement +5%, in a cohort where the fastest grows +5%. Momentum's engagement_trend → ~100 (leader). Threat's engagement_momentum → 60 (same — still just +5% absolute). Different stories, both true.
+
+**Applying your principle** ("same input data is fine as long as we have different intelligence and calculation behind to back up our story"): this passes the test. Cohort-relative rank vs absolute trajectory genuinely shape different decisions:
+- Momentum's question drives "where am I in this race" decisions (defend/attack/exit).
+- Threat's question drives "is this specific competitor heating up" decisions (alert/ignore).
+
+**Why it confused both of us:** the names are near-synonyms. `engagement_trend` and `engagement_momentum` sound interchangeable. The drift here is naming, not logic.
+
+**Origin of the duplication (first principles answer to your question):**
+- `scoring.py` predates `composite_indices.py`. When Momentum and Threat were both designed, "engagement growth" was the most actionable raw signal we had, so it ended up in both — correctly, given the dual reference frames.
+- Nobody renamed `engagement_trend` to clarify it was cohort-rank, OR `engagement_momentum` to clarify it was absolute-trajectory. The implementation diverged but the names converged.
+
+**🔧 Recommended resolution:**
+1. **Keep both signals — same input, different intelligence, different story.** Passes your principle.
+2. **Rename for clarity:**
+   - `engagement_trend` (Momentum) → **`engagement_vs_peers`** (it's cohort-rank, say so)
+   - `engagement_momentum` (Threat) → **`engagement_trajectory`** (it's direction, say so)
+3. **Add explicit subtitle in the UX** so a customer never has to read the code to know which is which: "Engagement vs your competitor set" vs "Engagement direction (this brand alone)"
+4. **Document the dual-frame pattern** in SIGNALS.md so the next signal we add follows the same naming convention.
+
+#### 🟢 Caveat 3 — `price_overlap` weak fallback
+
+**Your nod:** "fallback idea makes sense. Just give me what you revise for me to audit."
+
+**🔧 Recommended resolution (concrete code-shaped):**
+
+The signal stays — partial info beats no info — but we add a **confidence dimension** that flows end-to-end:
+
+1. **In `scoring.py` `_compute_threat_breakdown`:** add `confidence: 'high' | 'low'` to the `price_overlap` raw_inputs:
+   - `high` when SYCM ranking data is present (the real measurement)
+   - `low` when falling back to follower-count estimate
+2. **In the frontend tile:** render a small ⓘ "estimated" badge next to the price_overlap score when `confidence === 'low'`. Hover reveals "Estimated from brand scale (ranking data unavailable this scrape) — interpret with caution."
+3. **In `narrative_pipeline.py`:** include the confidence in the prompt context so the LLM uses "we estimate" instead of "we observed" for low-confidence signals. Prevents the AI from over-claiming on shaky data.
+4. **In `test_scoring.py`:** add two test cases — one for each branch — asserting the confidence field is set correctly. Locks the contract.
+
+**No suppression.** Suppressing the signal when ranking data is missing means the brief loses a row whenever SYCM scraping has a bad day, which the customer reads as "your tool is broken." A confidence-tagged low-quality signal is better UX than a missing tile.
+
+**Estimated effort:** ~2 hours of code + tests + UX badge. Mechanical.
+
+### From this audit (composite indices / 12 metrics)
+
+4. **Rename `wtp` → `pricing_power_signal`** in code + DB `metric_type` enum + frontend labels. The implementation is sound; the name is dishonest. (Migration risk: existing `analysis_results` rows with `metric_type='wtp'` need a backfill or a UNION in the read query.)
+5. **Merge `launch_frequency` into `trending_products`** as a sub-dimension. **Decision needed:** is this worth the refactor cost given the metric already provides signal, or defer to V2?
+6. **Reposition `threat` from composite score to battlecard**. **Decision needed:** keep the score AS WELL as adding the battlecard, or replace the score with the battlecard?
+7. **Differentiate `voice_volume` vs `consumer_mindshare`** by intent layer (publisher-side vs audience-side). **Decision needed:** is the operational complexity (storing both, labeling them clearly in UI) worth the diagnostic value?
+8. **Split metrics by platform (XHS vs Douyin) everywhere.** Largest single fix. **Decision needed:** prioritize for V1 or push to V2?
+9. **Reframe `design_profile` from score to mood-board.** **Decision needed:** is the visual asset display ready (we have post images via Apify)?
+10. **`keywords` as a heatmap, not a score.** **Decision needed:** does the frontend have a heatmap component, or do we need to build one?
 
 ### From this audit (composite indices / 12 metrics)
 
