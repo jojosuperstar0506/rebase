@@ -210,6 +210,21 @@ All config is region-agnostic via environment variables. See `.env.example`.
 
 ---
 
+## Where to Find Things
+
+| You want to know... | Read this |
+|---|---|
+| What's our intelligence layer + what's the moat | [`docs/INTELLIGENCE-LAYER.md`](docs/INTELLIGENCE-LAYER.md) |
+| Where each piece of data lives in the DB | [`docs/SCHEMA.md`](docs/SCHEMA.md) |
+| How auth works (Bearer tokens + workspace ownership) | [`docs/AUTH-MIGRATION-PLAN.md`](docs/AUTH-MIGRATION-PLAN.md) |
+| How scraping works (Apify Tier B) | [`docs/SCRAPING-STRATEGY.md`](docs/SCRAPING-STRATEGY.md) |
+| What's in flight + priorities | [`ROADMAP.md`](ROADMAP.md) "Where We Are Now" section |
+| Shared rules for everyone (humans + AI sessions) | [`CLAUDE.md`](CLAUDE.md) |
+| Per-metric algorithm details | [`services/competitor_intel/SCORING_METHODOLOGY.md`](services/competitor_intel/SCORING_METHODOLOGY.md) |
+| Per-signal audit (the 17 brief signals) | [`services/competitor_intel/SIGNALS.md`](services/competitor_intel/SIGNALS.md) |
+
+---
+
 ## Revenue Model
 
 | Layer | Revenue Stream | Pricing |
