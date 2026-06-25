@@ -41,12 +41,16 @@ Each PR is small + focused, but they ARE stacked (each base = the previous branc
 I rotated `JWT_SECRET` on ECS tonight from the placeholder string `change_me_in_dot_env` to a real 64-char hex:
 
 ```
-JWT_SECRET=654dd10544a8d78b1b90bf604143ed1b002baa1cc4c3f994362c42e5413b84d6
+JWT_SECRET=<REDACTED 2026-06-25 — secret was committed publicly; must be rotated, do not reuse>
 ```
 
 (File: `/root/rebase/backend/.env`)
 
-I **also** updated Vercel's `JWT_SECRET` env var to the same value (per the [environment variables panel](https://vercel.com/jojosuperstar0506s-projects/rebase/settings/environment-variables) — pre-existing value was `rebase2026-will-joanna-secret-key`, now matches ECS).
+I **also** updated Vercel's `JWT_SECRET` env var to the same value (per the environment variables panel — pre-existing value was `<REDACTED>`, now matches ECS).
+
+> ⚠️ **Security note (2026-06-25):** the real `JWT_SECRET` and the prior Vercel value were
+> committed here in plaintext in a public repo. They are now invalid for trust purposes — both
+> must be regenerated (`openssl rand -hex 32`) on any revival. Tracked in `WIND-DOWN-AND-REVIVAL.md` §4.
 
 **If you re-deploy from your branch BEFORE merging this stack**, double-check `JWT_SECRET` matches on both sides. Mismatch = every JWT verify fails silently and the new middleware downgrades to legacy x-user-id path → security gain is zero.
 

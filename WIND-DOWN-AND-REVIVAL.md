@@ -150,8 +150,23 @@ and `COPY`/`INSERT` lines.** A backup you haven't opened is not a backup.
 
 ## 4. WIND-DOWN CHECKLIST — cancel in this order (only after §3 is verified)
 
-- [ ] **Rotate/disable all API keys FIRST** (security — the box held them all):
-      Anthropic, DeepSeek, Qwen, Apify, Resend, and any `GITHUB_TOKEN`.
+- [ ] **Rotate/revoke ALL secrets FIRST** (security — the box + `.env` held them all; some were
+      exposed in chat or committed publicly). Editing GitHub does NOT invalidate a key that's
+      already been seen — you must regenerate each one in its provider console:
+
+  | Secret | Where to rotate | Exposure |
+  |---|---|---|
+  | `ANTHROPIC_API_KEY` | console.anthropic.com → API Keys | ⚠️ shown in chat 2026-06-25 — rotate |
+  | `DEEPSEEK_API_KEY` | platform.deepseek.com → API Keys | on box `.env` — rotate |
+  | `QWEN_API_KEY` | dashscope.aliyuncs.com console | on box `.env` — rotate |
+  | `GLM_API_KEY` | open.bigmodel.cn | on box `.env` — rotate |
+  | `APIFY_API_TOKEN` | console.apify.com → Settings → Integrations | on box `.env` — rotate/cancel |
+  | `RESEND_API_KEY` | resend.com → API Keys | on box `.env` — rotate |
+  | `GITHUB_TOKEN` | github.com → Settings → Developer settings → Tokens | on box `.env` — revoke |
+  | `JWT_SECRET` | regenerate: `openssl rand -hex 32` | 🔴 committed publicly (handoff doc) — DEAD, regenerate |
+  | `API_SECRET` | regenerate: `openssl rand -hex 32` | on box `.env` — regenerate |
+  | `COOKIE_ENCRYPTION_KEY` / `ADMIN_SECRET` | regenerate: `openssl rand -hex 32` | on box `.env` — regenerate |
+  | DB password (`rebase_app`) | `ALTER USER rebase_app WITH PASSWORD ...` | localhost-only; moot once box released |
 - [ ] **Apify** — console.apify.com → cancel subscription. (Pure China-content tooling; irrelevant to pivot.)
 - [ ] **Resend** — drop to free or delete; only the cron used it.
 - [ ] **Alibaba OSS** — delete bucket `rebase-docs` (after §3.5 download).
