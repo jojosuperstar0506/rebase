@@ -32,9 +32,11 @@ Vercel  ─────────────  Frontend SPA (React + Vite + TS
 Alibaba Cloud ECS — Hong Kong Zone B — 8.217.242.191
       │   ecs.t5-lc1m1.small (1 vCPU / 1 GB RAM), Alibaba Cloud Linux 3
       │   Node 20 LTS + PM2 (process "rebase-backend") + Nginx (80 → 3000)
-      │   App dir: /var/www/rebase-backend  (git clone of this repo)
+      │   App dir: /root/rebase  (git clone of this repo; .env at /root/rebase/backend/.env)
+      │   (NOTE: an old abandoned copy exists at /var/www/rebase-backend.ABANDONED-20260504 — ignore)
       │   Runs: backend/server.js  AND  backend/scheduler.js cron jobs
-      ├──────────► PostgreSQL  (DATABASE_URL — running locally on this box)
+      ├──────────► PostgreSQL 13  (LOCAL on this box, db "rebase", owner rebase_app)
+      │              auto-dumped nightly ~20:00 to /var/backups/rebase/*.sql.gz (~15 days kept)
       ├──────────► Alibaba OSS  bucket "rebase-docs" (uploaded documents)
       ├──────────► Anthropic Claude API   (primary LLM)
       ├──────────► DeepSeek API           (secondary LLM)
@@ -67,7 +69,7 @@ Alibaba Cloud ECS — Hong Kong Zone B — 8.217.242.191
 | Resend | resend.com | `RESEND_API_KEY` |
 | Domain (if registered) | check registrar | `rebase.ai` referenced in email "from" |
 
-> The live secrets were stored ONLY in `/var/www/rebase-backend/backend/.env` on the ECS box and
+> The live secrets were stored ONLY in `/root/rebase/backend/.env` on the ECS box and
 > in Vercel env vars — never committed to git. When we release the box, those secret VALUES are
 > gone, but every key can be regenerated from its provider console (see §6.5).
 
@@ -85,20 +87,17 @@ ssh root@8.217.242.191
 
 ### 3.2 — Back up the PostgreSQL database (MOST IMPORTANT)
 ```bash
-cd /var/www/rebase-backend/backend
-# Pull the connection string out of the live .env so we use the exact same DB:
-grep DATABASE_URL .env
+# Easiest, password-free method — dump as the postgres OS superuser via peer auth.
+# (No need for the rebase_app password. cd /tmp avoids a harmless cwd warning.)
+cd /tmp && sudo -u postgres pg_dump rebase --no-owner --no-privileges \
+  > /root/rebase-db-backup-$(date +%Y-%m-%d).sql
 
-# Full logical dump (schema + ALL data). Replace the URL if grep showed a different one:
-pg_dump "$(grep -E '^DATABASE_URL=' .env | cut -d= -f2-)" \
-  --no-owner --no-privileges \
-  > ~/rebase-db-backup-2026-06-25.sql
-
-# Sanity check it's non-trivial (should be hundreds of KB+, not a few bytes):
-ls -lh ~/rebase-db-backup-2026-06-25.sql
-head -40 ~/rebase-db-backup-2026-06-25.sql
+# Sanity check it's non-trivial (was ~6.6 MB on 2026-06-25, not a few bytes):
+ls -lh /root/rebase-db-backup-*.sql
+head -40 /root/rebase-db-backup-*.sql   # expect "PostgreSQL database dump" + CREATE statements
 ```
-If `pg_dump` is missing: `sudo dnf install -y postgresql` (client only) — it can still dump a local DB.
+> There is ALSO an automated nightly dump cron writing to `/var/backups/rebase/rebase_*.sql.gz`
+> (gzipped, ~15 days retained). Download that whole folder too — it's free extra history.
 
 ### 3.3 — Also export the human-valuable tables to CSV (lead list = real relationships)
 ```bash
@@ -113,7 +112,7 @@ $PSQL -c "\copy (SELECT * FROM applicants)  TO '~/applicants.csv'  CSV HEADER" 2
 
 ### 3.4 — Save the live `.env` (so revival is instant, not a key hunt)
 ```bash
-cp /var/www/rebase-backend/backend/.env ~/rebase-env-backup-2026-06-25.txt
+cp /root/rebase/backend/.env ~/rebase-env-backup-2026-06-25.txt
 ```
 > This file contains real secrets. Store it in a password manager / encrypted vault, NOT in git,
 > NOT in plain cloud storage.
@@ -314,8 +313,9 @@ Then open the Vercel URL → `/signup`, complete onboarding, confirm you land on
    release the instance to truly stop billing.
 5. **Migrations are forward-only and tracked in `_migrations`** — never edit an already-applied
    `.sql`; add a new numbered file instead.
-6. **The DB likely lived ON the ECS box**, not a managed RDS. Releasing the box destroys it —
-   which is exactly why §3.2 exists. Verify in Console → RDS whether a separate instance exists.
+6. **The DB lives LOCALLY on the ECS box** — PostgreSQL 13, db "rebase" (confirmed 2026-06-25),
+   NOT a managed RDS. Releasing the box destroys it; that's why §3.2 exists. A nightly cron also
+   dumps it to `/var/backups/rebase/*.sql.gz` — download that folder too before releasing.
 7. **`ANTHROPIC_MODEL`** in the old `.env` points at a model that may be retired by revival time —
    set it to a current Claude model id when you come back.
 
