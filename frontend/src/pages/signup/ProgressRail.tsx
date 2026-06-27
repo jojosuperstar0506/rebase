@@ -35,7 +35,7 @@ export function ProgressRail({ current, completed, onJump }: Props) {
             onClick={clickable && onJump ? () => onJump(s) : undefined}
             disabled={!clickable}
             className={cn(
-              "flex items-center gap-2 text-[0.75rem] uppercase tracking-[0.18em] transition-opacity",
+              "flex items-center gap-2 min-h-[44px] text-[0.75rem] uppercase tracking-[0.18em] transition-opacity",
               isCurrent ? "text-[var(--color-text-primary)]" : "text-[var(--color-text-subtle)]",
               clickable && "hover:opacity-80 cursor-pointer",
               !clickable && "cursor-default"

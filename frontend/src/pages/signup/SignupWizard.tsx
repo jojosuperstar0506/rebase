@@ -106,7 +106,7 @@ export default function SignupWizard() {
         </Link>
         <Link
           to="/login"
-          className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+          className="inline-flex items-center min-h-[44px] text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
           style={{ fontFamily: "var(--font-mono)" }}
         >
           have an account? log in →
