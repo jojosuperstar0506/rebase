@@ -18,6 +18,9 @@ interface CIDataState {
   /** True when localStorage has data but API workspace doesn't exist yet */
   needsSync: boolean;
   loading: boolean;
+  /** Set when the data load threw unexpectedly (so pages can show an error
+   *  state + retry instead of hanging on the loading skeleton forever). */
+  error: string | null;
   refresh: () => void;
   /** Sync localStorage workspace + competitors up to the API */
   syncToApi: () => Promise<void>;
@@ -31,25 +34,35 @@ export function useCIData(): CIDataState {
   const [source, setSource] = useState<'api' | 'local' | 'demo'>('demo');
   const [workspaceSource, setWorkspaceSource] = useState<'api' | 'local'>('local');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
+    setError(null);
 
-    const ws = await getWorkspace();
-    setWorkspace(ws.data);
-    setWorkspaceSource(ws.source);
+    // The ciApi layer degrades to local/demo data on network failure, so this
+    // rarely throws — but localStorage parsing or a data transform still can.
+    // Without this guard a throw would leave the page stuck on its loading
+    // skeleton with no recovery, so surface it as a retryable error instead.
+    try {
+      const ws = await getWorkspace();
+      setWorkspace(ws.data);
+      setWorkspaceSource(ws.source);
 
-    const comps = await getCompetitors(ws.data?.id);
-    setCompetitors(comps.data);
+      const comps = await getCompetitors(ws.data?.id);
+      setCompetitors(comps.data);
 
-    const dash = await getDashboard(ws.data?.id);
-    setDashboard(dash.data);
-    setSource(dash.source);
+      const dash = await getDashboard(ws.data?.id);
+      setDashboard(dash.data);
+      setSource(dash.source);
 
-    const conns = await getConnections(ws.data?.id);
-    setConnections(conns.data);
-
-    setLoading(false);
+      const conns = await getConnections(ws.data?.id);
+      setConnections(conns.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load workspace data');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -122,6 +135,7 @@ export function useCIData(): CIDataState {
     workspaceSource,
     needsSync: needsSyncFinal,
     loading,
+    error,
     refresh: loadAll,
     syncToApi,
   };
