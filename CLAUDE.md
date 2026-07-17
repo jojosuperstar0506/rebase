@@ -185,6 +185,7 @@ This ensures we can switch from Alibaba Cloud Hong Kong to Guangzhou (or any oth
 - **`.github/CODEOWNERS`** — who owns which directory; drives PR review routing.
 - **`CLAUDE.md`** — this file. The shared rulebook (humans + AI sessions).
 - **`docs/SCHEMA.md`** — DB cheat-sheet. 17 tables, 5 layers, "where does X live" lookup, SQL recipes. **Read before any DB/migration work.**
+- **`docs/INTELLIGENCE-LAYER.md`** — canonical Intelligence Layer reference (investor-readable A section, engineer-readable B section, differentiation in C, open decisions in D). **Read before changing any metric, signal, or composite-index definition.**
 - **`docs/SCRAPING-STRATEGY.md`** — current scraping approach (Apify Tier B via easyapi actors).
 - **`docs/SCRAPING-DEPLOY-RUNBOOK.md`** — phased ECS deploy procedure for the scraper.
 - **`.env.example`** — template with all variable names and comments. Copy to `.env` for local dev.
