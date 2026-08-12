@@ -3,6 +3,11 @@ import { Navigate, useLocation } from "react-router-dom";
 import { isTokenValid } from "../utils/jwt";
 import { getOnboardingState } from "@/services/onboardingApi";
 
+// Demo mode — when VITE_DEMO_MODE=true, skip the JWT-validity and
+// onboarding-state checks so viewers can browse the CI pages without a real
+// signed token or a live backend. Paired with USE_MOCKS in ciMocks.ts.
+const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === "true";
+
 /**
  * Gate every protected route on TWO things:
  *   1. Valid auth token (or legacy admin_authed flag)
@@ -40,6 +45,8 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
   const adminAuthed = !!localStorage.getItem("admin_authed");
 
   const [gate, setGate] = useState<GateState>(() => {
+    // Demo mode: skip both the token-validity and onboarding-state gates.
+    if (DEMO_MODE) return { kind: "ok" };
     if (!isTokenValid(token) && !adminAuthed) {
       return { kind: "redirect", to: "/login" };
     }
