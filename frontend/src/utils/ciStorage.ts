@@ -54,15 +54,35 @@ const DEMO_SEED_COMPETITORS: CICompetitor[] = [
   created_at: '2026-05-04T00:00:00.000Z',
 }));
 
+// Bump this whenever the demo dataset changes. Any browser holding an older
+// version gets its demo workspace + competitors replaced on next load.
+//
+// Why a version rather than "seed only when empty": anyone who opened the app
+// before the handbag dataset shipped has a stale workspace cached (a Nike one,
+// from the old sneaker fixtures). Seed-if-empty would never replace it, so
+// they would keep seeing the wrong brand forever with no way to fix it short
+// of clearing site data by hand.
+const DEMO_SEED_VERSION = '2026-05-05.handbag.1';
+const DEMO_SEED_VERSION_KEY = 'rebase_ci_demo_seed_version';
+
+/**
+ * Install (or refresh) the demo dataset in localStorage.
+ *
+ * Runs at most once per seed version per browser. After it stamps the version
+ * key, the prospect's own edits — renaming the brand, adding or removing
+ * competitors — persist normally and are never clobbered.
+ */
+function ensureDemoSeed(): void {
+  if (import.meta.env.VITE_DEMO_MODE !== 'true') return;
+  if (localStorage.getItem(DEMO_SEED_VERSION_KEY) === DEMO_SEED_VERSION) return;
+  localStorage.setItem('rebase_ci_workspace', JSON.stringify(DEMO_SEED_WORKSPACE));
+  localStorage.setItem('rebase_ci_competitors', JSON.stringify(DEMO_SEED_COMPETITORS));
+  localStorage.setItem(DEMO_SEED_VERSION_KEY, DEMO_SEED_VERSION);
+}
+
 export function getCIWorkspace(): CIWorkspace | null {
+  ensureDemoSeed();
   const raw = localStorage.getItem('rebase_ci_workspace');
-  // Demo mode: seed the handbag workspace on first read so a prospect opening
-  // the shared link lands on a populated dashboard with zero setup. Anything
-  // they save afterwards is respected — the seed only fills the empty case.
-  if (!raw && import.meta.env.VITE_DEMO_MODE === 'true') {
-    localStorage.setItem('rebase_ci_workspace', JSON.stringify(DEMO_SEED_WORKSPACE));
-    return DEMO_SEED_WORKSPACE;
-  }
   return raw ? JSON.parse(raw) : null;
 }
 
@@ -72,13 +92,8 @@ export function saveCIWorkspace(data: CIWorkspace) {
 }
 
 export function getCICompetitors(): CICompetitor[] {
+  ensureDemoSeed();
   const raw = localStorage.getItem('rebase_ci_competitors');
-  // Demo mode: seed the five tracked handbag competitors on first read.
-  // Same rule as the workspace — fills the empty case only.
-  if (!raw && import.meta.env.VITE_DEMO_MODE === 'true') {
-    localStorage.setItem('rebase_ci_competitors', JSON.stringify(DEMO_SEED_COMPETITORS));
-    return DEMO_SEED_COMPETITORS;
-  }
   return raw ? JSON.parse(raw) : [];
 }
 
