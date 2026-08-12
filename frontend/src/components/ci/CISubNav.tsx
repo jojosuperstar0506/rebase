@@ -2,7 +2,7 @@ import { useApp } from '../../context/AppContext';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Newspaper, BarChart3, Library, Tag,
-  Target, Map as MapIcon,
+  Target, Map as MapIcon, ShieldCheck,
   Settings as SettingsIcon, HelpCircle,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -45,7 +45,10 @@ const CI_TABS: CITab[] = [
   { path: '/ci',             label: { en: 'Brief',       zh: '简报'    }, Icon: Newspaper },
   { path: '/ci/analytics',   label: { en: 'Analytics',   zh: '分析'    }, Icon: BarChart3 },
   { path: '/ci/library',     label: { en: 'Library',     zh: '资料库'  }, Icon: Library },
-  { path: '/ci/competitors', label: { en: 'Brands',      zh: '品牌'    }, Icon: Tag, groupBreakAfter: true },
+  { path: '/ci/competitors', label: { en: 'Brands',      zh: '品牌'    }, Icon: Tag },
+  // Evaluation sits at the end of the "current state" group on purpose:
+  // it audits everything to its left (collection → computation → narrative).
+  { path: '/ci/evaluation',  label: { en: 'Evaluation',  zh: '评估'    }, Icon: ShieldCheck, groupBreakAfter: true },
   // ── Recommended next
   { path: '/ci/actions',     label: { en: 'Actions',     zh: '今日'    }, Icon: Target },
   { path: '/ci/opportunity', label: { en: 'Opportunity', zh: '本月机会' }, Icon: MapIcon, groupBreakAfter: true },

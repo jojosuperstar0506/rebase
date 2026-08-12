@@ -34,8 +34,35 @@ export interface CIConnection {
   connected_at: string | null;
 }
 
+// Demo-mode seed values. Kept here (rather than imported from demoFixtures)
+// so ciStorage stays dependency-free — it is imported by nearly everything.
+const DEMO_SEED_WORKSPACE: CIWorkspace = {
+  brand_name: 'TORY BURCH',
+  brand_category: '女包',
+  price_range: { min: 1200, max: 4800 },
+  platforms: ['小红书', '抖音'],
+};
+
+const DEMO_SEED_COMPETITORS: CICompetitor[] = [
+  'COACH', '古良吉吉', 'MICHAEL KORS', 'MCM', 'Dissona',
+].map((brand_name, i) => ({
+  id: `demo-c${i + 1}`,
+  brand_name,
+  tier: 'watchlist' as const,
+  platform_ids: {},
+  added_via: 'onboarding' as const,
+  created_at: '2026-05-04T00:00:00.000Z',
+}));
+
 export function getCIWorkspace(): CIWorkspace | null {
   const raw = localStorage.getItem('rebase_ci_workspace');
+  // Demo mode: seed the handbag workspace on first read so a prospect opening
+  // the shared link lands on a populated dashboard with zero setup. Anything
+  // they save afterwards is respected — the seed only fills the empty case.
+  if (!raw && import.meta.env.VITE_DEMO_MODE === 'true') {
+    localStorage.setItem('rebase_ci_workspace', JSON.stringify(DEMO_SEED_WORKSPACE));
+    return DEMO_SEED_WORKSPACE;
+  }
   return raw ? JSON.parse(raw) : null;
 }
 
@@ -46,6 +73,12 @@ export function saveCIWorkspace(data: CIWorkspace) {
 
 export function getCICompetitors(): CICompetitor[] {
   const raw = localStorage.getItem('rebase_ci_competitors');
+  // Demo mode: seed the five tracked handbag competitors on first read.
+  // Same rule as the workspace — fills the empty case only.
+  if (!raw && import.meta.env.VITE_DEMO_MODE === 'true') {
+    localStorage.setItem('rebase_ci_competitors', JSON.stringify(DEMO_SEED_COMPETITORS));
+    return DEMO_SEED_COMPETITORS;
+  }
   return raw ? JSON.parse(raw) : [];
 }
 
@@ -79,6 +112,18 @@ export interface KnownWorkspace {
 }
 
 export function getKnownWorkspaces(): KnownWorkspace[] {
+  // Demo mode: the switcher lists exactly one workspace — the demo brand.
+  // Without this, stale entries cached from earlier sessions (notably an old
+  // "OMI" workspace from prior testing) show up in the dropdown and make the
+  // demo look like someone else's account.
+  if (import.meta.env.VITE_DEMO_MODE === 'true') {
+    return [{
+      id: 'demo-mock-workspace',
+      brand_name: 'TORY BURCH',
+      brand_category: '女包',
+      cached_at: new Date().toISOString(),
+    }];
+  }
   const raw = localStorage.getItem('rebase_ci_known_workspaces');
   return raw ? JSON.parse(raw) : [];
 }

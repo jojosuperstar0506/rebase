@@ -120,6 +120,10 @@ type CacheEntry<T> = {
 const responseCache = new Map<string, CacheEntry<unknown>>();
 
 async function cachedGet<T>(path: string, minIntervalMs: number): Promise<T | null> {
+  // Demo mode: skip the network. This path is separate from tryApi and feeds
+  // /dashboard, /alerts and /connections — without the guard those three
+  // still hit the (intentionally stopped) backend and log proxy errors.
+  if (DEMO_MODE) return null;
   const now = Date.now();
   const entry = responseCache.get(path) as CacheEntry<T> | undefined;
 

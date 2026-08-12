@@ -380,6 +380,22 @@ export default function CIBrief() {
   // so a wedged backend doesn't leave the UI spinning forever.
   async function handleRegenerate() {
     if (regenerating) return;
+    // Demo mode: the brief is a fixed fixture and the backend is not
+    // reachable, so a real regenerate would fail with "Could not start
+    // analysis". Play the stage animation to show what the flow looks
+    // like, then settle back — the underlying data intentionally does
+    // not change.
+    if (import.meta.env.VITE_DEMO_MODE === 'true') {
+      setRegenerating(true);
+      setJobError(null);
+      const stages: Array<AnalysisJob['status']> = ['queued', 'scoring', 'narrating', 'complete'];
+      for (const s of stages) {
+        setJobStatus(s);
+        await new Promise(r => window.setTimeout(r, 650));
+      }
+      window.setTimeout(() => { setRegenerating(false); setJobStatus(null); }, 700);
+      return;
+    }
     if (!workspaceId || workspaceId === 'mock' || workspaceId === 'local') {
       // No real workspace — bail rather than firing a useless API call.
       return;
@@ -1088,25 +1104,10 @@ export default function CIBrief() {
           </div>
         </section>
 
-        {/* ─── SECTION 1.5: Competitive map (scatter) ─────────────────────
-             Visual companion to the verdict — shows where the user sits vs
-             every competitor across any 2 of the 12 indices the user cares
-             about. Lives on Brief (not Analytics) because the verdict
-             interprets competitive position; the scatter shows it. Falls
-             through silently if the indices endpoint returns null. */}
-        {indices && Object.keys(indices.indices_by_competitor).length > 0 && (
-          <section style={{ marginBottom: 40 }}>
-            <h3 style={{ fontSize: 12, fontWeight: 600, color: C.t3, letterSpacing: '0.16em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', margin: '0 0 6px' }}>
-              {lang === 'zh' ? '竞争地图' : 'Competitive map'}
-            </h3>
-            <p style={{ fontSize: 12, color: C.t3, margin: '0 0 14px', lineHeight: 1.55 }}>
-              {lang === 'zh'
-                ? '任选 2 项指数作为 X / Y 轴 — 看自己和竞品在矩阵中的相对位置。'
-                : "Pick any 2 indices as X / Y — see where you sit vs every competitor in the matrix."}
-            </p>
-            <IndexScatterPlot data={indices} />
-          </section>
-        )}
+        {/* The competitive map (scatter plot) used to live here. It moved to
+            Analytics — that page is "where do I stand", which is the question
+            a 2-axis positioning matrix answers. Brief stays the narrative:
+            verdict → moves → what to do about it. See CIAnalytics §0a. */}
 
         {/* ─── SECTION 1b: Three moves ──────────────────────────────── */}
         <section style={{ marginBottom: 40 }}>
