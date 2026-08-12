@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useApp } from "../context/AppContext";
@@ -11,6 +11,27 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 
+// Demo mode — when VITE_DEMO_MODE=true, skip the invite-code verify call and
+// route straight to /ci. Paired with USE_MOCKS in ciMocks.ts so the whole
+// dashboard renders off local fixtures with no backend involvement.
+const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
+
+// A minted unsigned JWT with sub matching the invite-code shape and a
+// far-future exp. isTokenValid checks exp only (no signature verify), and
+// downstream JWT-sanity guards check sub matches /^[A-Z][A-Z0-9-]{3,}$/.
+// The signature segment is intentionally the string "demo" — no key involved.
+// Backend never sees this token (tryApi short-circuits in demo mode).
+function mintDemoJwt(): string {
+  const header = { alg: 'none', typ: 'JWT' };
+  const payload = { sub: 'RB-DEMO-TB01', exp: 9999999999 };
+  const b64u = (obj: object) =>
+    btoa(JSON.stringify(obj))
+      .replace(/=+$/, '')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_');
+  return `${b64u(header)}.${b64u(payload)}.demo`;
+}
+
 export default function Login() {
   const { lang, setLang } = useApp();
   const [code, setCode] = useState("");
@@ -19,6 +40,14 @@ export default function Login() {
   const navigate = useNavigate();
   const s = T.login;
   const nav = T.nav;
+
+  // In demo mode, auto-enter the app on mount without asking for a code.
+  useEffect(() => {
+    if (!DEMO_MODE) return;
+    localStorage.setItem("rebase_token", mintDemoJwt());
+    window.dispatchEvent(new CustomEvent("rebase_auth_change"));
+    navigate("/ci", { replace: true });
+  }, [navigate]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();

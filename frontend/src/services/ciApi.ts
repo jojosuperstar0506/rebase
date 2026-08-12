@@ -5,6 +5,13 @@ import {
 
 const API_BASE = '/api/ci';
 
+// Demo mode — when VITE_DEMO_MODE=true, tryApi and tryApiVerbose short-circuit
+// to null / empty result immediately instead of hitting the backend. This
+// avoids 30-second timeout stalls when ECS is intentionally stopped for cost
+// saving. Callers already handle null gracefully (they fall through to mocks
+// or empty states). See ciMocks.ts USE_MOCKS + Login.tsx auto-bypass.
+const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
+
 // JWT.sub for invite-code users is the uppercase invite code (e.g. "RB-TORYBU-841E").
 // Older tokens minted before the auth refactor had sub = phone or email — those are
 // stale: workspaces now key on the invite code, so a phone-keyed sub silently lands
@@ -69,6 +76,8 @@ function getHeaders(): Record<string, string> {
 
 // Helper: try API call, return null on failure (don't throw)
 async function tryApi<T>(path: string, options?: RequestInit): Promise<T | null> {
+  // Demo mode: skip network entirely (backend is intentionally off).
+  if (DEMO_MODE) return null;
   try {
     const res = await fetch(`${API_BASE}${path}`, {
       ...options,
@@ -209,6 +218,9 @@ export type ApiResult<T> =
   | { ok: false; status: number; message?: string };
 
 async function tryApiVerbose<T>(path: string, options?: RequestInit): Promise<ApiResult<T>> {
+  // Demo mode: skip network. Match the "backend unreachable" branch below so
+  // consumers get the same shape they'd see if ECS were down for real.
+  if (DEMO_MODE) return { ok: false, status: 0, message: 'demo-mode-bypass' };
   try {
     const res = await fetch(`${API_BASE}${path}`, {
       ...options,
@@ -290,12 +302,15 @@ export async function getWorkspace(): Promise<{ data: Workspace | null; source: 
     }
     return { data: apiData, source: 'api' };
   }
-  // Fall back to localStorage
+  // Fall back to localStorage. In demo mode, mint a synthetic id so the CI
+  // pages don't short-circuit on the usual 'local' / 'mock' guards — they'll
+  // call getBrief/getAnalytics/etc., ciMocks short-circuits the network call
+  // via USE_MOCKS, and mock fixtures render.
   const local = getCIWorkspace();
   if (local) {
     return {
       data: {
-        id: 'local',
+        id: DEMO_MODE ? 'demo-mock-workspace' : 'local',
         user_id: 'local',
         brand_name: local.brand_name,
         brand_category: local.brand_category ?? null,

@@ -447,7 +447,11 @@ export const MOCK_DOMAIN_SCORES_NIKE: DomainScores = {
 //     error / empty data), so flipping this off just means we stop overlaying
 //     Nike-themed mocks on workspaces whose pipelines haven't run yet
 // Easy revert: change to true and redeploy. No data migration involved.
-const USE_MOCKS = false;
+//
+// Demo mode (2026-XX) — set VITE_DEMO_MODE=true in Vercel env to force mocks on
+// even when the backend is available. Useful for cost-saving demo windows when
+// ECS is stopped: mocks fill the UI shell so viewers can click around.
+const USE_MOCKS = (import.meta.env.VITE_DEMO_MODE === 'true') || false;
 
 /**
  * Try GET /api/ci/brief; returns null on 404/network error so callers can
