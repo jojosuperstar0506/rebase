@@ -15,6 +15,13 @@
  *   - Chinese-first, since the primary user is a Chinese SMB owner
  */
 
+// Handbag-category demo fixtures. Imported lazily-safe: demoFixtures only
+// imports TYPES from this file, so the runtime dependency is one-directional
+// (ciMocks → demoFixtures) with no cycle.
+import {
+  demoBrief, demoLibrary, demoAnalytics, demoDomainScores,
+} from './demoFixtures';
+
 // ─── Types (final API contract) ──────────────────────────────────────────
 
 export type TrendDirection = 'gaining' | 'steady' | 'losing';
@@ -448,10 +455,20 @@ export const MOCK_DOMAIN_SCORES_NIKE: DomainScores = {
 //     Nike-themed mocks on workspaces whose pipelines haven't run yet
 // Easy revert: change to true and redeploy. No data migration involved.
 //
-// Demo mode (2026-XX) — set VITE_DEMO_MODE=true in Vercel env to force mocks on
-// even when the backend is available. Useful for cost-saving demo windows when
-// ECS is stopped: mocks fill the UI shell so viewers can click around.
-const USE_MOCKS = (import.meta.env.VITE_DEMO_MODE === 'true') || false;
+// Demo mode — set VITE_DEMO_MODE=true in Vercel env to force mocks on even
+// when the backend is available. Useful for cost-saving demo windows when
+// ECS is stopped: fixtures fill the UI shell so viewers can click around.
+const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
+const USE_MOCKS = DEMO_MODE || false;
+
+// In demo mode every getter below short-circuits to the handbag-category
+// fixtures (TORY BURCH) instead of the legacy Nike sneaker mocks. This keeps
+// the workspace header and the page body in the same category — previously
+// the header said "Tory Burch" while every panel said "Nike".
+//
+// Returning synchronously-resolved fixtures also means no network round-trip
+// and no artificial setTimeout, so navigating between CI tabs never shows a
+// regenerating spinner for data we already have.
 
 /**
  * Try GET /api/ci/brief; returns null on 404/network error so callers can
@@ -472,6 +489,7 @@ async function _fetchBriefFromApi(workspaceId: string, lang: string = 'zh'): Pro
 }
 
 export async function getBrief(workspaceId: string, lang: string = 'zh'): Promise<WeeklyBrief | null> {
+  if (DEMO_MODE) return demoBrief(lang === 'en' ? 'en' : 'zh');
   // Skip the network call for the synthetic "local" workspace_id used when
   // a user hasn't completed onboarding yet — there's no row to fetch.
   if (workspaceId && workspaceId !== 'local') {
@@ -498,6 +516,7 @@ async function _fetchLibraryFromApi(workspaceId: string, lang: string = 'zh'): P
 }
 
 export async function getLibrary(workspaceId: string, lang: string = 'zh'): Promise<LibraryEntry[]> {
+  if (DEMO_MODE) return demoLibrary(lang === 'en' ? 'en' : 'zh');
   if (workspaceId && workspaceId !== 'local') {
     const real = await _fetchLibraryFromApi(workspaceId, lang);
     if (real) return real;
@@ -530,6 +549,7 @@ async function _fetchDomainScoresFromApi(workspaceId: string): Promise<DomainSco
 }
 
 export async function getDomainScores(workspaceId: string): Promise<DomainScores> {
+  if (DEMO_MODE) return demoDomainScores();
   if (workspaceId && workspaceId !== 'local') {
     const real = await _fetchDomainScoresFromApi(workspaceId);
     if (real) return real;
@@ -904,6 +924,7 @@ async function _fetchAnalyticsFromApi(workspaceId: string, lang: string = 'zh'):
 }
 
 export async function getAnalytics(workspaceId: string, lang: string = 'zh'): Promise<AnalyticsData | null> {
+  if (DEMO_MODE) return demoAnalytics(lang === 'en' ? 'en' : 'zh');
   if (workspaceId && workspaceId !== 'local') {
     const real = await _fetchAnalyticsFromApi(workspaceId, lang);
     if (real) return real;

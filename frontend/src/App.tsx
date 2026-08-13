@@ -32,6 +32,7 @@ import SignupWizard from "./pages/signup/SignupWizard";
 // into the Brief (collapsed metrics panel) or per-brand detail views.
 import CIBrief from "./pages/ci/CIBrief";
 import CIAnalytics from "./pages/ci/CIAnalytics";
+import CIEvaluation from "./pages/ci/CIEvaluation";
 import CILibrary from "./pages/ci/CILibrary";
 import CICompetitors from "./pages/ci/CICompetitors";
 import CISettings from "./pages/ci/CISettings";
@@ -489,6 +490,7 @@ function AppRoutes() {
         <Route path="/ci/actions" element={<ProtectedRoute><CIErrorBoundary><CIActions /></CIErrorBoundary></ProtectedRoute>} />
         <Route path="/ci/opportunity" element={<ProtectedRoute><CIErrorBoundary><CIOpportunity /></CIErrorBoundary></ProtectedRoute>} />
         <Route path="/ci/analytics" element={<ProtectedRoute><CIErrorBoundary><CIAnalytics /></CIErrorBoundary></ProtectedRoute>} />
+        <Route path="/ci/evaluation" element={<ProtectedRoute><CIErrorBoundary><CIEvaluation /></CIErrorBoundary></ProtectedRoute>} />
         <Route path="/ci/library" element={<ProtectedRoute><CIErrorBoundary><CILibrary /></CIErrorBoundary></ProtectedRoute>} />
         <Route path="/ci/competitors" element={<ProtectedRoute><CIErrorBoundary><CICompetitors /></CIErrorBoundary></ProtectedRoute>} />
         <Route path="/ci/settings" element={<ProtectedRoute><CIErrorBoundary><CISettings /></CIErrorBoundary></ProtectedRoute>} />

@@ -38,6 +38,7 @@ import {
 import { getBrandInsights } from '../../services/ciApi';
 import { getIndices, type IndicesResponse, type PillarName } from '../../services/ciIndices';
 import PillarSection from '../../components/ci/PillarSection';
+import IndexScatterPlot from '../../components/ci/IndexScatterPlot';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -251,7 +252,30 @@ export default function CIAnalytics() {
           </div>
         )}
 
-        {/* ─── §0a. Scorecard hero ──────────────────────────────────────
+        {/* ─── §0a. Competitive map (scatter) — the page hero ────────────
+             Analytics answers "where do I stand", and a 2-axis positioning
+             matrix is the most direct answer to that: every brand plotted,
+             quadrant lines at the midpoint, so an empty quadrant reads as
+             white space you could move into.
+
+             This lived on Brief until 2026-05-05. Moving it here restores
+             the split: Brief = narrative (what happened, what to do),
+             Analytics = position (where everyone sits, what is uncontested). */}
+        {indices && Object.keys(indices.indices_by_competitor).length > 0 && (
+          <section style={{ marginBottom: 32 }}>
+            <SectionHeader
+              title={lang === 'zh' ? '竞争地图 · 白空间' : 'Competitive map · white space'}
+              subtitle={lang === 'zh'
+                ? '任选 2 项指数作为 X / Y 轴。空白象限 = 无人占据的位置 — 那是你可以进攻的地方。'
+                : 'Pick any 2 indices as X / Y. An empty quadrant means nobody is there — that is where you can play.'}
+              count={null}
+              C={C}
+            />
+            <IndexScatterPlot data={indices} />
+          </section>
+        )}
+
+        {/* ─── §0b. Scorecard ───────────────────────────────────────────
              "Where you stand at a glance" — the consultant-grade answer-first
              pattern. Computes ahead/behind/tied counts + strongest/weakest 3
              from the indices data. Defensive: renders nothing if own brand
@@ -261,7 +285,7 @@ export default function CIAnalytics() {
           <IndexScorecard indices={indices} C={C} lang={lang} isMobile={isMobile} />
         )}
 
-        {/* ─── §0b. Composite indices (3 pillars × 12 indices) ──────────
+        {/* ─── §0c. Composite indices (3 pillars × 12 indices) ──────────
              The detailed breakdown that backs up the scorecard. Each pillar
              carries its own description + methodology disclosure. */}
         {indices && Object.keys(indices.indices_by_competitor).length > 0 && (
@@ -282,9 +306,6 @@ export default function CIAnalytics() {
                 data={indices}
               />
             ))}
-            {/* Scatter plot moved to /ci (Brief tab) — visualizing the user's
-                position vs competitors lives next to the verdict that
-                interprets it, not in the deep-dive page. */}
           </section>
         )}
 

@@ -101,6 +101,13 @@ function getHeaders(): Record<string, string> {
 }
 
 export async function getIndices(workspaceId: string, lang: 'zh' | 'en' = 'zh'): Promise<IndicesResponse | null> {
+  // Demo mode: serve the handbag fixture set. Without this every indices-gated
+  // section on Analytics (scorecard, pillar cards, scatter plot, all-12 view)
+  // renders nothing, because they are all behind `indices &&`.
+  if (import.meta.env.VITE_DEMO_MODE === 'true') {
+    const { demoIndices } = await import('./demoFixtures');
+    return demoIndices(lang);
+  }
   try {
     const url = `${API_BASE}/indices?workspace_id=${encodeURIComponent(workspaceId)}&lang=${lang}`;
     const res = await fetch(url, { headers: getHeaders() });

@@ -34,7 +34,54 @@ export interface CIConnection {
   connected_at: string | null;
 }
 
+// Demo-mode seed values. Kept here (rather than imported from demoFixtures)
+// so ciStorage stays dependency-free — it is imported by nearly everything.
+const DEMO_SEED_WORKSPACE: CIWorkspace = {
+  brand_name: 'TORY BURCH',
+  brand_category: '女包',
+  price_range: { min: 1200, max: 4800 },
+  platforms: ['小红书', '抖音'],
+};
+
+const DEMO_SEED_COMPETITORS: CICompetitor[] = [
+  'COACH', '古良吉吉', 'MICHAEL KORS', 'MCM', 'Dissona',
+].map((brand_name, i) => ({
+  id: `demo-c${i + 1}`,
+  brand_name,
+  tier: 'watchlist' as const,
+  platform_ids: {},
+  added_via: 'onboarding' as const,
+  created_at: '2026-05-04T00:00:00.000Z',
+}));
+
+// Bump this whenever the demo dataset changes. Any browser holding an older
+// version gets its demo workspace + competitors replaced on next load.
+//
+// Why a version rather than "seed only when empty": anyone who opened the app
+// before the handbag dataset shipped has a stale workspace cached (a Nike one,
+// from the old sneaker fixtures). Seed-if-empty would never replace it, so
+// they would keep seeing the wrong brand forever with no way to fix it short
+// of clearing site data by hand.
+const DEMO_SEED_VERSION = '2026-05-05.handbag.1';
+const DEMO_SEED_VERSION_KEY = 'rebase_ci_demo_seed_version';
+
+/**
+ * Install (or refresh) the demo dataset in localStorage.
+ *
+ * Runs at most once per seed version per browser. After it stamps the version
+ * key, the prospect's own edits — renaming the brand, adding or removing
+ * competitors — persist normally and are never clobbered.
+ */
+function ensureDemoSeed(): void {
+  if (import.meta.env.VITE_DEMO_MODE !== 'true') return;
+  if (localStorage.getItem(DEMO_SEED_VERSION_KEY) === DEMO_SEED_VERSION) return;
+  localStorage.setItem('rebase_ci_workspace', JSON.stringify(DEMO_SEED_WORKSPACE));
+  localStorage.setItem('rebase_ci_competitors', JSON.stringify(DEMO_SEED_COMPETITORS));
+  localStorage.setItem(DEMO_SEED_VERSION_KEY, DEMO_SEED_VERSION);
+}
+
 export function getCIWorkspace(): CIWorkspace | null {
+  ensureDemoSeed();
   const raw = localStorage.getItem('rebase_ci_workspace');
   return raw ? JSON.parse(raw) : null;
 }
@@ -45,6 +92,7 @@ export function saveCIWorkspace(data: CIWorkspace) {
 }
 
 export function getCICompetitors(): CICompetitor[] {
+  ensureDemoSeed();
   const raw = localStorage.getItem('rebase_ci_competitors');
   return raw ? JSON.parse(raw) : [];
 }
@@ -79,6 +127,18 @@ export interface KnownWorkspace {
 }
 
 export function getKnownWorkspaces(): KnownWorkspace[] {
+  // Demo mode: the switcher lists exactly one workspace — the demo brand.
+  // Without this, stale entries cached from earlier sessions (notably an old
+  // "OMI" workspace from prior testing) show up in the dropdown and make the
+  // demo look like someone else's account.
+  if (import.meta.env.VITE_DEMO_MODE === 'true') {
+    return [{
+      id: 'demo-mock-workspace',
+      brand_name: 'TORY BURCH',
+      brand_category: '女包',
+      cached_at: new Date().toISOString(),
+    }];
+  }
   const raw = localStorage.getItem('rebase_ci_known_workspaces');
   return raw ? JSON.parse(raw) : [];
 }
